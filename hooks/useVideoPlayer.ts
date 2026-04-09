@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, ChangeEvent } from "react";
+import { useState, useRef, useEffect, ChangeEvent, useCallback } from "react";
 import { encodeWavDataUrl } from "../utils/audio";
 
 type AudioSegment = {
@@ -42,9 +42,15 @@ type TokenUsageSource = "audio" | "vision";
 
 type UseVideoPlayerOptions = {
   onTokenUsage?: (source: TokenUsageSource, usage: TokenUsage) => void;
+  analysis?: {
+    audio: boolean;
+    visual: boolean;
+  };
 };
 
 export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
+  const enableAudioAnalysis = options.analysis?.audio ?? true;
+  const enableVisualAnalysis = options.analysis?.visual ?? true;
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -128,7 +134,13 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
   }, [videoFile]);
 
   useEffect(() => {
-    if (!videoFile) return;
+    if (!videoFile || !enableAudioAnalysis) {
+      setAudioSegments([]);
+      setAudioStatus("idle");
+      setAudioError(null);
+      setAudioProgress(0);
+      return;
+    }
     let cancelled = false;
 
     const transcribeAudio = async () => {
@@ -280,10 +292,18 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     return () => {
       cancelled = true;
     };
-  }, [videoFile]);
+  }, [videoFile, enableAudioAnalysis]);
 
   useEffect(() => {
-    if (!videoFile || !videoSrc) return;
+    if (!videoFile || !videoSrc || !enableVisualAnalysis) {
+      setVideoInsights([]);
+      setVideoInsightStatus("idle");
+      setVideoInsightError(null);
+      setSceneChanges([]);
+      setSceneStatus("idle");
+      setSceneError(null);
+      return;
+    }
     let cancelled = false;
 
     const captureFrameFromVideo = (video: HTMLVideoElement) => {
@@ -552,9 +572,22 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ image, time: safeTime }),
         });
-        const data = await res.json();
+        const raw = await res.text();
+        let data: any = null;
+        if (raw) {
+          try {
+            data = JSON.parse(raw);
+          } catch {
+            data = null;
+          }
+        }
         if (!res.ok) {
-          throw new Error(data?.error || "Video recognition failed");
+          const message =
+            data?.error || data?.message || raw || "Video recognition failed";
+          throw new Error(message);
+        }
+        if (!data) {
+          throw new Error("Invalid response from video recognition.");
         }
         if (!cancelled) {
           if (data?.usage) {
@@ -594,12 +627,20 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     return () => {
       cancelled = true;
     };
-  }, [videoFile, videoSrc]);
+  }, [videoFile, videoSrc, enableVisualAnalysis]);
+
+  const loadVideoFile = useCallback((file: File | null) => {
+    if (file && file.type.startsWith("video/")) {
+      setVideoFile(file);
+    } else if (!file) {
+      setVideoFile(null);
+    }
+  }, []);
 
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && file.type.startsWith("video/")) {
-      setVideoFile(file);
+    if (file) {
+      loadVideoFile(file);
     }
   };
 
@@ -695,7 +736,7 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     }
   };
 
-  const clearVideo = () => {
+  const clearVideo = useCallback(() => {
     setVideoSrc(null);
     setVideoFile(null);
     setVideoWidth(0);
@@ -705,7 +746,7 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     setAudioError(null);
     setAudioProgress(0);
     setEdits([]);
-  };
+  }, []);
 
   const toggleEditorMode = () => setIsEditorMode(!isEditorMode);
 
@@ -730,6 +771,17 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     setEdits((prev) => (prev.length ? prev.slice(0, -1) : prev));
   const removeEdit = (id: string) =>
     setEdits((prev) => prev.filter((edit) => edit.id !== id));
+
+  const replaceEdits = useCallback((next: EditSegment[]) => {
+    setEdits(
+      next.map((edit) => ({
+        id: edit.id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        start: edit.start,
+        end: edit.end,
+        reason: edit.reason,
+      }))
+    );
+  }, []);
 
   const seekToTime = (time: number, play = false) => {
     if (!videoRef.current || !Number.isFinite(time)) return;
@@ -791,6 +843,7 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     progressRef,
     // Handlers
     handleFileUpload,
+    loadVideoFile,
     togglePlay,
     handleTimeUpdate,
     handleLoadedMetadata,
@@ -809,5 +862,6 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     removeEdit,
     captureFrame,
     seekToTime,
+    replaceEdits,
   };
 }

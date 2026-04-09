@@ -25,8 +25,28 @@ type VisualContext = {
   summary?: string;
 };
 
+type MemoryContext = {
+  summary?: string;
+};
+
+type MultiClipSummary = {
+  label: string;
+  summary: string;
+};
+
+type SuggestionContext = {
+  start: number;
+  end: number;
+  note?: string;
+};
+
 type HistoryMessage = {
   role: "user" | "assistant";
+  content: string;
+};
+
+type ChatMessage = {
+  role: "system" | "user" | "assistant";
   content: string;
 };
 
@@ -51,66 +71,74 @@ type UsageTotals = {
   total_tokens?: number;
 };
 
-type FormatResult = {
+const resolveChatModel = (allowThinking?: boolean) => {
+  const defaultModel = "nvidia/nemotron-3-super-120b-a12b";
+  const baseModel = process.env.NVIDIA_CHAT_MODEL ?? defaultModel;
+  const liteModel = process.env.NVIDIA_CHAT_MODEL_LITE ?? baseModel;
+  const thinkingModel = process.env.NVIDIA_CHAT_MODEL_THINKING ?? baseModel;
+  return allowThinking ? thinkingModel : liteModel;
+};
+
+type JsonAttempt = {
   content: string;
   parsed: ModelJson | null;
   usage: UsageTotals | null;
 };
 
+type JsonResponse = {
+  content: string;
+  parsed: ModelJson | null;
+  usage: UsageTotals | null;
+  attempts: number;
+  rawAttempts: string[];
+};
+
 function parseModelJson(value: string): ModelJson | null {
   try {
-    return JSON.parse(value) as ModelJson;
-  } catch {
-    const match = value.match(/\{[\s\S]*\}/);
-    if (!match) return null;
-    try {
-      return JSON.parse(match[0]) as ModelJson;
-    } catch {
+    const parsed = JSON.parse(value) as Partial<ModelJson> | null;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (typeof parsed.assistant_message !== "string") return null;
+    if (
+      parsed.status !== "ok" &&
+      parsed.status !== "needs_info" &&
+      parsed.status !== "error"
+    ) {
       return null;
     }
+    if (!Array.isArray(parsed.actions)) return null;
+    return {
+      assistant_message: parsed.assistant_message,
+      status: parsed.status,
+      follow_up:
+        typeof parsed.follow_up === "string" ? parsed.follow_up : null,
+      actions: parsed.actions as ModelAction[],
+    };
+  } catch {
+    return null;
   }
 }
 
-function parseTimestampToSeconds(token: string): number | null {
-  const parts = token.split(":").map(Number);
-  if (!parts.length || parts.some((part) => Number.isNaN(part))) return null;
-  if (parts.length === 3) {
-    return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  }
-  if (parts.length === 2) {
-    return parts[0] * 60 + parts[1];
-  }
-  return parts[0];
-}
-
-function extractRangeFromText(text: string) {
-  const matches = text.match(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g) ?? [];
-  if (matches.length < 2) return null;
-  const start = parseTimestampToSeconds(matches[0]);
-  const end = parseTimestampToSeconds(matches[1]);
-  if (start === null || end === null || start >= end) return null;
-  return { start, end };
-}
-
-function findLastRangeFromHistory(history?: HistoryMessage[]) {
-  if (!history?.length) return null;
-  for (let i = history.length - 1; i >= 0; i -= 1) {
-    const text = history[i]?.content ?? "";
-    const range = extractRangeFromText(text);
-    if (range) return range;
-  }
-  return null;
-}
-
-async function formatToJson({
-  raw,
-  userMessage,
-  videoDuration,
+async function requestJsonAttempt({
+  messages,
+  allowThinking,
+  temperature,
+  top_p,
+  extraSystem,
 }: {
-  raw: string;
-  userMessage?: string;
-  videoDuration?: number;
-}): Promise<FormatResult> {
+  messages: ChatMessage[];
+  allowThinking?: boolean;
+  temperature: number;
+  top_p: number;
+  extraSystem?: string;
+}): Promise<JsonAttempt> {
+  const attemptMessages = extraSystem
+    ? [
+        messages[0],
+        { role: "system", content: extraSystem },
+        ...messages.slice(1),
+      ]
+    : messages;
+
   const response = await fetch(
     "https://integrate.api.nvidia.com/v1/chat/completions",
     {
@@ -120,35 +148,130 @@ async function formatToJson({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "nvidia/nemotron-3-super-120b-a12b",
-        messages: [
-          {
-            role: "system",
-            content:
-              "Convert the input into strict JSON only using this schema: " +
-              '{"assistant_message": string, "status": "ok"|"needs_info"|"error", "follow_up": string|null, "actions": [{"type": string, "start": number|null, "end": number|null, "clip": number|null, "reason": string|null}]}. ' +
-              "Do not add any extra keys. If no actions are needed, use an empty array. Never invent timestamps.",
-          },
-          {
-            role: "user",
-            content:
-              `User request: ${userMessage ?? ""}\n` +
-              `Video duration (seconds): ${videoDuration ?? ""}\n` +
-              `Assistant response: ${raw}`,
-          },
-        ],
-        max_tokens: 512,
-        temperature: 0,
-        top_p: 0.1,
-        chat_template_kwargs: { enable_thinking: false },
+        model: resolveChatModel(allowThinking),
+        messages: attemptMessages,
+        max_tokens: 16384,
+        temperature,
+        top_p,
+        chat_template_kwargs: { enable_thinking: Boolean(allowThinking) },
       }),
     }
   );
 
-  const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content ?? "";
+  const raw = await response.text();
+  let data: any = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok) {
+    const message =
+      data?.error?.message || raw?.slice(0, 200) || "Chat model request failed";
+    throw new Error(message);
+  }
+
+  const content = data?.choices?.[0]?.message?.content ?? raw ?? "";
   const parsed = parseModelJson(content);
   return { content, parsed, usage: data?.usage ?? null };
+}
+
+async function requestJsonWithRetry({
+  messages,
+  allowThinking,
+}: {
+  messages: ChatMessage[];
+  allowThinking?: boolean;
+}): Promise<JsonResponse> {
+  const attempts: { temperature: number; top_p: number; extraSystem?: string }[] = [
+    { temperature: 0.6, top_p: 0.8 },
+    {
+      temperature: 0,
+      top_p: 0.1,
+      extraSystem:
+        "Your previous response was not valid JSON. Fix it and reply ONLY with the JSON object that matches the schema. No markdown, no backticks, no extra text.",
+    },
+    {
+      temperature: 0,
+      top_p: 0.1,
+      extraSystem:
+        "Return STRICT JSON only. Use double quotes, no trailing commas. Make sure all keys exist and types match the schema exactly.",
+    },
+    {
+      temperature: 0,
+      top_p: 0.1,
+      extraSystem:
+        "Output only the JSON object (no prose). If you are unsure, return status \"needs_info\" with a follow_up question. Always include actions as an array.",
+    },
+    {
+      temperature: 0,
+      top_p: 0.1,
+      extraSystem:
+        "Final attempt: output ONLY a valid JSON object that matches the schema. No extra text.",
+    },
+  ];
+  let last: JsonAttempt | null = null;
+  const rawAttempts: string[] = [];
+  const usageTotals: Required<UsageTotals> = {
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+  };
+  const addUsage = (usage: UsageTotals | null | undefined) => {
+    if (!usage) return;
+    if (typeof usage.prompt_tokens === "number") {
+      usageTotals.prompt_tokens += usage.prompt_tokens;
+    }
+    if (typeof usage.completion_tokens === "number") {
+      usageTotals.completion_tokens += usage.completion_tokens;
+    }
+    if (typeof usage.total_tokens === "number") {
+      usageTotals.total_tokens += usage.total_tokens;
+    }
+  };
+
+  const buildRepairPrompt = (template: string, raw?: string) => {
+    const snippet =
+      typeof raw === "string" && raw.trim().length
+        ? raw.trim().slice(0, 1200)
+        : "No response content.";
+    return `${template}\nInvalid response:\n${snippet}`;
+  };
+
+  for (let i = 0; i < attempts.length; i += 1) {
+    const attempt = attempts[i];
+    const extraSystem =
+      attempt.extraSystem && i > 0
+        ? buildRepairPrompt(attempt.extraSystem, last?.content)
+        : attempt.extraSystem;
+    last = await requestJsonAttempt({
+      messages,
+      allowThinking,
+      temperature: attempt.temperature,
+      top_p: attempt.top_p,
+      extraSystem,
+    });
+    rawAttempts.push(last.content);
+    addUsage(last.usage);
+    if (last.parsed) {
+      return {
+        content: last.content,
+        parsed: last.parsed,
+        usage: usageTotals,
+        attempts: i + 1,
+        rawAttempts,
+      };
+    }
+  }
+
+  return {
+    content: last?.content ?? "",
+    parsed: null,
+    usage: usageTotals,
+    attempts: attempts.length,
+    rawAttempts,
+  };
 }
 
 function formatSeconds(value: number) {
@@ -204,7 +327,19 @@ async function describeFrame(frameDataUrl: string) {
 }
 
 export async function POST(req: Request) {
-  const { message, video, frame, audio, visual, clips, history } = (await req.json()) as {
+  const {
+    message,
+    video,
+    frame,
+    audio,
+    visual,
+    clips,
+    history,
+    memory,
+    allowThinking,
+    multiClips,
+    suggestions,
+  } = (await req.json()) as {
     message?: string;
     video?: VideoContext;
     frame?: string | null;
@@ -212,13 +347,11 @@ export async function POST(req: Request) {
     visual?: VisualContext;
     clips?: ClipContext;
     history?: HistoryMessage[];
+    memory?: MemoryContext;
+    allowThinking?: boolean;
+    multiClips?: MultiClipSummary[];
+    suggestions?: SuggestionContext[];
   };
-
-  const editIntentRegex = /\b(trim|cut|remove|delete)\b/i;
-  const explicitRange = message ? extractRangeFromText(message) : null;
-  const lastRange = findLastRangeFromHistory(history);
-  const effectiveRange =
-    explicitRange ?? (message && editIntentRegex.test(message) ? lastRange : null);
   const usageTotals: Required<UsageTotals> = {
     prompt_tokens: 0,
     completion_tokens: 0,
@@ -276,13 +409,6 @@ export async function POST(req: Request) {
   if (typeof video?.isEditorMode === "boolean") {
     contextLines.push(`Editor mode: ${video.isEditorMode ? "on" : "off"}`);
   }
-  if (lastRange) {
-    contextLines.push(
-      `Last mentioned range: ${formatSeconds(lastRange.start)} - ${formatSeconds(
-        lastRange.end
-      )}`
-    );
-  }
 
   if (audio?.summary) {
     contextLines.push(`Audio context:
@@ -304,6 +430,31 @@ ${clips.summary}`);
 ${visual.summary}`);
   }
 
+  if (memory?.summary) {
+    contextLines.push(`User memory: ${memory.summary}`);
+  }
+
+  if (typeof allowThinking === "boolean") {
+    contextLines.push(`Thinking mode: ${allowThinking ? "on" : "off"}`);
+  }
+
+  if (multiClips && multiClips.length) {
+    const summaries = multiClips
+      .map((clip) => `- ${clip.label}: ${clip.summary}`)
+      .join("\n");
+    contextLines.push(`Multi-clip summaries:\n${summaries}`);
+  }
+
+  if (suggestions && suggestions.length) {
+    const lines = suggestions.map((suggestion, index) => {
+      const note = suggestion.note ? ` (${suggestion.note})` : "";
+      return `${index + 1}. ${formatSeconds(suggestion.start)} - ${formatSeconds(
+        suggestion.end
+      )}${note}`;
+    });
+    contextLines.push(`Current trim suggestions:\n${lines.join("\n")}`);
+  }
+
   if (typeof frame === "string" && frame.startsWith("data:image/")) {
     try {
       const frameResult = await describeFrame(frame);
@@ -316,11 +467,44 @@ ${visual.summary}`);
     }
   }
 
-  const messages = [
+  const messages: ChatMessage[] = [
     {
       role: "system",
-      content:
-        "You are an AI video editing assistant inside a video editor. Respond as if the edit will happen in this app. Do not suggest external apps, websites, or OS-level steps. Keep replies concise, friendly, and action-focused. Maintain memory of the clip stack and conversation context. Use ONLY the provided video context, audio context, clip stack, and frame description. Do NOT infer or guess content from the file name, title, or metadata. The user is a casual, non-technical editor: avoid jargon like \"timestamps\" unless necessary. If they don't know exact times, offer simple choices like \"beginning / middle / end\" or \"about how long\" and suggest they can move the playhead and say \"use current time\" or adjust the trim handles and say \"use current trim range.\" If the user asks to export/merge, say you are starting the export and avoid claiming it is complete. If the request requires content you do not have (e.g., transcript still processing), say so briefly and ask whether to wait or proceed with visual-only suggestions. If the user asks to trim/cut/remove and does not provide an explicit time range, use the last mentioned range if it exists and confirm briefly; otherwise ask a short follow-up question and do not guess. If the user references a clip without specifying which one, ask which clip number. If the request is missing details, set status to \"needs_info\" and ask at most 2 short, friendly clarifying questions in follow_up. Never fabricate timestamps. Return ONLY strict JSON (no markdown, no extra keys) using this schema: {\"assistant_message\": string, \"status\": \"ok\"|\"needs_info\"|\"error\", \"follow_up\": string|null, \"actions\": [{\"type\": string, \"start\": number|null, \"end\": number|null, \"clip\": number|null, \"reason\": string|null}]}.",
+      content: [
+        "You are an AI video editing assistant inside a video editor.",
+        "Respond as if the edit will happen in this app. Do not suggest external apps, websites, or OS-level steps.",
+        "Keep replies concise, friendly, and action-focused.",
+        "Use ONLY the provided video context, audio context, clip stack, user memory, multi-clip summaries, and frame description.",
+        "Do NOT infer or guess content from the file name, title, or metadata.",
+        "The user is a casual, non-technical editor: avoid jargon like \"timestamps\" unless necessary.",
+        "If they don't know exact times, offer simple choices like \"beginning / middle / end\" or \"about how long\" and suggest they can move the playhead and say \"use current time\" or adjust the trim handles and say \"use current trim range.\"",
+        "Thinking mode rule: if Thinking mode is off, keep responses short and do not add reasoning or multi-step explanations. If Thinking mode is on, you may add at most 1-2 short rationale lines.",
+        "One-mode-per-reply: respond in exactly one of these modes unless the user explicitly asks otherwise: Summarize OR Suggest OR Apply.",
+        "Summarize mode (highlights/key moments): provide 3-6 key moments max. Each item should have a short title and a one-line reason. Include a time range if available. End with one short question like \"Want me to trim any of these?\" Do NOT include trim suggestions or extra lists in the same reply.",
+        "Suggest mode (trim options): only provide trim suggestions if the user asked for suggestions or highlights. Provide a single list once. Do not repeat the list on confirmation.",
+        "Apply mode (trim/export): if the user requests a trim/cut/remove with an explicit range, apply it. If they confirm after you already suggested items, do not re-list; if only one option exists, apply it, otherwise ask which number.",
+        "If the user asks to show/describe/what happens in a moment, do NOT create trim actions. Reply with a summary or suggestions only.",
+        "IMPORTANT: In this app, actions represent sections to REMOVE (cut out), not sections to keep.",
+        "If the user asks to remove the first or last N seconds/minutes and the duration is known, compute the exact start/end times from duration. If duration is missing, ask a short follow-up question.",
+        "Only create keep-only actions (remove before and after) when the user clearly asks to keep only a specific range.",
+        "If the user asks to keep only a range, create actions that remove everything outside that range (0-start and end-duration). Use the video duration to compute the end.",
+        "If the intent is ambiguous between keeping and removing (for example, the user says \"trim\" without specifying keep or remove), ask one short clarification question and do NOT create actions yet.",
+        "If current trim suggestions are provided, only use them when the user references a suggestion (like \"trim 2\") or confirms they want to apply one. If multiple suggestions exist and the user says \"trim it\" or \"yes\", ask which number.",
+        "When using a current trim suggestion, copy its exact start/end times and include them in the action; do not invent new timestamps.",
+        "If multi-clip summaries are provided and a trim belongs to a specific clip, include the 1-based clip number in the action's \"clip\" field.",
+        "If multi-clip summaries are provided, assume multiple videos are uploaded. Do not say there is only one video unless explicitly told.",
+        "Multi-clip summaries are brief key points. Go deeper only when the user asks about a specific incident or clip, and ask one short follow-up if needed.",
+        "If the user describes an incident, use the multi-clip summaries to pick the most likely clip and either provide a time range or ask a short clarifying question. When you pick a clip, include its 1-based clip number in the action's \"clip\" field.",
+        "If the user asks to trim/cut/remove and does not provide an explicit time range, use the last mentioned range if it exists and confirm briefly; otherwise ask one short follow-up question and do not guess.",
+        "If the user references a clip without specifying which one, ask which clip number.",
+        "If the request requires content you do not have (e.g., transcript still processing), say so briefly and ask whether to wait or proceed with visual-only suggestions.",
+        "If the user asks to export/merge, say you are starting the export and include an action with type \"export\". Do not claim it is complete.",
+        "Never fabricate timestamps.",
+        "Formatting rules: output must be a single JSON object with double quotes only. No trailing commas. Do not wrap in markdown or backticks.",
+        "Always include all keys: assistant_message, status, follow_up, actions. follow_up must be null unless you ask a question. actions must be an array (can be empty).",
+        "Numbers must be finite (no NaN/Infinity).",
+        "Return ONLY strict JSON (no markdown, no extra keys) using this schema: {\"assistant_message\": string, \"status\": \"ok\"|\"needs_info\"|\"error\", \"follow_up\": string|null, \"actions\": [{\"type\": string, \"start\": number|null, \"end\": number|null, \"clip\": number|null, \"reason\": string|null}]}."
+      ].join(" "),
     },
   ];
 
@@ -338,135 +522,29 @@ ${contextLines.join("\n")}`,
     messages.push({ role: "user", content: message });
   }
 
-  const response = await fetch(
-    "https://integrate.api.nvidia.com/v1/chat/completions",
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "nvidia/nemotron-3-super-120b-a12b",
-        messages,
-        max_tokens: 16384,
-        temperature: 1,
-        top_p: 0.95,
-        chat_template_kwargs: { enable_thinking: false },
-      }),
-    }
-  );
-
-  const data = await response.json();
-  if (!response.ok) {
-    return Response.json(data, { status: response.status });
-  }
-
-  const content = data?.choices?.[0]?.message?.content ?? "";
-  addUsage(data?.usage);
-  let parsed = parseModelJson(content);
-  let formatterContent: string | null = null;
-
-  if (!parsed) {
-    const formatted = await formatToJson({
-      raw: content,
-      userMessage: message,
-      videoDuration: video?.duration,
+  let jsonResult: JsonResponse;
+  try {
+    jsonResult = await requestJsonWithRetry({
+      messages,
+      allowThinking,
     });
-    formatterContent = formatted.content;
-    parsed = formatted.parsed;
-    addUsage(formatted.usage);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Chat model request failed";
+    return Response.json({ error: { message } }, { status: 500 });
   }
+  addUsage(jsonResult.usage);
+  const content = jsonResult.content;
+  let parsed = jsonResult.parsed;
 
   if (!parsed) {
-    const extracted = extractRangeFromText(content);
     parsed = {
-      assistant_message: content || "No response from AI",
-      status: extracted ? "ok" : "needs_info",
-      follow_up: extracted
-        ? null
-        : "I did not receive structured edit instructions. Could you provide a clear time range?",
-      actions: extracted
-        ? [
-            {
-              type: "trim",
-              start: extracted.start,
-              end: extracted.end,
-              clip: null,
-              reason: "AI response fallback",
-            },
-          ]
-        : [],
+      assistant_message:
+        "I couldn't return a valid JSON response. Please rephrase your request.",
+      status: "error",
+      follow_up: "Please rephrase your request or try again.",
+      actions: [],
     };
-  }
-
-  const isTrimAction = (action: ModelAction) =>
-    ["trim", "cut", "remove", "delete"].includes((action?.type ?? "").toLowerCase());
-  const hasValidRange = (action: ModelAction) =>
-    Number.isFinite(action?.start) &&
-    Number.isFinite(action?.end) &&
-    (action.start as number) < (action.end as number);
-
-  if (parsed?.actions?.length) {
-    const shouldOverride =
-      Boolean(explicitRange) ||
-      (Boolean(effectiveRange) &&
-        message &&
-        editIntentRegex.test(message) &&
-        parsed.actions.some((action) => isTrimAction(action) && !hasValidRange(action)));
-    if (shouldOverride && (explicitRange || effectiveRange)) {
-      const rangeToUse = explicitRange ?? effectiveRange!;
-      parsed.actions = parsed.actions.map((action) => {
-        if (!isTrimAction(action)) return action;
-        return {
-          ...action,
-          start: rangeToUse.start,
-          end: rangeToUse.end,
-        };
-      });
-    }
-  } else if (
-    effectiveRange &&
-    message &&
-    editIntentRegex.test(message)
-  ) {
-    parsed.actions = [
-      {
-        type: "trim",
-        start: effectiveRange.start,
-        end: effectiveRange.end,
-        clip: null,
-        reason: explicitRange ? "User range" : "Last mentioned range",
-      },
-    ];
-  }
-
-  if (
-    effectiveRange &&
-    message &&
-    editIntentRegex.test(message) &&
-    parsed.status === "needs_info"
-  ) {
-    parsed.status = "ok";
-    parsed.follow_up = null;
-    if (!parsed.assistant_message) {
-      parsed.assistant_message =
-        explicitRange
-          ? "Got it. I'll trim that section."
-          : "Got it. I'll use the last range you mentioned.";
-    }
-  }
-
-  if (
-    effectiveRange &&
-    !explicitRange &&
-    message &&
-    editIntentRegex.test(message)
-  ) {
-    parsed.status = "ok";
-    parsed.follow_up = null;
-    parsed.assistant_message =
-      "Got it. I'll trim the last range you mentioned.";
   }
 
   const assistantMessage =
@@ -481,10 +559,13 @@ ${contextLines.join("\n")}`,
       visual,
       clips,
       history,
+      multiClips,
+      suggestions,
     },
     response: {
       raw: content,
-      formatter: formatterContent,
+      attempts: jsonResult.attempts,
+      rawAttempts: jsonResult.rawAttempts,
       parsed,
     },
   };

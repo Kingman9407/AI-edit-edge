@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { formatTime } from "../../utils/formatTime";
+import { normalizeSegments } from "../../utils/segments";
+import { PLAN_CONFIGS, PlanId } from "../../utils/plans";
 
 interface Message {
   id: string;
@@ -60,6 +62,36 @@ type ModelAction = {
   reason?: string | null;
 };
 
+type MultiClipFile = {
+  id: string;
+  name: string;
+  type: string;
+  sizeBytes: number;
+};
+
+type ClipSnapshot = {
+  id: string;
+  name: string;
+  type: string;
+  sizeBytes: number;
+  duration: number;
+  width: number;
+  height: number;
+  audioSegments: AudioSegment[];
+  audioStatus: "idle" | "processing" | "done" | "error" | "no-audio";
+  audioError: string | null;
+  videoInsights: VideoInsight[];
+  sceneChanges: number[];
+  edits: ClipSegment[];
+};
+
+type ChatMemory = {
+  lastIntent?: string;
+  lastTrim?: { start: number; end: number };
+  clipCount?: number;
+  lastExportAt?: number;
+};
+
 type ChatSession = {
   id: string;
   title: string;
@@ -69,6 +101,17 @@ type ChatSession = {
 };
 
 interface ChatProps {
+  planId: PlanId;
+  multiClipMode?: "active" | "all";
+  multiClipFiles?: MultiClipFile[];
+  multiClipSnapshots?: ClipSnapshot[];
+  activeClipIndex?: number;
+  onQueueClipTrim?: (
+    clipIndex: number,
+    start: number,
+    end: number,
+    reason?: string
+  ) => string;
   videoContext?: VideoContext;
   captureFrame?: () => string | null;
   audioSegments?: AudioSegment[];
@@ -120,6 +163,12 @@ const hasDuplicateMessageIds = (input: Message[]) => {
 };
 
 export default function Chat({
+  planId,
+  multiClipMode = "active",
+  multiClipFiles = [],
+  multiClipSnapshots = [],
+  activeClipIndex = 0,
+  onQueueClipTrim,
   videoContext,
   captureFrame,
   audioSegments = [],
@@ -133,6 +182,7 @@ export default function Chat({
   onAddEdit,
   onTokenUsage,
 }: ChatProps) {
+  const planConfig = PLAN_CONFIGS[planId];
   const defaultMessages = useMemo<Message[]>(
     () => [
       {
@@ -148,79 +198,29 @@ export default function Chat({
   const [status, setStatus] = useState<string | null>(null);
   const [statusLog, setStatusLog] = useState<string[]>([]);
   const [suggestions, setSuggestions] = useState<SuggestionSegment[]>([]);
-  const allowLocalActions = false;
+  const allowLocalEdits = planConfig.chat.allowSimpleEdits;
+  const allowSuggestions = planConfig.clips.allowSuggestions;
+  const allowAutoApply = planConfig.clips.allowAutoApply;
+  const includeAudioContext = planConfig.chat.includeAudio;
+  const includeVisualContext = planConfig.chat.includeVisual;
+  const includeClipContext = planConfig.chat.includeClips;
+  const allowThinking = planConfig.allowThinking;
+  const maxTrimFraction = planConfig.maxTrimFraction;
+  const nextPlanLabel = planConfig.nextPlanLabel;
   const hasLoadedRef = useRef(false);
   const statusScrollRef = useRef<HTMLDivElement | null>(null);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [memory, setMemory] = useState<ChatMemory | null>(null);
 
-  const timeRegex =
-    /\b(\d{1,2}:\d{2}:\d{2}|\d{1,2}:\d{2}|\d+(?:\.\d+)?s)\b/g;
-  const editIntentRegex = /\b(trim|cut|remove|delete)\b/i;
-  const exportIntentRegex =
-    /\b(export|render|combine|download|final\s+video)\b/i;
-  const suggestIntentRegex =
-    /\b(important|highlight|highlights|timestamp|time\s*stamp|key part|best part|possible trim|suggest)\b/i;
-  const suggestionPickRegex =
-    /\b(?:trim|cut|remove)\s*(?:option|clip|suggestion)?\s*(\d+)(?!:)\b/i;
+  useEffect(() => {
+    if (!allowSuggestions) {
+      setSuggestions([]);
+    }
+  }, [allowSuggestions]);
 
-  const stopwords = new Set([
-    "trim",
-    "cut",
-    "remove",
-    "delete",
-    "part",
-    "parts",
-    "section",
-    "segment",
-    "show",
-    "find",
-    "give",
-    "tell",
-    "timestamp",
-    "time",
-    "stamp",
-    "important",
-    "highlight",
-    "highlights",
-    "key",
-    "best",
-    "please",
-    "this",
-    "that",
-    "these",
-    "those",
-    "the",
-    "a",
-    "an",
-    "and",
-    "to",
-    "for",
-    "of",
-    "in",
-    "on",
-    "with",
-    "from",
-    "at",
-    "is",
-    "are",
-    "be",
-    "i",
-    "me",
-    "my",
-    "you",
-    "your",
-    "we",
-    "us",
-    "can",
-    "could",
-    "should",
-    "would",
-    "want",
-    "need",
-    "like",
-  ]);
+  
 
   const buildSessionTitle = (sessionMessages: MessageLike[]) => {
     const firstUser = sessionMessages.find((msg) => msg.sender === "user");
@@ -241,6 +241,58 @@ export default function Chat({
       updatedAt: timestamp,
     };
   };
+
+  useEffect(() => {
+    if (!memoryKey) {
+      setMemory(null);
+      return;
+    }
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(`chat:memory:${memoryKey}`);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored) as ChatMemory;
+        setMemory(parsed);
+        return;
+      } catch {
+        setMemory(null);
+      }
+    } else {
+      setMemory(null);
+    }
+  }, [memoryKey]);
+
+  useEffect(() => {
+    if (!memoryKey) return;
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      `chat:memory:${memoryKey}`,
+      JSON.stringify(memory ?? {})
+    );
+  }, [memoryKey, memory]);
+
+  const lastEdit = edits.length ? edits[edits.length - 1] : null;
+  const lastEditStart = lastEdit?.start ?? null;
+  const lastEditEnd = lastEdit?.end ?? null;
+
+  useEffect(() => {
+    if (!memoryKey) return;
+    const clipCount = edits.length;
+    const nextTrim =
+      clipCount && lastEditStart !== null && lastEditEnd !== null
+        ? { start: lastEditStart, end: lastEditEnd }
+        : undefined;
+
+    setMemory((prev) => {
+      const sameCount = (prev?.clipCount ?? 0) === clipCount;
+      const sameTrim = nextTrim
+        ? prev?.lastTrim?.start === nextTrim.start &&
+          prev?.lastTrim?.end === nextTrim.end
+        : !prev?.lastTrim;
+      if (sameCount && sameTrim) return prev;
+      return { ...(prev ?? {}), clipCount, lastTrim: nextTrim };
+    });
+  }, [memoryKey, edits.length, lastEditStart, lastEditEnd]);
 
   useEffect(() => {
     if (!memoryKey) {
@@ -363,193 +415,126 @@ export default function Chat({
     setIsHistoryOpen(false);
   };
 
-  const parseTimeToSeconds = (token: string) => {
-    if (token.endsWith("s")) {
-      return parseFloat(token.slice(0, -1));
-    }
-    const parts = token.split(":").map(Number);
-    if (parts.length === 3) {
-      return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    }
-    if (parts.length === 2) {
-      return parts[0] * 60 + parts[1];
-    }
-    return Number.isFinite(parts[0]) ? parts[0] : null;
-  };
-
-  const extractTimeRange = (text: string) => {
-    const matches = text.match(timeRegex) ?? [];
-    const values = matches
-      .map(parseTimeToSeconds)
-      .filter((value): value is number => Number.isFinite(value));
-    if (values.length >= 2) {
-      return { start: values[0], end: values[1] };
-    }
-    return null;
-  };
-
-  const extractRelativeRange = (text: string) => {
-    const directionMatch = text.match(/\b(first|last)\b/i);
-    if (!directionMatch) return null;
-    const direction = directionMatch[1].toLowerCase();
-    const timeTokens = text.match(timeRegex) ?? [];
-    let seconds: number | null = null;
-
-    if (timeTokens.length >= 1) {
-      seconds = parseTimeToSeconds(timeTokens[0]);
-    }
-
-    if (!seconds || !Number.isFinite(seconds)) {
-      const unitMatch = text.match(
-        /\b(\d+(?:\.\d+)?)\s*(s|sec|secs|second|seconds|m|min|mins|minute|minutes)\b/i
-      );
-      if (unitMatch) {
-        const amount = parseFloat(unitMatch[1]);
-        const unit = unitMatch[2].toLowerCase();
-        const multiplier = unit.startsWith("m") ? 60 : 1;
-        seconds = amount * multiplier;
-      }
-    }
-
-    if (!seconds || !Number.isFinite(seconds) || seconds <= 0) {
-      return { needsValue: true as const };
-    }
-
-    if (direction === "first") {
-      return { start: 0, end: seconds };
-    }
-
-    const duration = videoContext?.duration ?? 0;
-    if (!duration) {
-      return { needsDuration: true as const, seconds };
-    }
-
-    return {
-      start: Math.max(0, duration - seconds),
-      end: duration,
-    };
-  };
-
-  const extractKeywords = (text: string) => {
-    const normalized = text.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
-    const tokens = normalized.split(/\s+/).filter(Boolean);
-    const keywords = tokens.filter(
-      (token) => token.length >= 3 && !stopwords.has(token)
-    );
-    return Array.from(new Set(keywords));
-  };
-
   const countWords = (text: string) =>
     text.trim() ? text.trim().split(/\s+/).length : 0;
+
+  const resolveActionClipIndex = (clipValue?: number | null) => {
+    if (clipValue === null || clipValue === undefined) return null;
+    const numeric = Number(clipValue);
+    if (!Number.isFinite(numeric)) return null;
+    const index = Math.floor(numeric) - 1;
+    return index >= 0 ? index : null;
+  };
 
   const truncateText = (text: string, maxLength = 90) => {
     if (text.length <= maxLength) return text;
     return `${text.slice(0, maxLength - 3).trim()}...`;
   };
 
-  const buildSuggestionMessage = (query: string) => {
-    if (!audioSegments.length) {
-      const currentTime = videoContext?.currentTime;
-      const duration = videoContext?.duration ?? 0;
-      const trimStartPercent = videoContext?.trimStart ?? 0;
-      const trimEndPercent = videoContext?.trimEnd ?? 100;
-      const trimStartSeconds =
-        duration > 0 ? (trimStartPercent / 100) * duration : null;
-      const trimEndSeconds =
-        duration > 0 ? (trimEndPercent / 100) * duration : null;
+  const updateMemory = (patch: Partial<ChatMemory>) => {
+    setMemory((prev) => ({
+      ...(prev ?? {}),
+      ...patch,
+    }));
+  };
 
-      const lines: string[] = [
-        "I do not have audio to scan for highlights yet.",
-      ];
-      if (audioStatus === "processing") {
-        lines.push("Audio analysis is still running.");
-      }
-      if (audioStatus === "no-audio") {
-        lines.push("No audio track detected, so I can only use your playhead.");
-      }
-      if (Number.isFinite(currentTime)) {
-        lines.push(`Current playhead: ${formatTime(currentTime ?? 0)}.`);
-      }
-      if (trimStartSeconds !== null && trimEndSeconds !== null && duration > 0) {
-        lines.push(
-          `Current trim range: ${formatTime(trimStartSeconds)}-${formatTime(
-            trimEndSeconds
-          )}.`
-        );
-      }
-      lines.push(
-        "Move the playhead to the moment you want and say 'use current time', or give a timestamp range."
+  const buildMemorySummary = (current: ChatMemory | null) => {
+    if (!current) return "";
+    const parts: string[] = [];
+    if (current.lastIntent) {
+      parts.push(`Last request: "${truncateText(current.lastIntent, 60)}"`);
+    }
+    if (current.lastTrim) {
+      parts.push(
+        `Last trim: ${formatTime(current.lastTrim.start)}-${formatTime(
+          current.lastTrim.end
+        )}`
       );
-      return { message: lines.join("\n"), segments: [] as SuggestionSegment[] };
     }
+    if (typeof current.clipCount === "number") {
+      parts.push(`Clips: ${current.clipCount}`);
+    }
+    if (current.lastExportAt) {
+      parts.push(
+        `Last export: ${new Date(current.lastExportAt).toLocaleString()}`
+      );
+    }
+    return parts.join(" - ");
+  };
 
-    const keywords = extractKeywords(query);
-    const keywordMatches = audioSegments
-      .map((segment) => {
-        const transcript = segment.transcript.toLowerCase();
-        const score = keywords.reduce(
-          (acc, keyword) => (transcript.includes(keyword) ? acc + 1 : acc),
-          0
-        );
-        return { segment, score };
+  const getTotalTrimmedSeconds = (
+    extraSegments: { start: number; end: number }[] = []
+  ) => {
+    const duration = videoContext?.duration ?? 0;
+    if (!duration) return 0;
+    const combined = [
+      ...edits.map((edit) => ({ start: edit.start, end: edit.end })),
+      ...extraSegments,
+    ];
+    const normalized = normalizeSegments(combined, duration);
+    return normalized.reduce(
+      (total, segment) => total + (segment.end - segment.start),
+      0
+    );
+  };
+
+  const buildTrimLimitMessage = () => {
+    const percent = Math.round(maxTrimFraction * 100);
+    const base = `${planConfig.label} plan allows trimming up to ${percent}% of the video.`;
+    if (nextPlanLabel) {
+      return `${base} Upgrade to ${nextPlanLabel} to trim more.`;
+    }
+    return base;
+  };
+
+  const canQueueTrimSegments = (
+    segments: { start: number; end: number }[]
+  ) => {
+    const duration = videoContext?.duration ?? 0;
+    if (!duration || maxTrimFraction >= 1) return true;
+    const limitSeconds = duration * maxTrimFraction;
+    const nextTotal = getTotalTrimmedSeconds(segments);
+    return nextTotal <= limitSeconds + 0.001;
+  };
+
+  const buildActionSuggestions = (
+    actions: ModelAction[] | undefined | null
+  ) => {
+    if (!actions?.length) return [] as SuggestionSegment[];
+    return actions
+      .filter((action) => {
+        const type = (action?.type ?? "").toLowerCase();
+        return ["trim", "cut", "remove", "delete"].includes(type);
       })
-      .filter((entry) => entry.score > 0);
+      .map((action) => ({
+        start: Number(action?.start),
+        end: Number(action?.end),
+        note: action?.reason ?? "AI suggestion",
+      }))
+      .filter(
+        (segment) =>
+          Number.isFinite(segment.start) &&
+          Number.isFinite(segment.end) &&
+          segment.start < segment.end
+      );
+  };
 
-    let ranked = keywordMatches;
-    if (!ranked.length) {
-      ranked = audioSegments
-        .filter((segment) => segment.transcript.trim())
-        .map((segment) => ({
-          segment,
-          score: countWords(segment.transcript),
-        }));
-    }
-
-    if (!ranked.length) {
-      ranked = audioSegments.map((segment) => ({
-        segment,
-        score: segment.category === "speech" ? 1 : 0,
-      }));
-    }
-
-    const sorted = ranked
-      .sort((a, b) => {
-        if (b.score !== a.score) return b.score - a.score;
-        return a.segment.start - b.segment.start;
-      })
-      .slice(0, 4);
-
-    const suggestedSegments: SuggestionSegment[] = sorted.map(({ segment }) => {
-      const baseNote =
-        segment.category === "music"
-          ? "background music"
-          : segment.category === "sfx"
-          ? "background sound"
-          : "speech";
-      const detail = segment.transcript.trim()
-        ? truncateText(segment.transcript.trim())
-        : baseNote;
-      return {
-        start: segment.start,
-        end: segment.end,
-        note: detail,
-      };
-    });
-
-    const header = keywords.length
-      ? `Possible matches for "${keywords.join(" ")}":`
-      : "Possible trim points from the transcript:";
-    const lines = suggestedSegments.map(
+  const pushActionSuggestions = (actions: ModelAction[] | undefined | null) => {
+    const nextSuggestions = buildActionSuggestions(actions);
+    if (!nextSuggestions.length) return 0;
+    setSuggestions(nextSuggestions);
+    const lines = nextSuggestions.map(
       (segment, index) =>
         `${index + 1}. ${formatTime(segment.start)}-${formatTime(
           segment.end
         )} - ${segment.note}`
     );
-    lines.push(
-      "Reply with 'trim 1' to cut one, or send a custom time range."
+    pushSystemMessage(
+      `I found ${nextSuggestions.length} trim suggestion${
+        nextSuggestions.length > 1 ? "s" : ""
+      }:\n${lines.join("\n")}\nReply with "trim 1" to apply one.`
     );
-
-    return { message: [header, ...lines].join("\n"), segments: suggestedSegments };
+    return nextSuggestions.length;
   };
 
   const pushSystemMessage = (text: string) => {
@@ -574,6 +559,7 @@ export default function Chat({
   const applyActionsFromJson = (actions: ModelAction[] | undefined | null) => {
     if (!actions?.length || !onAddEdit) return 0;
     let applied = 0;
+    let limitHit = false;
     actions.forEach((action) => {
       const actionType = (action?.type ?? "").toLowerCase();
       if (!["trim", "cut", "remove", "delete"].includes(actionType)) return;
@@ -581,6 +567,27 @@ export default function Chat({
       const end = Number(action?.end);
       if (!Number.isFinite(start) || !Number.isFinite(end)) return;
       if (start >= end) return;
+      const clipIndex = resolveActionClipIndex(action?.clip);
+      if (
+        clipIndex !== null &&
+        multiClipFiles.length &&
+        typeof onQueueClipTrim === "function"
+      ) {
+        if (clipIndex !== activeClipIndex) {
+          const message = onQueueClipTrim(
+            clipIndex,
+            start,
+            end,
+            action?.reason ?? `AI ${actionType}`
+          );
+          pushSystemMessage(message);
+          return;
+        }
+      }
+      if (!canQueueTrimSegments([{ start, end }])) {
+        limitHit = true;
+        return;
+      }
       onAddEdit({
         start,
         end,
@@ -588,6 +595,9 @@ export default function Chat({
       });
       applied += 1;
     });
+    if (limitHit) {
+      pushSystemMessage(buildTrimLimitMessage());
+    }
     return applied;
   };
 
@@ -602,6 +612,7 @@ export default function Chat({
     pushStatus("Starting export...");
     const result = await onRequestExport();
     if (result?.success) {
+      updateMemory({ lastExportAt: Date.now() });
       const note =
         edits.length > 0
           ? "Export complete. Use the Removed Export panel for the collected clips."
@@ -615,32 +626,39 @@ export default function Chat({
     setStatus(null);
   };
 
-  const buildAudioSummary = () => {
-    if (!audioSegments.length) {
-      if (audioStatus === "no-audio") {
-        return "No audio track detected. Relying on visual frames.";
+  const buildAudioSummaryFor = (
+    segments: AudioSegment[],
+    status: "idle" | "processing" | "done" | "error" | "no-audio",
+    error: string | null,
+    allowVisualFallback: boolean
+  ) => {
+    if (!segments.length) {
+      if (status === "no-audio") {
+        return allowVisualFallback
+          ? "No audio track detected. Relying on visual frames."
+          : "No audio track detected.";
       }
-      if (audioStatus === "processing") {
+      if (status === "processing") {
         return "Audio transcription is processing.";
       }
-      if (audioStatus === "error") {
-        return `Audio transcription failed: ${audioError ?? "unknown error"}`;
+      if (status === "error") {
+        return `Audio transcription failed: ${error ?? "unknown error"}`;
       }
       return "";
     }
 
-    const speechSegments = audioSegments.filter(
+    const speechSegments = segments.filter(
       (segment) => segment.category === "speech"
     );
-    const musicSegments = audioSegments.filter(
+    const musicSegments = segments.filter(
       (segment) => segment.category === "music"
     );
-    const sfxSegments = audioSegments.filter(
+    const sfxSegments = segments.filter(
       (segment) => segment.category === "sfx"
     );
 
-    const formatSegments = (segments: AudioSegment[]) =>
-      segments.map((segment) => {
+    const formatSegments = (items: AudioSegment[]) =>
+      items.map((segment) => {
         const range = `${formatTime(segment.start)}-${formatTime(segment.end)}`;
         if (segment.category === "music") {
           return `${range} music`;
@@ -669,52 +687,160 @@ export default function Chat({
     return sections.join("\n");
   };
 
-  const buildClipSummary = () => {
-    if (!edits.length) return "";
-    return edits.map((edit, index) => {
-      const overlapping = audioSegments.filter(
-        (segment) => segment.end >= edit.start && segment.start <= edit.end
-      );
-      const audioNotes = overlapping.map((segment) => {
-        if (segment.category === "music") {
-          return `${formatTime(segment.start)}-${formatTime(segment.end)} music`;
-        }
-        if (segment.category === "sfx") {
-          return `${formatTime(segment.start)}-${formatTime(
-            segment.end
-          )} background`;
-        }
-        const text = segment.transcript.trim() || "speech";
-        return `${formatTime(segment.start)}-${formatTime(segment.end)} ${text}`;
-      });
-      const reason = edit.reason ? `Reason: ${edit.reason}` : "Reason: user request";
-      const audioLine = audioNotes.length
-        ? ` Audio: ${audioNotes.join(" | ")}`
-        : "";
-      return `Clip ${index + 1}: ${formatTime(edit.start)}-${formatTime(
-        edit.end
-      )}. ${reason}.${audioLine}`;
-    }).join("\n");
+  const buildAudioKeySummaryFor = (segments: AudioSegment[]) => {
+    if (!segments.length) return "No audio highlights yet.";
+    const speech = segments.filter(
+      (segment) => segment.category === "speech" && segment.transcript.trim()
+    );
+    if (!speech.length) {
+      const musicCount = segments.filter(
+        (segment) => segment.category === "music"
+      ).length;
+      const sfxCount = segments.filter(
+        (segment) => segment.category === "sfx"
+      ).length;
+      const notes = [
+        musicCount ? `${musicCount} music segments` : "",
+        sfxCount ? `${sfxCount} sfx segments` : "",
+      ].filter(Boolean);
+      return notes.length ? notes.join(" + ") : "Audio detected.";
+    }
+
+    const ranked = speech
+      .map((segment) => ({
+        segment,
+        score: countWords(segment.transcript),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+
+    return ranked
+      .map(({ segment }) => {
+        const range = `${formatTime(segment.start)}-${formatTime(segment.end)}`;
+        return `${range} ${truncateText(segment.transcript.trim(), 80)}`;
+      })
+      .join(" | ");
   };
 
-  const buildVisualSummary = () => {
-    const lines: string[] = [];
-    if (videoInsights.length) {
-      lines.push(
-        "Visual scenes:",
-        ...videoInsights.map(
+  const buildAudioKeySummaryWithStatus = (
+    segments: AudioSegment[],
+    status: "idle" | "processing" | "done" | "error" | "no-audio",
+    error: string | null,
+    allowVisualFallback: boolean
+  ) => {
+    if (!segments.length) {
+      if (status === "no-audio") {
+        return allowVisualFallback
+          ? "No audio track detected (visual-only)."
+          : "No audio track detected.";
+      }
+      if (status === "processing") {
+        return "Audio processing.";
+      }
+      if (status === "error") {
+        return `Audio error: ${error ?? "unknown error"}`;
+      }
+      if (status === "done") {
+        return "No audio highlights yet.";
+      }
+      if (status === "idle") {
+        return "Audio not analyzed yet.";
+      }
+      return "";
+    }
+    return buildAudioKeySummaryFor(segments);
+  };
+
+  const buildVisualKeySummaryFor = (
+    insights: VideoInsight[],
+    scenes: number[]
+  ) => {
+    if (!insights.length && !scenes.length) return "";
+    const parts: string[] = [];
+    if (insights.length) {
+      const top = insights.slice(0, 2);
+      parts.push(
+        ...top.map(
           (insight) => `${formatTime(insight.time)} ${insight.description}`
         )
       );
     }
-    if (sceneChanges.length) {
+    if (scenes.length) {
+      parts.push(`${scenes.length} scene changes`);
+    }
+    return parts.join(" | ");
+  };
+
+  const buildAudioSummary = (allowVisualFallback: boolean) =>
+    buildAudioSummaryFor(audioSegments, audioStatus, audioError, allowVisualFallback);
+
+  const buildClipKeySummaryFor = (clipEdits: ClipSegment[]) => {
+    if (!clipEdits.length) return "";
+    const last = clipEdits[clipEdits.length - 1];
+    const range = `${formatTime(last.start)}-${formatTime(last.end)}`;
+    if (clipEdits.length === 1) {
+      return `1 trim (${range})`;
+    }
+    return `${clipEdits.length} trims (latest ${range})`;
+  };
+
+  const buildClipSummaryFor = (
+    clipEdits: ClipSegment[],
+    segments: AudioSegment[]
+  ) => {
+    if (!clipEdits.length) return "";
+    return clipEdits
+      .map((edit, index) => {
+        const overlapping = segments.filter(
+          (segment) => segment.end >= edit.start && segment.start <= edit.end
+        );
+        const audioNotes = overlapping.map((segment) => {
+          if (segment.category === "music") {
+            return `${formatTime(segment.start)}-${formatTime(segment.end)} music`;
+          }
+          if (segment.category === "sfx") {
+            return `${formatTime(segment.start)}-${formatTime(
+              segment.end
+            )} background`;
+          }
+          const text = segment.transcript.trim() || "speech";
+          return `${formatTime(segment.start)}-${formatTime(segment.end)} ${text}`;
+        });
+        const reason = edit.reason
+          ? `Reason: ${edit.reason}`
+          : "Reason: user request";
+        const audioLine = audioNotes.length
+          ? ` Audio: ${audioNotes.join(" | ")}`
+          : "";
+        return `Clip ${index + 1}: ${formatTime(edit.start)}-${formatTime(
+          edit.end
+        )}. ${reason}.${audioLine}`;
+      })
+      .join("\n");
+  };
+
+  const buildClipSummary = () => buildClipSummaryFor(edits, audioSegments);
+
+  const buildVisualSummaryFor = (
+    insights: VideoInsight[],
+    scenes: number[]
+  ) => {
+    const lines: string[] = [];
+    if (insights.length) {
       lines.push(
-        "Scene changes:",
-        sceneChanges.map((time) => formatTime(time)).join(", ")
+        "Visual scenes:",
+        ...insights.map(
+          (insight) => `${formatTime(insight.time)} ${insight.description}`
+        )
       );
+    }
+    if (scenes.length) {
+      lines.push("Scene changes:", scenes.map((time) => formatTime(time)).join(", "));
     }
     return lines.join("\n");
   };
+
+  const buildVisualSummary = () => buildVisualSummaryFor(videoInsights, sceneChanges);
 
   const submitMessage = async (text: string) => {
     if (!text.trim()) return;
@@ -725,102 +851,11 @@ export default function Chat({
       sender: "user",
     };
 
+    updateMemory({ lastIntent: text.trim() });
     setMessages((prev) => [...prev, userMessage]);
     const currentInput = text;
     setInput("");
     setStatusLog([]);
-
-    if (exportIntentRegex.test(currentInput)) {
-      if (!edits.length) {
-        pushSystemMessage("No clips collected yet to export.");
-        return;
-      }
-      await handleExportRequest();
-      return;
-    }
-
-    if (allowLocalActions && editIntentRegex.test(currentInput)) {
-      const pickMatch = currentInput.match(suggestionPickRegex);
-      if (pickMatch && suggestions.length) {
-        const index = Number.parseInt(pickMatch[1], 10) - 1;
-        const suggestion = suggestions[index];
-        if (suggestion) {
-          onAddEdit?.({
-            start: suggestion.start,
-            end: suggestion.end,
-            reason: `Trim suggestion ${index + 1}`,
-          });
-          pushSystemMessage(
-            `Trim queued: ${formatTime(suggestion.start)}-${formatTime(
-              suggestion.end
-            )}.`
-          );
-          setSuggestions([]);
-          return;
-        }
-      }
-
-      const timeRange = extractTimeRange(currentInput);
-      const relativeRange = extractRelativeRange(currentInput);
-      const useTrimRange =
-        /use (current )?trim|use trim range/i.test(currentInput);
-
-      if (!timeRange && !useTrimRange && !relativeRange) {
-        const suggestionResult = buildSuggestionMessage(currentInput);
-        pushSystemMessage(suggestionResult.message);
-        setSuggestions(suggestionResult.segments);
-        return;
-      }
-
-      if (relativeRange && "needsDuration" in relativeRange) {
-        pushSystemMessage(
-          "I can remove the last part once the video duration is loaded. Please wait for metadata or press play once."
-        );
-        return;
-      }
-
-      if (relativeRange && "needsValue" in relativeRange) {
-        pushSystemMessage(
-          "Tell me how many seconds or minutes to remove, like first 30 seconds or last 10 seconds."
-        );
-        return;
-      }
-
-      let start = timeRange?.start ?? 0;
-      let end = timeRange?.end ?? 0;
-
-      if (relativeRange && "start" in relativeRange) {
-        start = relativeRange.start;
-        end = relativeRange.end;
-      } else if (useTrimRange && videoContext?.duration) {
-        const safeTrimStart = videoContext?.trimStart ?? 0;
-        const safeTrimEnd = videoContext?.trimEnd ?? 100;
-        start = (safeTrimStart / 100) * videoContext.duration;
-        end = (safeTrimEnd / 100) * videoContext.duration;
-      }
-
-      if (Number.isFinite(start) && Number.isFinite(end) && start < end) {
-        onAddEdit?.({
-          start,
-          end,
-          reason: currentInput,
-        });
-        pushSystemMessage(`Trim queued: ${formatTime(start)}-${formatTime(end)}.`);
-        return;
-      } else {
-        pushSystemMessage(
-          "I still need a valid time range. Please send a range like 00:12-00:18, or use the trim sliders and say use current trim range."
-        );
-        return;
-      }
-    }
-
-    if (allowLocalActions && suggestIntentRegex.test(currentInput)) {
-      const suggestionResult = buildSuggestionMessage(currentInput);
-      pushSystemMessage(suggestionResult.message);
-      setSuggestions(suggestionResult.segments);
-      return;
-    }
 
     const historyForModel = [...messages, userMessage].map((msg) => ({
       role: msg.sender === "user" ? "user" : "assistant",
@@ -840,27 +875,53 @@ export default function Chat({
         trimmedDuration > 0 ? (safeTrimEnd / 100) * trimmedDuration : 0;
 
       pushStatus("Reviewing the timeline and trim range...");
-      if (audioSegments.length) {
-        pushStatus("Scanning speech, music, and background sounds...");
-      } else if (audioStatus === "processing") {
-        pushStatus("Audio is still processing — using visuals for now...");
-      } else if (audioStatus === "no-audio") {
-        pushStatus("No audio track detected — using visuals only...");
+      if (includeAudioContext) {
+        if (audioSegments.length) {
+          pushStatus("Scanning speech, music, and background sounds...");
+        } else if (audioStatus === "processing") {
+          pushStatus("Audio is still processing - using visuals for now...");
+        } else if (audioStatus === "no-audio") {
+          pushStatus("No audio track detected - using visuals only...");
+        }
       }
 
-      pushStatus("Capturing the current frame...");
       const frameDataUrl =
-        videoContext && captureFrame ? captureFrame() : null;
-      pushStatus("Summarizing audio + visuals...");
-      const audioSummary = buildAudioSummary();
-      const clipSummary = buildClipSummary();
-      const visualSummary = buildVisualSummary();
+        includeVisualContext && videoContext && captureFrame
+          ? captureFrame()
+          : null;
+
+      if (includeAudioContext || includeVisualContext || includeClipContext) {
+        pushStatus("Summarizing context...");
+      }
+
+      const audioSummary = includeAudioContext
+        ? buildAudioSummary(includeVisualContext)
+        : "";
+      const clipSummary = includeClipContext ? buildClipSummary() : "";
+      const visualSummary = includeVisualContext ? buildVisualSummary() : "";
+      const memorySnapshot = buildMemorySummary({
+        ...(memory ?? {}),
+        lastIntent: currentInput.trim(),
+      });
 
       pushStatus("Sending context to the AI...");
 
       const requestBody = {
         message: currentInput,
         history: historyForModel,
+        memory: memorySnapshot ? { summary: memorySnapshot } : undefined,
+        allowThinking,
+        multiClips:
+          multiClipMode === "all" && multiClipSummaries.length
+            ? multiClipSummaries
+            : undefined,
+        suggestions: suggestions.length
+          ? suggestions.map((suggestion) => ({
+              start: suggestion.start,
+              end: suggestion.end,
+              note: suggestion.note,
+            }))
+          : undefined,
         video: videoContext
           ? {
               name: videoContext.name,
@@ -895,20 +956,46 @@ export default function Chat({
           : undefined,
       };
 
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
+      let res: Response | null = null;
+      let data: any = null;
+      let raw = "";
+      const maxParseRetries = 5;
 
-      const data = await res.json();
+      for (let attempt = 1; attempt <= maxParseRetries; attempt += 1) {
+        res = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(requestBody),
+        });
 
-      if (!res.ok) {
-        const errorMessage =
-          data?.error?.message || `Request failed (${res.status})`;
-        throw new Error(errorMessage);
+        raw = await res.text();
+        try {
+          data = raw ? JSON.parse(raw) : null;
+        } catch {
+          data = null;
+        }
+
+        if (!res.ok) {
+          const errorMessage =
+            data?.error?.message ||
+            raw?.slice(0, 200) ||
+            `Request failed (${res.status})`;
+          throw new Error(errorMessage);
+        }
+
+        if (data) break;
+
+        if (attempt < maxParseRetries) {
+          pushStatus(
+            `AI response was invalid JSON. Retrying (${attempt + 1}/${maxParseRetries})...`
+          );
+        }
+      }
+
+      if (!data || !res) {
+        throw new Error("AI response was not valid JSON. Please try again.");
       }
 
       if (data?.usage) {
@@ -917,27 +1004,54 @@ export default function Chat({
 
       pushStatus("Parsing the AI response...");
 
+      const responseStatus = data?.parsed?.status;
       const aiText =
         data?.assistantMessage ||
-        data?.parsed?.assistant_message ||
-        data?.parsed?.follow_up ||
+        (responseStatus === "needs_info"
+          ? data?.parsed?.follow_up || data?.parsed?.assistant_message
+          : data?.parsed?.assistant_message || data?.parsed?.follow_up) ||
         data?.choices?.[0]?.message?.content ||
         "No response from AI";
 
       const parsedActions = data?.parsed?.actions;
-      const appliedCount = applyActionsFromJson(parsedActions);
-      if (appliedCount > 0) {
-        pushStatus(`Applying ${appliedCount} edit${appliedCount > 1 ? "s" : ""}...`);
+      let appliedCount = 0;
+      const canApplyActions = allowAutoApply || allowLocalEdits;
+      const allowActionProcessing = responseStatus !== "needs_info";
+      if (canApplyActions && allowActionProcessing) {
+        appliedCount = applyActionsFromJson(parsedActions);
+        if (appliedCount > 0) {
+          pushStatus(
+            `Applying ${appliedCount} edit${appliedCount > 1 ? "s" : ""}...`
+          );
+          pushSystemMessage(
+            `Applied ${appliedCount} edit${appliedCount > 1 ? "s" : ""} from AI.`
+          );
+        }
+      }
+
+      if (appliedCount === 0 && allowSuggestions && allowActionProcessing) {
+        const suggestionCount = pushActionSuggestions(parsedActions);
+        if (suggestionCount > 0) {
+          pushStatus(
+            `Shared ${suggestionCount} trim suggestion${
+              suggestionCount > 1 ? "s" : ""
+            } for review.`
+          );
+        }
+      } else if (parsedActions?.length && !canApplyActions && allowActionProcessing) {
         pushSystemMessage(
-          `Applied ${appliedCount} edit${appliedCount > 1 ? "s" : ""} from AI.`
+          "Edits are not auto-applied on this plan. Try a simple time range like 00:12-00:18."
         );
       }
 
-      if (parsedActions?.some((action) =>
-        ["export", "render", "combine"].includes(
-          (action?.type ?? "").toLowerCase()
+      if (
+        allowAutoApply &&
+        parsedActions?.some((action) =>
+          ["export", "render", "combine"].includes(
+            (action?.type ?? "").toLowerCase()
+          )
         )
-      )) {
+      ) {
         pushStatus("Starting export...");
         await handleExportRequest();
       }
@@ -986,8 +1100,74 @@ export default function Chat({
     return `Explain what happens in ${range} (${note}).`;
   };
 
+  const memorySummary = buildMemorySummary(memory);
+
+  const multiClipSummaries = useMemo(() => {
+    if (multiClipMode !== "all" || !multiClipFiles.length) return [];
+    const snapshotMap = new Map(
+      multiClipSnapshots.map((snapshot) => [snapshot.id, snapshot])
+    );
+
+    return multiClipFiles.map((file, index) => {
+      const snapshot = snapshotMap.get(file.id);
+      if (!snapshot) {
+        return {
+          label: `Clip ${index + 1}: ${file.name}`,
+          summary: "No analysis yet. Open this clip to analyze it.",
+        };
+      }
+
+      const parts: string[] = [];
+      if (snapshot.duration) {
+        parts.push(`Duration: ${formatTime(snapshot.duration)}`);
+      }
+      if (snapshot.width && snapshot.height) {
+        parts.push(`Resolution: ${snapshot.width}x${snapshot.height}`);
+      }
+
+      if (includeAudioContext) {
+        const audioSummary = buildAudioKeySummaryWithStatus(
+          snapshot.audioSegments,
+          snapshot.audioStatus,
+          snapshot.audioError,
+          includeVisualContext
+        );
+        if (audioSummary) parts.push(`Audio: ${audioSummary}`);
+      }
+
+      if (includeVisualContext) {
+        const visualSummary = buildVisualKeySummaryFor(
+          snapshot.videoInsights,
+          snapshot.sceneChanges
+        );
+        if (visualSummary) {
+          parts.push(`Visual: ${visualSummary}`);
+        } else {
+          parts.push("Visual: not analyzed yet.");
+        }
+      }
+
+      if (includeClipContext) {
+        const clipSummary = buildClipKeySummaryFor(snapshot.edits);
+        if (clipSummary) parts.push(`Clips: ${clipSummary}`);
+      }
+
+      const summary = parts.length
+        ? parts.join("\n")
+        : "No extra analysis available.";
+      return { label: `Clip ${index + 1}: ${snapshot.name}`, summary };
+    });
+  }, [
+    multiClipMode,
+    multiClipFiles,
+    multiClipSnapshots,
+    includeAudioContext,
+    includeVisualContext,
+    includeClipContext,
+  ]);
+
   return (
-    <div className="flex h-full min-h-[500px] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 backdrop-blur-xl shadow-2xl">
+    <div className="flex h-full min-h-[500px] max-h-[80vh] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 backdrop-blur-xl shadow-2xl">
       {/* Header */}
       <div className="border-b border-zinc-800 bg-zinc-950/50 px-6 py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -999,6 +1179,15 @@ export default function Chat({
             AI Assistant
           </h2>
           <div className="flex items-center gap-2">
+            <span
+              className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+                allowThinking
+                  ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
+                  : "border-zinc-700 text-zinc-400"
+              }`}
+            >
+              Thinking {allowThinking ? "On" : "Off"}
+            </span>
             <button
               type="button"
               onClick={() => setIsHistoryOpen((prev) => !prev)}
@@ -1021,6 +1210,15 @@ export default function Chat({
           </div>
         </div>
       </div>
+
+      {memorySummary ? (
+        <div className="border-b border-zinc-800 bg-zinc-950/40 px-6 py-3">
+          <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+            Memory
+          </div>
+          <div className="mt-1 text-xs text-zinc-300">{memorySummary}</div>
+        </div>
+      ) : null}
 
       {isHistoryOpen ? (
         <div className="border-b border-zinc-800 bg-zinc-950/40 px-4 py-3">
@@ -1062,7 +1260,7 @@ export default function Chat({
       ) : null}
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 overscroll-y-contain">
         {messages.map((msg) => (
           <div
             key={msg.id}

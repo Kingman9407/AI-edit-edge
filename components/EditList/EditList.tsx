@@ -1,6 +1,7 @@
 import React from "react";
 import { formatTime } from "../../utils/formatTime";
 import SegmentedPreview from "../SegmentedPreview/SegmentedPreview";
+import { PLAN_CONFIGS, PlanId } from "../../utils/plans";
 
 type EditSegment = {
   id: string;
@@ -13,6 +14,7 @@ interface EditListProps {
   edits: EditSegment[];
   videoSrc?: string;
   previewSegments?: { start: number; end: number }[];
+  planId: PlanId;
   onSelect?: (time: number) => void;
   onUndoLast: () => void;
   onRemove: (id: string) => void;
@@ -22,9 +24,11 @@ interface EditListProps {
 const ClipPreview = ({
   videoSrc,
   start,
+  index,
 }: {
   videoSrc: string;
   start: number;
+  index: number;
 }) => {
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
 
@@ -55,6 +59,9 @@ const ClipPreview = ({
         preload="metadata"
         className="h-full w-full object-cover"
       />
+      <div className="absolute left-1 top-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-semibold text-white">
+        {index + 1}
+      </div>
       <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1 text-[10px] text-zinc-200">
         {formatTime(start)}
       </div>
@@ -66,15 +73,35 @@ export default function EditList({
   edits,
   videoSrc,
   previewSegments = [],
+  planId,
   onSelect,
   onUndoLast,
   onRemove,
   onClear,
 }: EditListProps) {
+  const freeLimit = Math.round(PLAN_CONFIGS.free.maxTrimFraction * 100);
+  const plusLimit = Math.round(PLAN_CONFIGS.plus.maxTrimFraction * 100);
+  const proLimit = Math.round(PLAN_CONFIGS.pro.maxTrimFraction * 100);
   return (
     <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 shadow-2xl backdrop-blur-xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm font-semibold text-zinc-200">Clip Stack</div>
+        <div className="space-y-1">
+          <div className="text-sm font-semibold text-zinc-200">Clip Stack</div>
+          <div className="text-[11px] text-zinc-500">
+            Trim limit:{" "}
+            <span className={planId === "free" ? "text-zinc-200" : ""}>
+              {freeLimit}%
+            </span>{" "}
+            /{" "}
+            <span className={planId === "plus" ? "text-zinc-200" : ""}>
+              {plusLimit}%
+            </span>{" "}
+            /{" "}
+            <span className={planId === "pro" ? "text-zinc-200" : ""}>
+              {proLimit}%
+            </span>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -115,7 +142,11 @@ export default function EditList({
                 >
                   <div className="flex items-center gap-4">
                     {videoSrc ? (
-                      <ClipPreview videoSrc={videoSrc} start={edit.start} />
+                      <ClipPreview
+                        videoSrc={videoSrc}
+                        start={edit.start}
+                        index={index}
+                      />
                     ) : null}
                     <div className="space-y-1">
                       <div className="font-semibold text-zinc-200">

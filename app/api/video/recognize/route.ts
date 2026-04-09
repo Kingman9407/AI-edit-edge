@@ -45,10 +45,25 @@ export async function POST(req: Request) {
     }
   );
 
-  const data = await response.json();
+  const raw = await response.text();
+  let data: any = null;
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = null;
+    }
+  }
   if (!response.ok) {
-    const errorMessage = data?.error?.message || "Video recognition failed";
+    const errorMessage =
+      data?.error?.message || data?.error || raw || "Video recognition failed";
     return Response.json({ error: errorMessage }, { status: response.status });
+  }
+  if (!data) {
+    return Response.json(
+      { error: "Invalid response from recognition model" },
+      { status: 502 }
+    );
   }
 
   const description = data?.choices?.[0]?.message?.content ?? "";

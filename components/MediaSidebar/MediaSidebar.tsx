@@ -1,5 +1,6 @@
 import React from "react";
 import { formatTime } from "../../utils/formatTime";
+import { PLAN_CONFIGS, PlanId } from "../../utils/plans";
 
 type AudioSegment = {
   start: number;
@@ -23,6 +24,7 @@ type VideoInsight = {
 };
 
 interface MediaSidebarProps {
+  planId: PlanId;
   videoContext?: VideoContext;
   audioSegments?: AudioSegment[];
   audioStatus?: "idle" | "processing" | "done" | "error" | "no-audio";
@@ -58,6 +60,7 @@ const buildSegmentLines = (segments: AudioSegment[], limit?: number) =>
   );
 
 export default function MediaSidebar({
+  planId,
   videoContext,
   audioSegments = [],
   audioStatus = "idle",
@@ -70,6 +73,9 @@ export default function MediaSidebar({
   sceneStatus = "idle",
   sceneError = null,
 }: MediaSidebarProps) {
+  const planConfig = PLAN_CONFIGS[planId];
+  const showAudioBreakdown = planConfig.mediaBreakdown !== "locked";
+  const showVisualBreakdown = planConfig.mediaBreakdown === "full";
   const speechSegments = audioSegments.filter(
     (segment) => segment.category === "speech"
   );
@@ -87,6 +93,20 @@ export default function MediaSidebar({
     (insight) => `${formatTime(insight.time)} ${insight.description}`
   );
   const sceneLines = sceneChanges.map((time) => formatTime(time));
+
+  if (!showAudioBreakdown && !showVisualBreakdown) {
+    return (
+      <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 shadow-2xl backdrop-blur-xl">
+        <div className="text-sm font-semibold text-zinc-200">Media Breakdown</div>
+        <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/60 p-6 text-center text-xs text-zinc-500">
+          Media breakdown is locked on the {planConfig.label} plan.
+          <div className="mt-2 text-[11px] text-zinc-600">
+            Upgrade to Plus to unlock audio analysis.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 shadow-2xl backdrop-blur-xl">
@@ -118,50 +138,72 @@ export default function MediaSidebar({
           </div>
         </div>
 
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
-          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-zinc-500">
-            <span>Video Recognition</span>
-            <span className="text-zinc-400">
-              {videoInsights.length} scenes
-            </span>
+        {showVisualBreakdown ? (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+            <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              <span>Video Recognition</span>
+              <span className="text-zinc-400">
+                {videoInsights.length} scenes
+              </span>
+            </div>
+            <div className="mt-2 text-xs text-zinc-400">
+              {videoInsightStatus === "processing" && "Analyzing frames..."}
+              {videoInsightStatus === "error" &&
+                (videoInsightError || "Video analysis error")}
+            </div>
+            <div className="mt-2 max-h-24 space-y-1 overflow-y-auto text-xs text-zinc-300">
+              {insightLines.length ? (
+                insightLines.map((line, index) => (
+                  <div key={`video-${index}`}>{line}</div>
+                ))
+              ) : (
+                <div className="text-zinc-500">No visual scenes yet.</div>
+              )}
+            </div>
           </div>
-          <div className="mt-2 text-xs text-zinc-400">
-            {videoInsightStatus === "processing" && "Analyzing frames..."}
-            {videoInsightStatus === "error" &&
-              (videoInsightError || "Video analysis error")}
+        ) : (
+          <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/60 p-4 text-xs text-zinc-500">
+            <div className="font-semibold uppercase tracking-wide text-zinc-500">
+              Video Recognition
+            </div>
+            <div className="mt-2">
+              Upgrade to Pro to unlock visual recognition.
+            </div>
           </div>
-          <div className="mt-2 max-h-24 space-y-1 overflow-y-auto text-xs text-zinc-300">
-            {insightLines.length ? (
-              insightLines.map((line, index) => (
-                <div key={`video-${index}`}>{line}</div>
-              ))
-            ) : (
-              <div className="text-zinc-500">No visual scenes yet.</div>
-            )}
-          </div>
-        </div>
+        )}
 
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
-          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-zinc-500">
-            <span>Scene Changes</span>
-            <span className="text-zinc-400">
-              {sceneChanges.length} cuts
-            </span>
+        {showVisualBreakdown ? (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+            <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-zinc-500">
+              <span>Scene Changes</span>
+              <span className="text-zinc-400">
+                {sceneChanges.length} cuts
+              </span>
+            </div>
+            <div className="mt-2 text-xs text-zinc-400">
+              {sceneStatus === "processing" && "Detecting scene changes..."}
+              {sceneStatus === "error" && (sceneError || "Scene analysis error")}
+            </div>
+            <div className="mt-2 max-h-24 space-y-1 overflow-y-auto text-xs text-zinc-300">
+              {sceneLines.length ? (
+                sceneLines.map((line, index) => (
+                  <div key={`scene-${index}`}>{line}</div>
+                ))
+              ) : (
+                <div className="text-zinc-500">No scene cuts detected yet.</div>
+              )}
+            </div>
           </div>
-          <div className="mt-2 text-xs text-zinc-400">
-            {sceneStatus === "processing" && "Detecting scene changes..."}
-            {sceneStatus === "error" && (sceneError || "Scene analysis error")}
+        ) : (
+          <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/60 p-4 text-xs text-zinc-500">
+            <div className="font-semibold uppercase tracking-wide text-zinc-500">
+              Scene Changes
+            </div>
+            <div className="mt-2">
+              Upgrade to Pro to unlock scene detection.
+            </div>
           </div>
-          <div className="mt-2 max-h-24 space-y-1 overflow-y-auto text-xs text-zinc-300">
-            {sceneLines.length ? (
-              sceneLines.map((line, index) => (
-                <div key={`scene-${index}`}>{line}</div>
-              ))
-            ) : (
-              <div className="text-zinc-500">No scene cuts detected yet.</div>
-            )}
-          </div>
-        </div>
+        )}
 
         <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
           <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-zinc-500">
