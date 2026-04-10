@@ -36,7 +36,7 @@ type ClipOrderResponse = {
   order: number[];
 };
 
-const MAX_SERVER_UPLOAD_BYTES = 4_000_000;
+
 
 const getUnsignedCloudinaryConfig = () => {
   if (typeof window === "undefined") return null;
@@ -168,52 +168,27 @@ const exportWithCloudinary = async (
     return data as CloudinaryResult;
   };
 
-  const buildFormWithUrl = async () => {
-    const directResult = await uploadVideoDirect(file);
-    if (!directResult.url) {
-      throw new Error(
-        "Direct upload failed. Please check Cloudinary configuration."
-      );
-    }
-    const form = new FormData();
-    form.append("fileUrl", directResult.url);
-    if (directResult.publicId) {
-      form.append("basePublicId", directResult.publicId);
-    }
-    form.append("filename", file.name);
-    form.append("segments", JSON.stringify(segments));
-    form.append("mode", mode);
-    return form;
-  };
+  // ✅ ALWAYS upload directly to Cloudinary (fix for Vercel payload limit)
+  const directResult = await uploadVideoDirect(file);
 
-  const buildFormWithFile = () => {
-    const form = new FormData();
-    form.append("file", file);
-    form.append("segments", JSON.stringify(segments));
-    form.append("mode", mode);
-    return form;
-  };
-
-  const shouldDirectUpload = file.size > MAX_SERVER_UPLOAD_BYTES;
-  if (shouldDirectUpload) {
-    return postExport(await buildFormWithUrl());
+  if (!directResult.url) {
+    throw new Error(
+      "Direct upload failed. Please check Cloudinary configuration."
+    );
   }
 
-  try {
-    return await postExport(buildFormWithFile());
-  } catch (err) {
-    const status = (err as { status?: number }).status;
-    if (status === 413) {
-      return postExport(await buildFormWithUrl());
-    }
-    if (
-      err instanceof Error &&
-      err.message.includes("FUNCTION_PAYLOAD_TOO_LARGE")
-    ) {
-      return postExport(await buildFormWithUrl());
-    }
-    throw err;
+  const form = new FormData();
+  form.append("fileUrl", directResult.url);
+
+  if (directResult.publicId) {
+    form.append("basePublicId", directResult.publicId);
   }
+
+  form.append("filename", file.name);
+  form.append("segments", JSON.stringify(segments));
+  form.append("mode", mode);
+
+  return postExport(form);
 };
 
 const fetchClipOrder = async (segments: Segment[]): Promise<number[]> => {
