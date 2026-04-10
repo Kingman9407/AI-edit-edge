@@ -95,23 +95,31 @@ type JsonResponse = {
 
 function parseModelJson(value: string): ModelJson | null {
   try {
-    const parsed = JSON.parse(value) as Partial<ModelJson> | null;
+    let cleaned = value.trim();
+    // Strip markdown code fences the model sometimes wraps JSON in
+    if (cleaned.startsWith("```")) {
+      cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
+    }
+    const parsed = JSON.parse(cleaned) as Partial<ModelJson> | null;
     if (!parsed || typeof parsed !== "object") return null;
     if (typeof parsed.assistant_message !== "string") return null;
-    if (
-      parsed.status !== "ok" &&
-      parsed.status !== "needs_info" &&
-      parsed.status !== "error"
-    ) {
-      return null;
-    }
-    if (!Array.isArray(parsed.actions)) return null;
+    // Default status to "ok" if the model returned an unexpected value
+    const status: ModelJson["status"] =
+      parsed.status === "ok" ||
+      parsed.status === "needs_info" ||
+      parsed.status === "error"
+        ? parsed.status
+        : "ok";
+    // Default actions to [] if missing or non-array
+    const actions = Array.isArray(parsed.actions)
+      ? (parsed.actions as ModelAction[])
+      : [];
     return {
       assistant_message: parsed.assistant_message,
-      status: parsed.status,
+      status,
       follow_up:
         typeof parsed.follow_up === "string" ? parsed.follow_up : null,
-      actions: parsed.actions as ModelAction[],
+      actions,
     };
   } catch {
     return null;

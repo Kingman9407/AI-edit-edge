@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Send } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import { Send, Bot, User } from "lucide-react";
 import { formatTime } from "../../utils/formatTime";
 import { normalizeSegments } from "../../utils/segments";
 import { PLAN_CONFIGS, PlanId } from "../../utils/plans";
@@ -857,7 +857,23 @@ export default function Chat({
     setInput("");
     setStatusLog([]);
 
-    const historyForModel = [...messages, userMessage].map((msg) => ({
+    // Filter out error/system messages and limit history to avoid overwhelming the lite model
+    const relevantMessages = [...messages, userMessage].filter(
+      (msg) =>
+        !(msg.sender === "system" && (
+          msg.text.startsWith("Error:") ||
+          msg.text.includes("couldn't return a valid JSON") ||
+          msg.text.includes("Welcome to the video editor") ||
+          msg.text.startsWith("Applied ") ||
+          msg.text.startsWith("Starting export") ||
+          msg.text.startsWith("Export ")
+        ))
+    );
+    const maxHistoryMessages = 10;
+    const trimmedHistory = relevantMessages.length > maxHistoryMessages
+      ? relevantMessages.slice(-maxHistoryMessages)
+      : relevantMessages;
+    const historyForModel = trimmedHistory.map((msg) => ({
       role: msg.sender === "user" ? "user" : "assistant",
       content: msg.text,
     }));
@@ -1166,24 +1182,34 @@ export default function Chat({
     includeClipContext,
   ]);
 
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, status, scrollToBottom]);
+
   return (
-    <div className="flex h-full min-h-[500px] max-h-[80vh] flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 backdrop-blur-xl shadow-2xl">
+    <div className="flex h-full min-h-[500px] max-h-[80vh] flex-col overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900/90 to-zinc-950/95 backdrop-blur-2xl shadow-2xl shadow-black/40">
       {/* Header */}
-      <div className="border-b border-zinc-800 bg-zinc-950/50 px-6 py-4">
+      <div className="border-b border-zinc-800/60 bg-gradient-to-r from-zinc-950/80 via-zinc-900/60 to-zinc-950/80 px-6 py-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+          <h2 className="text-lg font-semibold text-white flex items-center gap-3">
+            <span className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 shadow-lg shadow-blue-500/20">
+              <Bot size={18} className="text-white" />
+              <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-zinc-950 bg-emerald-400"></span>
             </span>
             AI Assistant
           </h2>
           <div className="flex items-center gap-2">
             <span
-              className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide ${
+              className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
                 allowThinking
-                  ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-200"
-                  : "border-zinc-700 text-zinc-400"
+                  ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-300"
+                  : "border-zinc-700/60 text-zinc-500"
               }`}
             >
               Thinking {allowThinking ? "On" : "Off"}
@@ -1191,38 +1217,38 @@ export default function Chat({
             <button
               type="button"
               onClick={() => setIsHistoryOpen((prev) => !prev)}
-              className="inline-flex items-center gap-2 rounded-full border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:border-blue-500 hover:text-white"
+              className="inline-flex items-center gap-2 rounded-full border border-zinc-700/60 bg-zinc-800/40 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-all hover:border-blue-500/60 hover:bg-blue-500/10 hover:text-white"
             >
-              <span className="flex flex-col gap-0.5">
-                <span className="h-0.5 w-4 rounded-full bg-zinc-400"></span>
-                <span className="h-0.5 w-4 rounded-full bg-zinc-400"></span>
-                <span className="h-0.5 w-4 rounded-full bg-zinc-400"></span>
+              <span className="flex flex-col gap-[3px]">
+                <span className="h-[2px] w-3.5 rounded-full bg-current"></span>
+                <span className="h-[2px] w-3.5 rounded-full bg-current"></span>
+                <span className="h-[2px] w-3.5 rounded-full bg-current"></span>
               </span>
               History
             </button>
             <button
               type="button"
               onClick={handleNewChat}
-              className="rounded-full border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:border-emerald-400 hover:text-white"
+              className="rounded-full border border-zinc-700/60 bg-zinc-800/40 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-all hover:border-emerald-400/60 hover:bg-emerald-500/10 hover:text-white"
             >
-              New Chat
+              + New Chat
             </button>
           </div>
         </div>
       </div>
 
       {memorySummary ? (
-        <div className="border-b border-zinc-800 bg-zinc-950/40 px-6 py-3">
-          <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+        <div className="border-b border-zinc-800/50 bg-zinc-950/40 px-6 py-3">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
             Memory
           </div>
-          <div className="mt-1 text-xs text-zinc-300">{memorySummary}</div>
+          <div className="mt-1 text-xs text-zinc-400">{memorySummary}</div>
         </div>
       ) : null}
 
       {isHistoryOpen ? (
-        <div className="border-b border-zinc-800 bg-zinc-950/40 px-4 py-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+        <div className="border-b border-zinc-800/50 bg-zinc-950/40 px-4 py-3">
+          <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
             Chat History
           </div>
           <div className="mt-2 max-h-40 space-y-2 overflow-y-auto text-xs text-zinc-300">
@@ -1235,23 +1261,23 @@ export default function Chat({
                     key={session.id}
                     type="button"
                     onClick={() => handleSelectSession(session.id)}
-                    className={`flex w-full flex-col rounded-xl border px-3 py-2 text-left transition ${
+                    className={`flex w-full flex-col rounded-xl border px-3 py-2 text-left transition-all ${
                       isActive
-                        ? "border-blue-500 bg-blue-500/10 text-zinc-100"
-                        : "border-zinc-800 bg-zinc-950/60 hover:border-blue-500"
+                        ? "border-blue-500/60 bg-blue-500/10 text-zinc-100 shadow-sm shadow-blue-500/10"
+                        : "border-zinc-800/60 bg-zinc-950/60 hover:border-blue-500/40 hover:bg-zinc-900/60"
                     }`}
                   >
                     <span className="text-sm font-semibold text-zinc-200">
                       {session.title}
                     </span>
-                    <span className="text-[11px] text-zinc-400">
+                    <span className="text-[11px] text-zinc-500">
                       {updated}
                     </span>
                   </button>
                 );
               })
             ) : (
-              <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-950/60 p-4 text-center text-xs text-zinc-500">
+              <div className="rounded-xl border border-dashed border-zinc-700/50 bg-zinc-950/60 p-4 text-center text-xs text-zinc-500">
                 No chat history yet.
               </div>
             )}
@@ -1260,43 +1286,71 @@ export default function Chat({
       ) : null}
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 overscroll-y-contain">
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex ${
-              msg.sender === "user" ? "justify-end" : "justify-start"
-            }`}
-          >
+      <div className="flex-1 overflow-y-auto px-5 py-6 space-y-5 overscroll-y-contain scroll-smooth">
+        {messages.map((msg) => {
+          const isUser = msg.sender === "user";
+          return (
             <div
-              className={`max-w-[80%] whitespace-pre-line rounded-2xl px-4 py-3 text-sm shadow-sm transition-all animate-in fade-in slide-in-from-bottom-2 ${
-                msg.sender === "user"
-                  ? "bg-blue-600 justify-end text-white rounded-tr-none"
-                  : "bg-zinc-800 text-zinc-200 rounded-tl-none border border-zinc-700/50"
+              key={msg.id}
+              className={`flex items-end gap-2.5 ${
+                isUser ? "flex-row-reverse" : "flex-row"
               }`}
             >
-              {msg.text}
+              {/* Avatar */}
+              <div
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-sm ${
+                  isUser
+                    ? "bg-gradient-to-br from-blue-500 to-blue-600"
+                    : "bg-gradient-to-br from-zinc-700 to-zinc-800 border border-zinc-700/50"
+                }`}
+              >
+                {isUser ? (
+                  <User size={14} className="text-white" />
+                ) : (
+                  <Bot size={14} className="text-zinc-300" />
+                )}
+              </div>
+              {/* Bubble */}
+              <div
+                className={`max-w-[75%] whitespace-pre-line rounded-2xl px-4 py-3 text-[13px] leading-relaxed shadow-md transition-all ${
+                  isUser
+                    ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-md"
+                    : "bg-zinc-800/80 text-zinc-200 rounded-bl-md border border-zinc-700/40"
+                }`}
+              >
+                {msg.text}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+
+        {/* Typing / Progress indicator */}
         {status || statusLog.length ? (
-          <div className="flex justify-start">
-            <div className="max-w-[80%] rounded-2xl border border-zinc-700/60 bg-zinc-800/70 px-4 py-3 text-xs text-zinc-300 shadow-sm">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
-                AI Progress
+          <div className="flex items-end gap-2.5">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-zinc-700 to-zinc-800 border border-zinc-700/50 shadow-sm">
+              <Bot size={14} className="text-zinc-300" />
+            </div>
+            <div className="max-w-[75%] rounded-2xl rounded-bl-md border border-zinc-700/40 bg-zinc-800/80 px-4 py-3 shadow-md">
+              {/* Typing dots */}
+              <div className="flex items-center gap-1 mb-2">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "0ms" }}></span>
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "150ms" }}></span>
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "300ms" }}></span>
               </div>
               <div
                 ref={statusScrollRef}
-                className="mt-2 max-h-32 space-y-1 overflow-y-auto pr-2 text-[11px] text-zinc-400"
+                className="max-h-28 space-y-0.5 overflow-y-auto pr-2 text-[11px] text-zinc-400"
               >
                 {statusLog.map((line, index) => {
                   const isLatest = index === statusLog.length - 1 && status;
                   return (
                     <div
                       key={`${line}-${index}`}
-                      className={isLatest ? "text-zinc-200 animate-pulse" : ""}
+                      className={`transition-colors ${
+                        isLatest ? "text-zinc-200" : "text-zinc-500"
+                      }`}
                     >
-                      {line}
+                      {isLatest ? "⚡ " : "✓ "}{line}
                     </div>
                   );
                 })}
@@ -1304,12 +1358,13 @@ export default function Chat({
             </div>
           </div>
         ) : null}
+        <div ref={messagesEndRef} />
       </div>
 
       {/* Segment Highlights */}
       {audioSegments.length ? (
-        <div className="border-t border-zinc-800 bg-zinc-950/40 px-4 py-3">
-          <div className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+        <div className="border-t border-zinc-800/50 bg-zinc-950/40 px-4 py-3">
+          <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
             Segment Highlights
           </div>
           <div className="mt-2 max-h-32 space-y-2 overflow-y-auto text-xs text-zinc-300">
@@ -1321,16 +1376,16 @@ export default function Chat({
               return (
                 <div
                   key={`${segment.start}-${segment.end}-${index}`}
-                  className="flex items-center justify-between gap-2 rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 py-2"
+                  className="flex items-center justify-between gap-2 rounded-xl border border-zinc-800/60 bg-zinc-900/60 px-3 py-2 transition-colors hover:border-zinc-700"
                 >
                   <div className="min-w-0">
-                    <div className="text-zinc-200">{range}</div>
-                    <div className="text-[11px] text-zinc-400">{note}</div>
+                    <div className="text-zinc-200 text-[12px] font-medium">{range}</div>
+                    <div className="text-[11px] text-zinc-500">{note}</div>
                   </div>
                   <button
                     type="button"
                     onClick={() => void submitMessage(buildQuickPrompt(segment))}
-                    className="shrink-0 rounded-full border border-zinc-700 bg-zinc-800 px-3 py-1 text-[11px] text-zinc-200 hover:bg-zinc-700"
+                    className="shrink-0 rounded-full border border-zinc-700/60 bg-zinc-800/80 px-3 py-1 text-[11px] text-zinc-300 transition-all hover:bg-blue-500/20 hover:border-blue-500/40 hover:text-white"
                   >
                     Ask AI
                   </button>
@@ -1342,21 +1397,21 @@ export default function Chat({
       ) : null}
 
       {/* Input Area */}
-      <div className="border-t border-zinc-800 bg-zinc-950/50 p-4">
+      <div className="border-t border-zinc-800/50 bg-gradient-to-r from-zinc-950/80 via-zinc-900/40 to-zinc-950/80 p-4">
         <form onSubmit={handleSend} className="relative flex items-center">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Type a message..."
-            className="w-full rounded-full border border-zinc-700 bg-zinc-900 py-3 pl-5 pr-12 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
+            placeholder="Ask me to trim, cut, or analyze your video..."
+            className="w-full rounded-full border border-zinc-700/60 bg-zinc-900/80 py-3 pl-5 pr-14 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-blue-500/80 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
           />
           <button
             type="submit"
             disabled={!input.trim()}
-            className="absolute right-2 flex h-9 w-9 items-center justify-center rounded-full bg-blue-600 text-white transition-colors hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600"
+            className="absolute right-2 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/20 transition-all hover:from-blue-400 hover:to-blue-500 hover:shadow-blue-500/30 disabled:opacity-40 disabled:shadow-none disabled:hover:from-blue-500 disabled:hover:to-blue-600"
           >
-            <Send size={16} />
+            <Send size={15} />
           </button>
         </form>
       </div>
