@@ -1,8 +1,6 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import { Segment } from "../../utils/segments";
 import { PLAN_CONFIGS, PlanId } from "../../utils/plans";
 
@@ -18,15 +16,6 @@ interface ExportPanelProps {
   ) => void;
 }
 
-type QualityOption = {
-  id: "fast" | "standard" | "high";
-  label: string;
-  desc: string;
-  bitrate: number;
-  maxHeight?: number;
-  codec: string;
-};
-
 type ExportMode = "sequential" | "ai";
 
 type CloudinaryResult = {
@@ -39,98 +28,6 @@ type CloudinaryResult = {
 
 type ClipOrderResponse = {
   order: number[];
-};
-
-const DEFAULT_QUALITY: QualityOption = {
-  id: "standard",
-  label: "Standard",
-  desc: "Original · 4 Mbps",
-  bitrate: 4_000_000,
-  codec: "avc",
-};
-
-const webCodecsAvailable = () => {
-  try {
-    return (
-      typeof VideoEncoder !== "undefined" &&
-      typeof VideoDecoder !== "undefined"
-    );
-  } catch {
-    return false;
-  }
-};
-
-const exportWithWebCodecs = async (
-  file: File,
-  segments: Segment[],
-  quality: QualityOption,
-  label: string,
-  onProgress?: (pct: number, message: string) => void
-): Promise<Blob> => {
-  return new Promise((resolve, reject) => {
-    const timeoutMs = 120000;
-    const worker = new Worker(new URL("./export.worker.ts", import.meta.url), {
-      type: "module",
-    });
-    let timeoutId: number | null = null;
-
-    const cleanup = () => {
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-        timeoutId = null;
-      }
-      worker.terminate();
-    };
-
-    const armTimeout = () => {
-      if (timeoutId !== null) {
-        window.clearTimeout(timeoutId);
-      }
-      timeoutId = window.setTimeout(() => {
-        cleanup();
-        reject(new Error("WebCodecs export timed out. Falling back to FFmpeg."));
-      }, timeoutMs);
-    };
-
-    worker.onmessage = (event) => {
-      const data = event.data;
-      if (data?.type === "progress") {
-        armTimeout();
-        onProgress?.(data.percent, data.message);
-        return;
-      }
-      if (data?.type === "done") {
-        cleanup();
-        resolve(data.blob as Blob);
-        return;
-      }
-      if (data?.type === "error") {
-        cleanup();
-        reject(new Error(data.error));
-      }
-    };
-
-    worker.onerror = (event) => {
-      cleanup();
-      reject(
-        event instanceof ErrorEvent
-          ? event.error ?? new Error(event.message)
-          : new Error("Worker error")
-      );
-    };
-
-    armTimeout();
-    worker.postMessage({
-      type: "start",
-      file,
-      segments: segments.map((segment) => ({
-        start: segment.start,
-        end: segment.end,
-      })),
-      quality,
-      label,
-    });
-  });
 };
 
 const exportWithCloudinary = async (
@@ -216,24 +113,6 @@ const triggerDownload = (url: string, name: string) => {
   link.remove();
 };
 
-const buildFilter = (segments: Segment[]) => {
-  const parts: string[] = [];
-  segments.forEach((segment, index) => {
-    parts.push(
-      `[0:v]trim=start=${segment.start}:end=${segment.end},setpts=PTS-STARTPTS[v${index}]`
-    );
-    parts.push(
-      `[0:a]atrim=start=${segment.start}:end=${segment.end},asetpts=PTS-STARTPTS[a${index}]`
-    );
-  });
-
-  const concatInputs = segments
-    .map((_, index) => `[v${index}][a${index}]`)
-    .join("");
-  parts.push(`${concatInputs}concat=n=${segments.length}:v=1:a=1[outv][outa]`);
-  return parts.join(";");
-};
-
 export default function ExportPanel({
   videoFile,
   keptSegments,
@@ -244,7 +123,6 @@ export default function ExportPanel({
   registerExporter,
 }: ExportPanelProps) {
   const planConfig = PLAN_CONFIGS[planId];
-  const ffmpegRef = useRef<FFmpeg | null>(null);
   const videoFileRef = useRef<File | null>(videoFile);
   const keptSegmentsRef = useRef<Segment[]>(keptSegments);
   const removedSegmentsRef = useRef<Segment[]>(removedSegments);
@@ -254,7 +132,6 @@ export default function ExportPanel({
   const onExportSuccessRef = useRef(onExportSuccess);
   const isExportingRef = useRef(false);
   const progressRef = useRef<(pct: number, msg: string) => void>(() => {});
-  const [isReady, setIsReady] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [trimmedUrl, setTrimmedUrl] = useState<string | null>(null);
@@ -268,7 +145,6 @@ export default function ExportPanel({
   );
   const exportSourceRef = useRef<"clips" | "kept" | null>(null);
   const [showSourcePicker, setShowSourcePicker] = useState(false);
-  const useGPU = useMemo(() => webCodecsAvailable(), []);
 
   const remainingExports = Math.max(
     0,
@@ -286,52 +162,6 @@ export default function ExportPanel({
       ),
     [videoFile, keptSegments.length, removedSegments.length, limitReached]
   );
-
-  const loadFfmpeg = async () => {
-    if (ffmpegRef.current) return;
-    const ffmpeg = new FFmpeg();
-    ffmpeg.on("progress", ({ progress }) => {
-      if (!isExportingRef.current) return;
-      const pct = 10 + Math.round(progress * 80);
-      progressRef.current?.(pct, `Encoding... ${Math.round(progress * 100)}%`);
-    });
-    const baseURLs = [
-      "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm",
-      "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm",
-    ];
-    let lastError: unknown = null;
-
-    for (const baseURL of baseURLs) {
-      try {
-        await ffmpeg.load({
-          coreURL: await toBlobURL(
-            `${baseURL}/ffmpeg-core.js`,
-            "text/javascript"
-          ),
-          wasmURL: await toBlobURL(
-            `${baseURL}/ffmpeg-core.wasm`,
-            "application/wasm"
-          ),
-          workerURL: await toBlobURL(
-            `${baseURL}/ffmpeg-core.worker.js`,
-            "text/javascript"
-          ),
-        });
-        ffmpegRef.current = ffmpeg;
-        setIsReady(true);
-        return;
-      } catch (err) {
-        lastError = err;
-      }
-    }
-    throw lastError ?? new Error("Failed to load FFmpeg");
-  };
-
-  React.useEffect(() => {
-    if (useGPU) {
-      setIsReady(true);
-    }
-  }, [useGPU]);
 
   React.useEffect(() => {
     videoFileRef.current = videoFile;
@@ -427,12 +257,6 @@ export default function ExportPanel({
     setProgressMsg("");
 
     try {
-      const inputName = "input.mp4";
-      const trimmedOutput = "final.mp4";
-      const baseName = currentVideo.name
-        ? currentVideo.name.replace(/\.[^.]+$/, "")
-        : "video";
-
       const reportProgress = (pct: number, msg: string) => {
         setProgressPct(pct);
         setProgressMsg(msg);
@@ -478,72 +302,9 @@ export default function ExportPanel({
         onExportSuccessRef.current?.(currentPlanId);
         return { success: true };
       }
-
-      if (cloudError) {
-        const lowered = cloudError.toLowerCase();
-        if (
-          lowered.includes("cloudinary is not configured") ||
-          lowered.includes("api secret") ||
-          lowered.includes("upload preset")
-        ) {
-          setError(cloudError);
-          return { success: false, error: cloudError };
-        }
-      }
-
-      reportProgress(
-        10,
-        "Cloudinary export failed. Falling back to local export..."
-      );
-
-      let exportedBlob: Blob | null = null;
-
-      if (useGPU) {
-        try {
-          exportedBlob = await exportWithWebCodecs(
-            currentVideo,
-            orderedSegments,
-            DEFAULT_QUALITY,
-            "final",
-            reportProgress
-        );
-        } catch (err) {
-          exportedBlob = null;
-          reportProgress(8, "GPU export failed. Falling back to FFmpeg...");
-        }
-      }
-
-      if (!exportedBlob) {
-        reportProgress(5, "Loading FFmpeg...");
-        await loadFfmpeg();
-        const ffmpeg = ffmpegRef.current;
-        if (!ffmpeg) throw new Error("FFmpeg not ready");
-
-        await ffmpeg.writeFile(inputName, await fetchFile(currentVideo));
-
-        const keptFilter = buildFilter(orderedSegments);
-        await ffmpeg.exec([
-          "-i",
-          inputName,
-          "-filter_complex",
-          keptFilter,
-          "-map",
-          "[outv]",
-          "-map",
-          "[outa]",
-          trimmedOutput,
-        ]);
-
-        const trimmedData = await ffmpeg.readFile(trimmedOutput);
-        exportedBlob = new Blob([trimmedData], { type: "video/mp4" });
-      }
-
-      const fallbackUrl = URL.createObjectURL(exportedBlob);
-      setTrimmedUrl(fallbackUrl);
-      reportProgress(100, "Done!");
-      onExportSuccessRef.current?.(currentPlanId);
-      triggerDownload(fallbackUrl, `${baseName}_final.mp4`);
-      return { success: true };
+      const message = cloudError ?? "Cloudinary export failed.";
+      setError(message);
+      return { success: false, error: message };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Export failed";
       setError(message);
@@ -610,11 +371,7 @@ export default function ExportPanel({
           disabled={!canExport || isExporting}
           className="rounded-full bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isExporting
-            ? "Exporting..."
-            : isReady
-            ? "Export Final Video"
-            : "Load FFmpeg & Export"}
+          {isExporting ? "Exporting..." : "Export Final Video"}
         </button>
       </div>
 
@@ -730,3 +487,6 @@ export default function ExportPanel({
     </div>
   );
 }
+
+
+

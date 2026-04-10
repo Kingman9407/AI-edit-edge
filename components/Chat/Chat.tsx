@@ -1046,7 +1046,7 @@ export default function Chat({
 
       if (
         allowAutoApply &&
-        parsedActions?.some((action) =>
+        parsedActions?.some((action: ModelAction) =>
           ["export", "render", "combine"].includes(
             (action?.type ?? "").toLowerCase()
           )
