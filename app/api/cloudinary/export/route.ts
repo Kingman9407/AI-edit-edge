@@ -232,10 +232,17 @@ export async function POST(req: Request) {
   }
 
   const file = formData.get("file");
+  const fileUrlRaw = formData.get("fileUrl");
+  const fileUrl = typeof fileUrlRaw === "string" ? fileUrlRaw : null;
+  const filenameRaw = formData.get("filename");
+  const filename = typeof filenameRaw === "string" ? filenameRaw : "";
+  const basePublicIdRaw = formData.get("basePublicId");
+  const basePublicIdOverride =
+    typeof basePublicIdRaw === "string" ? basePublicIdRaw : "";
   const segmentsRaw = formData.get("segments");
   const modeRaw = formData.get("mode");
 
-  if (!(file instanceof File)) {
+  if (!(file instanceof File) && !fileUrl) {
     return Response.json({ error: "Missing video file." }, { status: 400 });
   }
 
@@ -258,28 +265,34 @@ export async function POST(req: Request) {
   }
 
   const mode: ExportMode = modeRaw === "ai" ? "ai" : "sequential";
-  const baseName = normalizeName(file.name || "video");
-  const basePublicId = `ai-editor/${baseName}-${Date.now()}`;
+  const baseName = normalizeName(
+    (file instanceof File && file.name) || filename || "video"
+  );
+  const basePublicId =
+    basePublicIdOverride || `ai-editor/${baseName}-${Date.now()}`;
 
-  let baseResult: UploadResult;
-  try {
-    baseResult = await uploadBaseVideo(file, basePublicId, config);
-  } catch (error) {
-    return Response.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Cloudinary upload failed.",
-      },
-      { status: 500 }
-    );
-  }
-
-  const baseUrl = baseResult.secure_url || baseResult.url;
+  let baseUrl = fileUrl || "";
   if (!baseUrl) {
-    return Response.json(
-      { error: "Cloudinary upload returned no URL." },
-      { status: 500 }
-    );
+    let baseResult: UploadResult;
+    try {
+      baseResult = await uploadBaseVideo(file as File, basePublicId, config);
+    } catch (error) {
+      return Response.json(
+        {
+          error:
+            error instanceof Error ? error.message : "Cloudinary upload failed.",
+        },
+        { status: 500 }
+      );
+    }
+
+    baseUrl = baseResult.secure_url || baseResult.url || "";
+    if (!baseUrl) {
+      return Response.json(
+        { error: "Cloudinary upload returned no URL." },
+        { status: 500 }
+      );
+    }
   }
 
   const clipIds = segments.map(

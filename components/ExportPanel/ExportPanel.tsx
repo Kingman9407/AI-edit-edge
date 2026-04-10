@@ -26,8 +26,116 @@ type CloudinaryResult = {
   mode: ExportMode;
 };
 
+type DirectUploadResult = {
+  secure_url?: string;
+  url?: string;
+  public_id?: string;
+};
+
 type ClipOrderResponse = {
   order: number[];
+};
+
+const MAX_SERVER_UPLOAD_BYTES = 4_000_000;
+
+const getUnsignedCloudinaryConfig = () => {
+  if (typeof window === "undefined") return null;
+  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+  if (!cloudName || !uploadPreset) return null;
+  return { cloudName, uploadPreset };
+};
+
+const requestDirectUploadSignature = async (filename: string) => {
+  const response = await fetch("/api/cloudinary/sign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename }),
+  });
+  const raw = await response.text();
+  let data: any = null;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    data = null;
+  }
+  if (!response.ok || !data) {
+    const message =
+      data?.error || raw?.slice(0, 200) || "Cloudinary signing failed.";
+    throw new Error(message);
+  }
+  return data as {
+    cloudName: string;
+    apiKey: string;
+    timestamp: number;
+    signature: string;
+    publicId: string;
+  };
+};
+
+const uploadVideoDirect = async (file: File) => {
+  try {
+    const signed = await requestDirectUploadSignature(file.name);
+    const form = new FormData();
+    form.append("file", file);
+    form.append("api_key", signed.apiKey);
+    form.append("timestamp", signed.timestamp.toString());
+    form.append("signature", signed.signature);
+    form.append("public_id", signed.publicId);
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${signed.cloudName}/video/upload`,
+      { method: "POST", body: form }
+    );
+    const raw = await response.text();
+    let data: DirectUploadResult | null = null;
+    try {
+      data = JSON.parse(raw) as DirectUploadResult;
+    } catch {
+      data = null;
+    }
+    if (!response.ok || !data) {
+      const message =
+        (data as any)?.error?.message ||
+        raw?.slice(0, 200) ||
+        "Cloudinary direct upload failed.";
+      throw new Error(message);
+    }
+    return {
+      url: data.secure_url || data.url || "",
+      publicId: data.public_id || signed.publicId,
+    };
+  } catch (error) {
+    const fallback = getUnsignedCloudinaryConfig();
+    if (!fallback) throw error;
+
+    const form = new FormData();
+    form.append("file", file);
+    form.append("upload_preset", fallback.uploadPreset);
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${fallback.cloudName}/video/upload`,
+      { method: "POST", body: form }
+    );
+    const raw = await response.text();
+    let data: DirectUploadResult | null = null;
+    try {
+      data = JSON.parse(raw) as DirectUploadResult;
+    } catch {
+      data = null;
+    }
+    if (!response.ok || !data) {
+      const message =
+        (data as any)?.error?.message ||
+        raw?.slice(0, 200) ||
+        "Cloudinary direct upload failed.";
+      throw new Error(message);
+    }
+    return {
+      url: data.secure_url || data.url || "",
+      publicId: data.public_id || "",
+    };
+  }
 };
 
 const exportWithCloudinary = async (
@@ -36,7 +144,22 @@ const exportWithCloudinary = async (
   mode: ExportMode
 ): Promise<CloudinaryResult> => {
   const form = new FormData();
-  form.append("file", file);
+  const shouldDirectUpload = file.size > MAX_SERVER_UPLOAD_BYTES;
+  if (shouldDirectUpload) {
+    const directResult = await uploadVideoDirect(file);
+    if (!directResult.url) {
+      throw new Error(
+        "Direct upload failed. Please check Cloudinary configuration."
+      );
+    }
+    form.append("fileUrl", directResult.url);
+    if (directResult.publicId) {
+      form.append("basePublicId", directResult.publicId);
+    }
+    form.append("filename", file.name);
+  } else {
+    form.append("file", file);
+  }
   form.append("segments", JSON.stringify(segments));
   form.append("mode", mode);
 
@@ -54,6 +177,11 @@ const exportWithCloudinary = async (
   }
 
   if (!response.ok) {
+    if (response.status === 413) {
+      throw new Error(
+        "Upload too large for Vercel. Enable direct Cloudinary upload (set NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET) or use the signed upload route."
+      );
+    }
     const message =
       data?.error || raw?.slice(0, 200) || "Cloudinary export failed.";
     throw new Error(message);
