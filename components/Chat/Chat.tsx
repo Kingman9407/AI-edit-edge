@@ -399,6 +399,12 @@ export default function Chat({
     statusScrollRef.current.scrollTop = statusScrollRef.current.scrollHeight;
   }, [statusLog, status]);
 
+  useEffect(() => {
+    if (status !== null) return;
+    if (!statusLog.length) return;
+    setStatusLog([]);
+  }, [status, statusLog.length]);
+
   const handleNewChat = () => {
     const session = createSession(defaultMessages);
     setSessions((prev) => [session, ...prev]);
@@ -1193,18 +1199,23 @@ export default function Chat({
   }, [messages, status, scrollToBottom]);
 
   return (
-    <div className="flex h-full min-h-[500px] max-h-[80vh] flex-col overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900/90 to-zinc-950/95 backdrop-blur-2xl shadow-2xl shadow-black/40">
+    <div className="flex h-full min-h-[520px] max-h-[82vh] flex-col overflow-hidden rounded-3xl border border-zinc-800/70 bg-gradient-to-b from-zinc-900/90 via-zinc-950/95 to-zinc-950/98 backdrop-blur-2xl shadow-2xl shadow-black/40">
       {/* Header */}
-      <div className="border-b border-zinc-800/60 bg-gradient-to-r from-zinc-950/80 via-zinc-900/60 to-zinc-950/80 px-6 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-3">
-            <span className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-violet-600 shadow-lg shadow-blue-500/20">
+      <div className="border-b border-zinc-800/60 bg-gradient-to-r from-zinc-950/80 via-zinc-900/50 to-zinc-950/80 px-6 py-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 shadow-lg shadow-blue-500/20">
               <Bot size={18} className="text-white" />
               <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-zinc-950 bg-emerald-400"></span>
             </span>
-            AI Assistant
-          </h2>
-          <div className="flex items-center gap-2">
+            <div>
+              <h2 className="text-lg font-semibold text-white">AI Assistant</h2>
+              <div className="text-[11px] text-zinc-400">
+                Ask for trims, highlights, or exports in plain language.
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <span
               className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
                 allowThinking
@@ -1238,20 +1249,22 @@ export default function Chat({
       </div>
 
       {memorySummary ? (
-        <div className="border-b border-zinc-800/50 bg-zinc-950/40 px-6 py-3">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-            Memory
+        <div className="border-b border-zinc-800/50 bg-zinc-950/50 px-6 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+              Memory
+            </div>
           </div>
           <div className="mt-1 text-xs text-zinc-400">{memorySummary}</div>
         </div>
       ) : null}
 
       {isHistoryOpen ? (
-        <div className="border-b border-zinc-800/50 bg-zinc-950/40 px-4 py-3">
+        <div className="border-b border-zinc-800/50 bg-zinc-950/50 px-4 py-4">
           <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
             Chat History
           </div>
-          <div className="mt-2 max-h-40 space-y-2 overflow-y-auto text-xs text-zinc-300">
+          <div className="mt-3 max-h-44 space-y-2 overflow-y-auto text-xs text-zinc-300">
             {sessions.length ? (
               sessions.map((session) => {
                 const isActive = session.id === currentSessionId;
@@ -1286,7 +1299,7 @@ export default function Chat({
       ) : null}
 
       {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto px-5 py-6 space-y-5 overscroll-y-contain scroll-smooth">
+      <div className="flex-1 overflow-y-auto px-5 py-6 space-y-5 overscroll-y-contain scroll-smooth bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.08),transparent_45%)]">
         {messages.map((msg) => {
           const isUser = msg.sender === "user";
           return (
@@ -1312,7 +1325,7 @@ export default function Chat({
               </div>
               {/* Bubble */}
               <div
-                className={`max-w-[75%] whitespace-pre-line rounded-2xl px-4 py-3 text-[13px] leading-relaxed shadow-md transition-all ${
+                className={`max-w-[78%] whitespace-pre-line rounded-2xl px-4 py-3 text-[13px] leading-relaxed shadow-md transition-all ${
                   isUser
                     ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-md"
                     : "bg-zinc-800/80 text-zinc-200 rounded-bl-md border border-zinc-700/40"
@@ -1330,7 +1343,7 @@ export default function Chat({
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-zinc-700 to-zinc-800 border border-zinc-700/50 shadow-sm">
               <Bot size={14} className="text-zinc-300" />
             </div>
-            <div className="max-w-[75%] rounded-2xl rounded-bl-md border border-zinc-700/40 bg-zinc-800/80 px-4 py-3 shadow-md">
+            <div className="max-w-[78%] rounded-2xl rounded-bl-md border border-zinc-700/40 bg-zinc-800/80 px-4 py-3 shadow-md">
               {/* Typing dots */}
               <div className="flex items-center gap-1 mb-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "0ms" }}></span>
@@ -1363,11 +1376,14 @@ export default function Chat({
 
       {/* Segment Highlights */}
       {audioSegments.length ? (
-        <div className="border-t border-zinc-800/50 bg-zinc-950/40 px-4 py-3">
-          <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-            Segment Highlights
+        <div className="border-t border-zinc-800/50 bg-zinc-950/50 px-4 py-3">
+          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-zinc-500">
+            <span>Segment Highlights</span>
+            <span className="text-[10px] font-medium text-zinc-500">
+              {audioSegments.length} segments
+            </span>
           </div>
-          <div className="mt-2 max-h-32 space-y-2 overflow-y-auto text-xs text-zinc-300">
+          <div className="mt-3 max-h-32 space-y-2 overflow-y-auto text-xs text-zinc-300">
             {audioSegments.map((segment, index) => {
               const range = `${formatTime(segment.start)}-${formatTime(
                 segment.end
@@ -1376,7 +1392,7 @@ export default function Chat({
               return (
                 <div
                   key={`${segment.start}-${segment.end}-${index}`}
-                  className="flex items-center justify-between gap-2 rounded-xl border border-zinc-800/60 bg-zinc-900/60 px-3 py-2 transition-colors hover:border-zinc-700"
+                  className="flex items-center justify-between gap-2 rounded-xl border border-zinc-800/60 bg-zinc-900/60 px-3 py-2 transition-colors hover:border-blue-500/40 hover:bg-zinc-900/80"
                 >
                   <div className="min-w-0">
                     <div className="text-zinc-200 text-[12px] font-medium">{range}</div>
@@ -1397,14 +1413,14 @@ export default function Chat({
       ) : null}
 
       {/* Input Area */}
-      <div className="border-t border-zinc-800/50 bg-gradient-to-r from-zinc-950/80 via-zinc-900/40 to-zinc-950/80 p-4">
+      <div className="border-t border-zinc-800/50 bg-gradient-to-r from-zinc-950/90 via-zinc-900/50 to-zinc-950/90 p-4">
         <form onSubmit={handleSend} className="relative flex items-center">
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask me to trim, cut, or analyze your video..."
-            className="w-full rounded-full border border-zinc-700/60 bg-zinc-900/80 py-3 pl-5 pr-14 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-blue-500/80 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+            className="w-full rounded-full border border-zinc-700/60 bg-zinc-900/80 py-3 pl-5 pr-14 text-sm text-zinc-100 placeholder:text-zinc-500 shadow-inner shadow-black/20 focus:border-blue-500/80 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
           />
           <button
             type="submit"
