@@ -143,31 +143,6 @@ const exportWithCloudinary = async (
   segments: Segment[],
   mode: ExportMode
 ): Promise<CloudinaryResult> => {
-  const postExport = async (form: FormData) => {
-    const response = await fetch("/api/cloudinary/export", {
-      method: "POST",
-      body: form,
-    });
-
-    const raw = await response.text();
-    let data: any = null;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      data = null;
-    }
-
-    if (!response.ok) {
-      const message =
-        data?.error || raw?.slice(0, 200) || "Cloudinary export failed.";
-      const err = new Error(message) as Error & { status?: number };
-      err.status = response.status;
-      throw err;
-    }
-
-    return data as CloudinaryResult;
-  };
-
   // ✅ ALWAYS upload directly to Cloudinary (fix for Vercel payload limit)
   const directResult = await uploadVideoDirect(file);
 
@@ -177,18 +152,35 @@ const exportWithCloudinary = async (
     );
   }
 
-  const form = new FormData();
-  form.append("fileUrl", directResult.url);
+  const response = await fetch("/api/cloudinary/export", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileUrl: directResult.url,
+      basePublicId: directResult.publicId || undefined,
+      filename: file.name,
+      segments,
+      mode,
+    }),
+  });
 
-  if (directResult.publicId) {
-    form.append("basePublicId", directResult.publicId);
+  const raw = await response.text();
+  let data: any = null;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    data = null;
   }
 
-  form.append("filename", file.name);
-  form.append("segments", JSON.stringify(segments));
-  form.append("mode", mode);
+  if (!response.ok) {
+    const message =
+      data?.error || raw?.slice(0, 200) || "Cloudinary export failed.";
+    const err = new Error(message) as Error & { status?: number };
+    err.status = response.status;
+    throw err;
+  }
 
-  return postExport(form);
+  return data as CloudinaryResult;
 };
 
 const fetchClipOrder = async (segments: Segment[]): Promise<number[]> => {

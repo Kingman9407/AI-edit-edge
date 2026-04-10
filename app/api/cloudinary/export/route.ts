@@ -21,6 +21,7 @@ type UploadResult = {
 };
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const MAX_PARALLEL_CLIPS = 4;
 
@@ -114,39 +115,6 @@ const cloudinaryRequest = async (
   return data as UploadResult;
 };
 
-const uploadBaseVideo = async (
-  file: File,
-  publicId: string,
-  config: CloudinaryConfig
-) => {
-  const timestamp = Math.floor(Date.now() / 1000);
-  const form = new FormData();
-  form.append("file", file);
-  form.append("public_id", publicId);
-  form.append("timestamp", timestamp.toString());
-
-  if (config.uploadPreset) {
-    form.append("upload_preset", config.uploadPreset);
-    form.append("api_key", config.apiKey);
-  } else if (config.apiSecret) {
-    const signature = createSignature(
-      {
-        public_id: publicId,
-        timestamp,
-      },
-      config.apiSecret
-    );
-    form.append("api_key", config.apiKey);
-    form.append("signature", signature);
-  } else {
-    throw new Error(
-      "Cloudinary API secret or upload preset is required for uploads."
-    );
-  }
-
-  return cloudinaryRequest(config.cloudName, form);
-};
-
 const createClip = async (
   baseUrl: string,
   clipPublicId: string,
@@ -224,35 +192,33 @@ export async function POST(req: Request) {
     );
   }
 
-  let formData: FormData;
+  let body: {
+    fileUrl?: string;
+    filename?: string;
+    basePublicId?: string;
+    segments?: Segment[];
+    mode?: string;
+  };
   try {
-    formData = await req.formData();
+    body = await req.json();
   } catch {
-    return Response.json({ error: "Invalid form data." }, { status: 400 });
+    return Response.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const file = formData.get("file");
-  const fileUrlRaw = formData.get("fileUrl");
-  const fileUrl = typeof fileUrlRaw === "string" ? fileUrlRaw : null;
-  const filenameRaw = formData.get("filename");
-  const filename = typeof filenameRaw === "string" ? filenameRaw : "";
-  const basePublicIdRaw = formData.get("basePublicId");
-  const basePublicIdOverride =
-    typeof basePublicIdRaw === "string" ? basePublicIdRaw : "";
-  const segmentsRaw = formData.get("segments");
-  const modeRaw = formData.get("mode");
+  const fileUrl = body.fileUrl || "";
+  const filename = body.filename || "";
+  const basePublicIdOverride = body.basePublicId || "";
 
-  if (!(file instanceof File) && !fileUrl) {
-    return Response.json({ error: "Missing video file." }, { status: 400 });
-  }
-
-  if (typeof segmentsRaw !== "string") {
-    return Response.json({ error: "Missing segments." }, { status: 400 });
+  if (!fileUrl) {
+    return Response.json(
+      { error: "Missing fileUrl. Upload the video directly to Cloudinary first." },
+      { status: 400 }
+    );
   }
 
   let segments: Segment[] = [];
   try {
-    segments = normalizeSegments(JSON.parse(segmentsRaw) as Segment[]);
+    segments = normalizeSegments(body.segments || []);
   } catch {
     segments = [];
   }
@@ -264,36 +230,12 @@ export async function POST(req: Request) {
     );
   }
 
-  const mode: ExportMode = modeRaw === "ai" ? "ai" : "sequential";
-  const baseName = normalizeName(
-    (file instanceof File && file.name) || filename || "video"
-  );
+  const mode: ExportMode = body.mode === "ai" ? "ai" : "sequential";
+  const baseName = normalizeName(filename || "video");
   const basePublicId =
     basePublicIdOverride || `ai-editor/${baseName}-${Date.now()}`;
 
-  let baseUrl = fileUrl || "";
-  if (!baseUrl) {
-    let baseResult: UploadResult;
-    try {
-      baseResult = await uploadBaseVideo(file as File, basePublicId, config);
-    } catch (error) {
-      return Response.json(
-        {
-          error:
-            error instanceof Error ? error.message : "Cloudinary upload failed.",
-        },
-        { status: 500 }
-      );
-    }
-
-    baseUrl = baseResult.secure_url || baseResult.url || "";
-    if (!baseUrl) {
-      return Response.json(
-        { error: "Cloudinary upload returned no URL." },
-        { status: 500 }
-      );
-    }
-  }
+  const baseUrl = fileUrl;
 
   const clipIds = segments.map(
     (_, index) => `${basePublicId}_clip_${index + 1}`
@@ -343,3 +285,4 @@ export async function POST(req: Request) {
     mode,
   });
 }
+
