@@ -56,6 +56,7 @@ export default function VideoEditor() {
     audio: 0,
     vision: 0,
   });
+  const [showTokenUsage, setShowTokenUsage] = useState(true);
   const addTokenUsage = useCallback((source: TokenSource, usage?: TokenUsage | null) => {
     if (!usage) return;
     const total =
@@ -820,22 +821,33 @@ export default function VideoEditor() {
         <header className="mb-8 flex flex-wrap items-center gap-4">
           <div className="flex-1 space-y-1">
             <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-zinc-500">
-              <span>Tokens</span>
-              <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-zinc-200">
-                {tokenUsage.total.toLocaleString()}
-              </span>
-              <span className="text-zinc-500">Chat</span>
-              <span className="font-mono text-zinc-300">
-                {tokenUsage.chat.toLocaleString()}
-              </span>
-              <span className="text-zinc-500">Audio</span>
-              <span className="font-mono text-zinc-300">
-                {tokenUsage.audio.toLocaleString()}
-              </span>
-              <span className="text-zinc-500">Vision</span>
-              <span className="font-mono text-zinc-300">
-                {tokenUsage.vision.toLocaleString()}
-              </span>
+              <button
+                type="button"
+                onClick={() => setShowTokenUsage((prev) => !prev)}
+                className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-300 transition hover:border-blue-500 hover:text-white"
+              >
+                {showTokenUsage ? "Hide Tokens" : "Show Tokens"}
+              </button>
+              {showTokenUsage ? (
+                <>
+                  <span>Tokens</span>
+                  <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-zinc-200">
+                    {tokenUsage.total.toLocaleString()}
+                  </span>
+                  <span className="text-zinc-500">Chat</span>
+                  <span className="font-mono text-zinc-300">
+                    {tokenUsage.chat.toLocaleString()}
+                  </span>
+                  <span className="text-zinc-500">Audio</span>
+                  <span className="font-mono text-zinc-300">
+                    {tokenUsage.audio.toLocaleString()}
+                  </span>
+                  <span className="text-zinc-500">Vision</span>
+                  <span className="font-mono text-zinc-300">
+                    {tokenUsage.vision.toLocaleString()}
+                  </span>
+                </>
+              ) : null}
             </div>
             <h1 className="text-3xl font-bold tracking-tight text-white bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
               Video Editor Toolkit

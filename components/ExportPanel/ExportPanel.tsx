@@ -143,51 +143,77 @@ const exportWithCloudinary = async (
   segments: Segment[],
   mode: ExportMode
 ): Promise<CloudinaryResult> => {
-  const form = new FormData();
-  const shouldDirectUpload = file.size > MAX_SERVER_UPLOAD_BYTES;
-  if (shouldDirectUpload) {
+  const postExport = async (form: FormData) => {
+    const response = await fetch("/api/cloudinary/export", {
+      method: "POST",
+      body: form,
+    });
+
+    const raw = await response.text();
+    let data: any = null;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      data = null;
+    }
+
+    if (!response.ok) {
+      const message =
+        data?.error || raw?.slice(0, 200) || "Cloudinary export failed.";
+      const err = new Error(message) as Error & { status?: number };
+      err.status = response.status;
+      throw err;
+    }
+
+    return data as CloudinaryResult;
+  };
+
+  const buildFormWithUrl = async () => {
     const directResult = await uploadVideoDirect(file);
     if (!directResult.url) {
       throw new Error(
         "Direct upload failed. Please check Cloudinary configuration."
       );
     }
+    const form = new FormData();
     form.append("fileUrl", directResult.url);
     if (directResult.publicId) {
       form.append("basePublicId", directResult.publicId);
     }
     form.append("filename", file.name);
-  } else {
+    form.append("segments", JSON.stringify(segments));
+    form.append("mode", mode);
+    return form;
+  };
+
+  const buildFormWithFile = () => {
+    const form = new FormData();
     form.append("file", file);
+    form.append("segments", JSON.stringify(segments));
+    form.append("mode", mode);
+    return form;
+  };
+
+  const shouldDirectUpload = file.size > MAX_SERVER_UPLOAD_BYTES;
+  if (shouldDirectUpload) {
+    return postExport(await buildFormWithUrl());
   }
-  form.append("segments", JSON.stringify(segments));
-  form.append("mode", mode);
 
-  const response = await fetch("/api/cloudinary/export", {
-    method: "POST",
-    body: form,
-  });
-
-  const raw = await response.text();
-  let data: any = null;
   try {
-    data = JSON.parse(raw);
-  } catch {
-    data = null;
-  }
-
-  if (!response.ok) {
-    if (response.status === 413) {
-      throw new Error(
-        "Upload too large for Vercel. Enable direct Cloudinary upload (set NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET) or use the signed upload route."
-      );
+    return await postExport(buildFormWithFile());
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status === 413) {
+      return postExport(await buildFormWithUrl());
     }
-    const message =
-      data?.error || raw?.slice(0, 200) || "Cloudinary export failed.";
-    throw new Error(message);
+    if (
+      err instanceof Error &&
+      err.message.includes("FUNCTION_PAYLOAD_TOO_LARGE")
+    ) {
+      return postExport(await buildFormWithUrl());
+    }
+    throw err;
   }
-
-  return data as CloudinaryResult;
 };
 
 const fetchClipOrder = async (segments: Segment[]): Promise<number[]> => {
