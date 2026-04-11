@@ -1,4 +1,4 @@
-import { encodeWavDataUrl } from "./audio";
+import { encodeWavDataUrl } from "@/app/backend/functions/audio";
 
 export type AudioSegment = {
   start: number;

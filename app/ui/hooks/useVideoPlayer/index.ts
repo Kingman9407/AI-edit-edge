@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, ChangeEvent, useCallback } from "react";
-import { encodeWavDataUrl } from "../utils/audio";
+import { encodeWavDataUrl } from "@/app/backend/functions/audio";
 
 type AudioSegment = {
   start: number;

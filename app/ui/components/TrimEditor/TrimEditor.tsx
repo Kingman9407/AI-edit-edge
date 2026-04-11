@@ -1,6 +1,6 @@
 import React, { ChangeEvent } from "react";
 import { RotateCcw, CheckCircle2 } from "lucide-react";
-import { formatTime } from "../../utils/formatTime";
+import { formatTime } from "@/app/backend/functions/formatTime";
 
 interface TrimEditorProps {
   duration: number;

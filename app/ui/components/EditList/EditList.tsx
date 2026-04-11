@@ -1,7 +1,7 @@
 import React from "react";
-import { formatTime } from "../../utils/formatTime";
+import { formatTime } from "@/app/backend/functions/formatTime";
 import SegmentedPreview from "../SegmentedPreview/SegmentedPreview";
-import { PLAN_CONFIGS, PlanId } from "../../utils/plans";
+import { PLAN_CONFIGS, PlanId } from "@/app/backend/functions/plans";
 
 type EditSegment = {
   id: string;

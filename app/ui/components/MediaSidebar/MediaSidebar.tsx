@@ -1,6 +1,6 @@
 import React from "react";
-import { formatTime } from "../../utils/formatTime";
-import { PLAN_CONFIGS, PlanId } from "../../utils/plans";
+import { formatTime } from "@/app/backend/functions/formatTime";
+import { PLAN_CONFIGS, PlanId } from "@/app/backend/functions/plans";
 
 type AudioSegment = {
   start: number;

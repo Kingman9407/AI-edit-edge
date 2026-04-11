@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
-import { Segment } from "../../utils/segments";
-import { PLAN_CONFIGS, PlanId } from "../../utils/plans";
+import { Segment } from "@/app/backend/functions/segments";
+import { PLAN_CONFIGS, PlanId } from "@/app/backend/functions/plans";
 
 interface ExportPanelProps {
   videoFile: File | null;

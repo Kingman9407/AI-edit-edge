@@ -7,7 +7,7 @@ import {
   Maximize,
   Scissors,
 } from "lucide-react";
-import { formatTime } from "../../utils/formatTime";
+import { formatTime } from "@/app/backend/functions/formatTime";
 
 interface VideoPlayerProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;

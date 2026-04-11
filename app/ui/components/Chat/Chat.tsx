@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Send, Bot, User } from "lucide-react";
-import { formatTime } from "../../utils/formatTime";
-import { normalizeSegments } from "../../utils/segments";
-import { PLAN_CONFIGS, PlanId } from "../../utils/plans";
+import { formatTime } from "@/app/backend/functions/formatTime";
+import { normalizeSegments } from "@/app/backend/functions/segments";
+import { PLAN_CONFIGS, PlanId } from "@/app/backend/functions/plans";
 
 interface Message {
   id: string;
