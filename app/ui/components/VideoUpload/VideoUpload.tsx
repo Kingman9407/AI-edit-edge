@@ -13,7 +13,7 @@ export default function VideoUpload({ onFileUpload }: VideoUploadProps) {
           <Upload size={40} />
         </div>
         <div className="space-y-2">
-          <h2 className="text-2xl font-semibold text-zinc-100">Upload a Video</h2>
+          <h2 className="text-2xl font-semibold text-zinc-100">Upload a MP4 file</h2>
           <p className="text-zinc-400">Select an MP4 or WebM file to start editing.</p>
         </div>
         <label className="group relative inline-flex cursor-pointer items-center justify-center overflow-hidden rounded-full bg-blue-600 px-8 py-3 font-medium text-white transition-all hover:bg-blue-500 active:scale-95">
