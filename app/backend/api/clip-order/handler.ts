@@ -15,7 +15,7 @@ type OrderResponse = {
 
 export const runtime = "nodejs";
 
-const MODEL_DEFAULT = "nvidia/nemotron-3-super-120b-a12b";
+const MODEL_DEFAULT = "openai/gpt-oss-120b";
 
 const parseJson = (value: string): OrderResponse | null => {
   try {
@@ -74,10 +74,10 @@ const requestOrder = async (
   segments: Segment[],
   prompt?: string
 ): Promise<number[] | null> => {
-  const apiKey = process.env.NVIDIA_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return null;
 
-  const model = process.env.NVIDIA_ORDER_MODEL ?? process.env.NVIDIA_CHAT_MODEL ?? MODEL_DEFAULT;
+  const model = process.env.OPENROUTER_CHAT_MODEL ?? MODEL_DEFAULT;
   const attempts: { temperature: number; top_p: number; extraSystem?: string }[] = [
     { temperature: 0.2, top_p: 0.8 },
     {
@@ -102,7 +102,7 @@ const requestOrder = async (
       ? `${attempt.extraSystem}\nInvalid response:\n${lastContent.slice(0, 1200) || "<empty>"}`
       : "Return ONLY JSON with {\"order\": [1,2,3]} and nothing else.";
     const response = await fetch(
-      "https://integrate.api.nvidia.com/v1/chat/completions",
+      "https://openrouter.ai/api/v1/chat/completions",
       {
         method: "POST",
         headers: {

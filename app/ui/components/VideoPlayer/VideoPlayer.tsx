@@ -17,16 +17,7 @@ interface VideoPlayerProps {
   duration: number;
   currentTime: number;
   volume: number;
-  isMuted: boolean;
-  isEditorMode: boolean;
-  onTogglePlay: () => void;
-  onTimeUpdate: () => void;
-  onLoadedMetadata: () => void;
-  onEnded: () => void;
-  onProgressClick: (e: React.MouseEvent<HTMLDivElement>) => void;
-  onVolumeChange: (e: ChangeEvent<HTMLInputElement>) => void;
   onToggleMute: () => void;
-  onToggleEditorMode: () => void;
   onRequestFullscreen: () => void;
 }
 
@@ -39,7 +30,6 @@ export default function VideoPlayer({
   currentTime,
   volume,
   isMuted,
-  isEditorMode,
   onTogglePlay,
   onTimeUpdate,
   onLoadedMetadata,
@@ -47,7 +37,6 @@ export default function VideoPlayer({
   onProgressClick,
   onVolumeChange,
   onToggleMute,
-  onToggleEditorMode,
   onRequestFullscreen,
 }: VideoPlayerProps) {
   return (
@@ -122,17 +111,6 @@ export default function VideoPlayer({
           </div>
 
           <div className="flex items-center gap-4">
-            <button
-              onClick={onToggleEditorMode}
-              className={`flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                isEditorMode
-                  ? "bg-blue-600 text-white"
-                  : "bg-white/10 text-white hover:bg-white/20"
-              }`}
-            >
-              <Scissors size={16} />
-              Editor Mode
-            </button>
             <button
               onClick={onRequestFullscreen}
               className="text-white hover:text-blue-400 transition-colors"

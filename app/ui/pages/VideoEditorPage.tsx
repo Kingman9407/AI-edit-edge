@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useVideoPlayer } from "@/app/ui/hooks/useVideoPlayer";
 import VideoUpload from "../components/VideoUpload/VideoUpload";
 import VideoPlayer from "../components/VideoPlayer/VideoPlayer";
-import TrimEditor from "../components/TrimEditor/TrimEditor";
+
 import Chat from "../components/Chat/Chat";
 import SegmentedPreview from "../components/SegmentedPreview/SegmentedPreview";
 import EditList from "../components/EditList/EditList";
@@ -24,7 +24,7 @@ type TokenUsage = {
 type TokenSource = "chat" | "audio" | "vision";
 
 export default function VideoEditor() {
-  const [editMode, setEditMode] = useState<"single" | "multi">("single");
+  const [editMode, setEditMode] = useState<"single" | "multi">("multi");
   const [multiAiScope, setMultiAiScope] = useState<"active" | "all">("active");
   const [planId, setPlanId] = useState<PlanId>("free");
   const planConfig = PLAN_CONFIGS[planId];
@@ -56,7 +56,7 @@ export default function VideoEditor() {
     audio: 0,
     vision: 0,
   });
-  const [showTokenUsage, setShowTokenUsage] = useState(true);
+
   const addTokenUsage = useCallback((source: TokenSource, usage?: TokenUsage | null) => {
     if (!usage) return;
     const total =
@@ -81,7 +81,7 @@ export default function VideoEditor() {
     isMuted,
     trimStart,
     trimEnd,
-    isEditorMode,
+
     videoWidth,
     videoHeight,
     audioSegments,
@@ -109,7 +109,7 @@ export default function VideoEditor() {
     handleTrimEndChange,
     resetTrim,
     clearVideo,
-    toggleEditorMode,
+
     requestFullscreen,
     addEdit,
     clearEdits,
@@ -186,11 +186,7 @@ export default function VideoEditor() {
     []
   );
 
-  useEffect(() => {
-    if (editMode === "multi" && planId !== "pro") {
-      setEditMode("single");
-    }
-  }, [editMode, planId]);
+
 
   useEffect(() => {
     if (editMode !== "multi" || planId !== "pro") {
@@ -764,54 +760,29 @@ export default function VideoEditor() {
   const removedSegments = normalizedEdits;
 
   if (!videoSrc) {
-    if (editMode === "multi") {
-      if (planId !== "pro") {
-        return (
-          <div className="flex h-screen w-full items-center justify-center bg-zinc-950 p-4">
-            <div className="flex max-w-md flex-col items-center justify-center gap-4 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-10 text-center backdrop-blur-xl">
-              <div className="text-xl font-semibold text-zinc-100">
-                Multiple Video Editing
-              </div>
-              <div className="text-sm text-zinc-400">
-                Multiple video editing is available on the Pro plan.
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditMode("single")}
-                className="rounded-full border border-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-200 transition hover:border-blue-500 hover:text-white"
-              >
-                Switch to Single Video
-              </button>
-            </div>
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-zinc-950 p-4">
+        <div className="flex max-w-lg flex-col items-center justify-center gap-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-12 text-center backdrop-blur-xl">
+          <div className="text-2xl font-semibold text-zinc-100">
+            Upload Video
           </div>
-        );
-      }
-      return (
-        <div className="flex h-screen w-full items-center justify-center bg-zinc-950 p-4">
-          <div className="flex max-w-lg flex-col items-center justify-center gap-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-12 text-center backdrop-blur-xl">
-            <div className="text-2xl font-semibold text-zinc-100">
-              Upload Multiple Videos
-            </div>
-            <p className="text-zinc-400">
-              Add multiple clips and switch between them. AI will follow the
-              selected video.
-            </p>
-            <label className="group relative inline-flex cursor-pointer items-center justify-center overflow-hidden rounded-full bg-blue-600 px-8 py-3 font-medium text-white transition-all hover:bg-blue-500 active:scale-95">
-              <span>Choose Videos</span>
-              <input
-                ref={multiInputRef}
-                type="file"
-                accept="video/mp4,video/webm"
-                multiple
-                className="absolute inset-0 hidden"
-                onChange={handleMultiUpload}
-              />
-            </label>
-          </div>
+          <p className="text-zinc-400">
+            Add one or more clips to start editing.
+          </p>
+          <label className="group relative inline-flex cursor-pointer items-center justify-center overflow-hidden rounded-full bg-blue-600 px-8 py-3 font-medium text-white transition-all hover:bg-blue-500 active:scale-95">
+            <span>Choose Videos</span>
+            <input
+              ref={multiInputRef}
+              type="file"
+              accept="video/mp4,video/webm"
+              multiple
+              className="absolute inset-0 hidden"
+              onChange={handleMultiUpload}
+            />
+          </label>
         </div>
-      );
-    }
-    return <VideoUpload onFileUpload={handleFileUpload} />;
+      </div>
+    );
   }
 
   return (
@@ -820,133 +791,55 @@ export default function VideoEditor() {
         {/* Header */}
         <header className="mb-8 flex flex-wrap items-center gap-4">
           <div className="flex-1 space-y-1">
-            <div className="flex flex-wrap items-center gap-2 text-[11px] uppercase tracking-wide text-zinc-500">
-              <button
-                type="button"
-                onClick={() => setShowTokenUsage((prev) => !prev)}
-                className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-300 transition hover:border-blue-500 hover:text-white"
-              >
-                {showTokenUsage ? "Hide Tokens" : "Show Tokens"}
-              </button>
-              {showTokenUsage ? (
-                <>
-                  <span>Tokens</span>
-                  <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-zinc-200">
-                    {tokenUsage.total.toLocaleString()}
-                  </span>
-                  <span className="text-zinc-500">Chat</span>
-                  <span className="font-mono text-zinc-300">
-                    {tokenUsage.chat.toLocaleString()}
-                  </span>
-                  <span className="text-zinc-500">Audio</span>
-                  <span className="font-mono text-zinc-300">
-                    {tokenUsage.audio.toLocaleString()}
-                  </span>
-                  <span className="text-zinc-500">Vision</span>
-                  <span className="font-mono text-zinc-300">
-                    {tokenUsage.vision.toLocaleString()}
-                  </span>
-                </>
-              ) : null}
-            </div>
-            <h1 className="text-3xl font-bold tracking-tight text-white bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
-              Video Editor Toolkit
-            </h1>
-            <p className="text-sm text-zinc-400">
-              Editing: <span className="font-mono text-zinc-300">{videoFile?.name}</span>
-            </p>
+
+
+
           </div>
-          <div className="flex w-full justify-center sm:w-auto sm:flex-1">
-            <div className="flex items-center rounded-full border border-zinc-800 bg-zinc-900/70 p-1 shadow-xl">
-              {(["single", "multi"] as const).map((mode) => {
-                const isActive = editMode === mode;
-                const isProOnly = mode === "multi" && planId !== "pro";
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => {
-                      if (isProOnly) return;
-                      setEditMode(mode);
-                    }}
-                    disabled={isProOnly}
-                    title={isProOnly ? "Pro plan required" : undefined}
-                    className={`rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${
-                      isActive
-                        ? "bg-emerald-500 text-white shadow"
-                        : "text-zinc-300 hover:text-white"
-                    } ${isProOnly ? "cursor-not-allowed opacity-50 hover:text-zinc-300" : ""}`}
-                  >
-                    {mode === "single" ? "Single Video" : "Multiple Video"}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
-            <div className="flex items-center rounded-full border border-zinc-800 bg-zinc-900/70 p-1 shadow-xl">
-              {PLAN_ORDER.map((planOption) => {
-                const isActive = planOption === planId;
-                return (
-                  <button
-                    key={planOption}
-                    type="button"
-                    onClick={() => setPlanId(planOption)}
-                    className={`rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wide transition ${
-                      isActive
-                        ? "bg-blue-600 text-white shadow"
-                        : "text-zinc-300 hover:text-white"
-                    }`}
-                  >
-                    {PLAN_CONFIGS[planOption].label}
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              onClick={handleResetVideo}
-              className="rounded-full border border-zinc-800 bg-zinc-900 px-5 py-2.5 text-sm font-medium text-zinc-300 transition-all hover:bg-zinc-800 hover:text-white shadow-xl hover:shadow-blue-900/20"
-            >
-              {editMode === "multi" ? "Clear All" : "Upload New"}
-            </button>
-          </div>
+
+
         </header>
 
-        {editMode === "multi" && planId === "pro" ? (
-          <div className="mb-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-4 shadow-2xl backdrop-blur-xl">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-zinc-200">
-                Multiple Video Queue
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-950/60 px-2 py-1 text-[11px] text-zinc-400">
-                  <span>AI Scope</span>
-                  <div className="flex items-center rounded-full border border-zinc-700 bg-zinc-900/80 p-0.5">
-                    {(["active", "all"] as const).map((scope) => {
-                      const isActive = multiAiScope === scope;
-                      return (
-                        <button
-                          key={scope}
-                          type="button"
-                          onClick={() => setMultiAiScope(scope)}
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide transition ${
-                            isActive
-                              ? "bg-emerald-500 text-white"
-                              : "text-zinc-300 hover:text-white"
-                          }`}
-                        >
-                          {scope === "active" ? "Active" : "All Clips"}
-                        </button>
-                      );
-                    })}
+
+
+        {/* Layout Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column (Video + Trim Editor) - Takes up 2 columns */}
+          <div className="lg:col-span-2 flex flex-col gap-6">
+            {multiFiles.length > 0 && (
+              <div className="flex flex-wrap items-center gap-3">
+                {multiFiles.map((file, i) => (
+                  <div
+                    key={`${file.name}-${file.size}-${file.lastModified}`}
+                    onClick={() => handleSelectFile(i)}
+                    className={`group relative flex h-16 w-28 flex-shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border bg-zinc-900/40 shadow-xl transition-all hover:shadow-2xl ${
+                      activeIndex === i
+                        ? "border-emerald-500 ring-2 ring-emerald-500/50"
+                        : "border-zinc-800 hover:border-zinc-700"
+                    }`}
+                  >
+                    <video 
+                      src={URL.createObjectURL(file)} 
+                      className="h-full w-full object-cover" 
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveFile(i);
+                      }}
+                      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                    </button>
                   </div>
-                </div>
+                ))}
                 <button
                   type="button"
                   onClick={() => multiInputRef.current?.click()}
-                  className="rounded-full border border-zinc-700 px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:border-emerald-400 hover:text-white"
+                  className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 text-zinc-400 transition-all hover:border-blue-500 hover:bg-blue-500/10 hover:text-blue-400 shadow-xl"
+                  title="Add another video"
                 >
-                  Add Videos
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
                 </button>
                 <input
                   ref={multiInputRef}
@@ -957,50 +850,7 @@ export default function VideoEditor() {
                   onChange={handleMultiUpload}
                 />
               </div>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {multiFiles.length ? (
-                multiFiles.map((file, index) => {
-                  const isActive = index === activeIndex;
-                  return (
-                    <div
-                      key={`${file.name}-${file.size}-${file.lastModified}`}
-                      className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs ${
-                        isActive
-                          ? "border-emerald-400 bg-emerald-500/10 text-emerald-200"
-                          : "border-zinc-800 bg-zinc-950/60 text-zinc-300"
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleSelectFile(index)}
-                        className="max-w-[160px] truncate text-left"
-                      >
-                        {file.name}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveFile(index)}
-                        className="rounded-full border border-zinc-700 px-2 py-0.5 text-[10px] text-zinc-400 hover:border-red-500 hover:text-white"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="rounded-full border border-dashed border-zinc-700 px-3 py-1.5 text-xs text-zinc-500">
-                  No videos uploaded yet.
-                </div>
-              )}
-            </div>
-          </div>
-        ) : null}
-
-        {/* Layout Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column (Video + Trim Editor) - Takes up 2 columns */}
-          <div className="lg:col-span-2 flex flex-col gap-6">
+            )}
             <VideoPlayer
               videoRef={videoRef}
               progressRef={progressRef}
@@ -1010,7 +860,6 @@ export default function VideoEditor() {
               currentTime={currentTime}
               volume={volume}
               isMuted={isMuted}
-              isEditorMode={isEditorMode}
               onTogglePlay={togglePlay}
               onTimeUpdate={handleTimeUpdate}
               onLoadedMetadata={handleLoadedMetadata}
@@ -1018,21 +867,8 @@ export default function VideoEditor() {
               onProgressClick={handleProgressClick}
               onVolumeChange={handleVolumeChange}
               onToggleMute={toggleMute}
-              onToggleEditorMode={toggleEditorMode}
               onRequestFullscreen={requestFullscreen}
             />
-
-            {/* Trim Editor (only shown in editor mode) */}
-            {isEditorMode && (
-              <TrimEditor
-                duration={duration}
-                trimStart={trimStart}
-                trimEnd={trimEnd}
-                onTrimStartChange={handleTrimStartChange}
-                onTrimEndChange={handleTrimEndChange}
-                onReset={resetTrim}
-              />
-            )}
           </div>
 
           {/* Right Column (Sidebar + Chat) - Takes up 1 column */}
@@ -1079,6 +915,7 @@ export default function VideoEditor() {
                }
                multiClipFiles={multiClipFiles}
                multiClipSnapshots={multiClipSnapshots}
+               tokenUsage={tokenUsage}
                videoContext={{
                  name: videoFile?.name ?? "unknown",
                  type: videoFile?.type ?? "unknown",
@@ -1089,7 +926,6 @@ export default function VideoEditor() {
                  currentTime,
                  trimStart,
                  trimEnd,
-                 isEditorMode,
                }}
                captureFrame={captureFrame}
                audioSegments={activeAudioSegments}
@@ -1109,6 +945,7 @@ export default function VideoEditor() {
                  return exporter();
                }}
                onAddEdit={addEdit}
+               onPlanSelect={setPlanId}
              />
             </div>
           </div>

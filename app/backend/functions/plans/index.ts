@@ -4,7 +4,6 @@ export type PlanConfig = {
   id: PlanId;
   label: string;
   exportLimit: number;
-  allowThinking: boolean;
   maxTrimFraction: number;
   nextPlanLabel?: string;
   chat: {
@@ -29,8 +28,7 @@ export const PLAN_CONFIGS: Record<PlanId, PlanConfig> = {
     id: "free",
     label: "Free",
     exportLimit: 1,
-    allowThinking: false,
-    maxTrimFraction: 0.25,
+    maxTrimFraction: 1,
     nextPlanLabel: "Plus",
     chat: {
       includeAudio: false,
@@ -52,7 +50,6 @@ export const PLAN_CONFIGS: Record<PlanId, PlanConfig> = {
     id: "plus",
     label: "Plus",
     exportLimit: 10,
-    allowThinking: true,
     maxTrimFraction: 0.5,
     nextPlanLabel: "Pro",
     chat: {
@@ -75,7 +72,6 @@ export const PLAN_CONFIGS: Record<PlanId, PlanConfig> = {
     id: "pro",
     label: "Pro",
     exportLimit: 200,
-    allowThinking: true,
     maxTrimFraction: 1,
     chat: {
       includeAudio: true,

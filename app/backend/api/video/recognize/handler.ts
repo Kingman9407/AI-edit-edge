@@ -11,15 +11,15 @@ export async function POST(req: Request) {
   }
 
   const response = await fetch(
-    "https://integrate.api.nvidia.com/v1/chat/completions",
+    "https://openrouter.ai/api/v1/chat/completions",
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "microsoft/phi-4-multimodal-instruct",
+        model: "openai/gpt-oss-120b",
         messages: [
           {
             role: "user",

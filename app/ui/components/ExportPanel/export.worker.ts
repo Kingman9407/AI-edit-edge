@@ -21,12 +21,13 @@ import {
   BufferTarget,
   BlobSource,
   EncodedPacketSink,
+  AudioBufferSink,
   AudioBufferSource,
   CanvasSource,
   MP4,
   getFirstEncodableVideoCodec,
 } from "mediabunny";
-import type { VideoCodec } from "mediabunny";
+import type { VideoCodec, InputAudioTrack } from "mediabunny";
 
 export interface QualityOption {
   id: "fast" | "standard" | "high";
@@ -283,9 +284,9 @@ async function runExportPipeline(
   videoSource.close();
 
   if (hasAudio && audioSource) {
-    onProgress(82, "Fast audio mixdown (OfflineAudioContext)…");
+    onProgress(82, "Processing audio…");
     try {
-      await processAudio(file, segments, audioSource);
+      await processAudio(audioTrack, segments, audioSource);
     } catch (err) {
       console.warn(
         "[Worker] Audio processing failed, exporting without audio:",
@@ -306,53 +307,50 @@ async function runExportPipeline(
 }
 
 async function processAudio(
-  file: File,
+  audioTrack: InputAudioTrack,
   segments: { start: number; end: number }[],
   audioSource: AudioBufferSource
 ): Promise<void> {
-  const fileBuffer = await file.arrayBuffer();
-  const tempCtx = new AudioContext({ sampleRate: 48_000 });
-  let decodedAudio: AudioBuffer;
-  try {
-    decodedAudio = await tempCtx.decodeAudioData(fileBuffer);
-  } finally {
-    await tempCtx.close();
-  }
-
-  const sampleRate = decodedAudio.sampleRate;
-  const numCh = Math.min(decodedAudio.numberOfChannels, 2);
+  const audioSink = new AudioBufferSink(audioTrack);
 
   for (const seg of segments) {
-    const startFrame = Math.floor(seg.start * sampleRate);
-    const endFrame = Math.min(
-      Math.floor(seg.end * sampleRate),
-      decodedAudio.length
-    );
-    const totalFrames = endFrame - startFrame;
-    if (totalFrames <= 0) continue;
+    for await (const wrapped of audioSink.buffers(seg.start, seg.end)) {
+      const buffer = wrapped.buffer;
+      const bufStart = wrapped.timestamp;
+      const bufEnd = bufStart + wrapped.duration;
 
-    const offlineCtx = new OfflineAudioContext(numCh, totalFrames, sampleRate);
-    const bufSrc = offlineCtx.createBufferSource();
-    bufSrc.buffer = decodedAudio;
-    bufSrc.connect(offlineCtx.destination);
-    bufSrc.start(0, seg.start, seg.end - seg.start);
-    const renderedBuffer = await offlineCtx.startRendering();
+      let startOffsetSec = 0;
+      let endOffsetSec = wrapped.duration;
 
-    const bufferFactory = new OfflineAudioContext(
-      numCh,
-      totalFrames,
-      sampleRate
-    );
-    for (let i = 0; i < totalFrames; i += AUDIO_CHUNK_FRAMES) {
-      const chunkLen = Math.min(AUDIO_CHUNK_FRAMES, totalFrames - i);
-      const chunkBuffer = bufferFactory.createBuffer(numCh, chunkLen, sampleRate);
-      for (let ch = 0; ch < numCh; ch++) {
-        const src = renderedBuffer
-          .getChannelData(ch)
-          .subarray(i, i + chunkLen);
-        chunkBuffer.copyToChannel(src, ch);
+      if (bufStart < seg.start) {
+        startOffsetSec = seg.start - bufStart;
       }
-      await audioSource.add(chunkBuffer);
+      if (bufEnd > seg.end) {
+        endOffsetSec = seg.end - bufStart;
+      }
+
+      if (startOffsetSec > 0 || endOffsetSec < wrapped.duration) {
+        const startSample = Math.floor(startOffsetSec * buffer.sampleRate);
+        const endSample = Math.floor(endOffsetSec * buffer.sampleRate);
+        const numFrames = endSample - startSample;
+
+        if (numFrames > 0) {
+          const croppedBuffer = new AudioBuffer({
+            length: numFrames,
+            numberOfChannels: buffer.numberOfChannels,
+            sampleRate: buffer.sampleRate,
+          });
+          for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+            croppedBuffer.copyToChannel(
+              buffer.getChannelData(ch).subarray(startSample, endSample),
+              ch
+            );
+          }
+          await audioSource.add(croppedBuffer);
+        }
+      } else {
+        await audioSource.add(buffer);
+      }
     }
   }
 }

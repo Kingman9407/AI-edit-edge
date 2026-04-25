@@ -18,170 +18,17 @@ interface ExportPanelProps {
 
 type ExportMode = "sequential" | "ai";
 
-type CloudinaryResult = {
-  previewUrl: string;
-  downloadUrl: string;
-  name: string;
-  clipCount: number;
-  mode: ExportMode;
-};
-
-type DirectUploadResult = {
-  secure_url?: string;
-  url?: string;
-  public_id?: string;
-};
-
 type ClipOrderResponse = {
   order: number[];
 };
 
+import { QualityOption, ExportWorkerMessage, ExportWorkerResponse } from "./export.worker";
 
-
-const getUnsignedCloudinaryConfig = () => {
-  if (typeof window === "undefined") return null;
-  const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-  const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-  if (!cloudName || !uploadPreset) return null;
-  return { cloudName, uploadPreset };
-};
-
-const requestDirectUploadSignature = async (filename: string) => {
-  const response = await fetch("/api/cloudinary/sign", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ filename }),
-  });
-  const raw = await response.text();
-  let data: any = null;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    data = null;
-  }
-  if (!response.ok || !data) {
-    const message =
-      data?.error || raw?.slice(0, 200) || "Cloudinary signing failed.";
-    throw new Error(message);
-  }
-  return data as {
-    cloudName: string;
-    apiKey: string;
-    timestamp: number;
-    signature: string;
-    publicId: string;
-  };
-};
-
-const uploadVideoDirect = async (file: File) => {
-  try {
-    const signed = await requestDirectUploadSignature(file.name);
-    const form = new FormData();
-    form.append("file", file);
-    form.append("api_key", signed.apiKey);
-    form.append("timestamp", signed.timestamp.toString());
-    form.append("signature", signed.signature);
-    form.append("public_id", signed.publicId);
-
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${signed.cloudName}/video/upload`,
-      { method: "POST", body: form }
-    );
-    const raw = await response.text();
-    let data: DirectUploadResult | null = null;
-    try {
-      data = JSON.parse(raw) as DirectUploadResult;
-    } catch {
-      data = null;
-    }
-    if (!response.ok || !data) {
-      const message =
-        (data as any)?.error?.message ||
-        raw?.slice(0, 200) ||
-        "Cloudinary direct upload failed.";
-      throw new Error(message);
-    }
-    return {
-      url: data.secure_url || data.url || "",
-      publicId: data.public_id || signed.publicId,
-    };
-  } catch (error) {
-    const fallback = getUnsignedCloudinaryConfig();
-    if (!fallback) throw error;
-
-    const form = new FormData();
-    form.append("file", file);
-    form.append("upload_preset", fallback.uploadPreset);
-
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${fallback.cloudName}/video/upload`,
-      { method: "POST", body: form }
-    );
-    const raw = await response.text();
-    let data: DirectUploadResult | null = null;
-    try {
-      data = JSON.parse(raw) as DirectUploadResult;
-    } catch {
-      data = null;
-    }
-    if (!response.ok || !data) {
-      const message =
-        (data as any)?.error?.message ||
-        raw?.slice(0, 200) ||
-        "Cloudinary direct upload failed.";
-      throw new Error(message);
-    }
-    return {
-      url: data.secure_url || data.url || "",
-      publicId: data.public_id || "",
-    };
-  }
-};
-
-const exportWithCloudinary = async (
-  file: File,
-  segments: Segment[],
-  mode: ExportMode
-): Promise<CloudinaryResult> => {
-  // ✅ ALWAYS upload directly to Cloudinary (fix for Vercel payload limit)
-  const directResult = await uploadVideoDirect(file);
-
-  if (!directResult.url) {
-    throw new Error(
-      "Direct upload failed. Please check Cloudinary configuration."
-    );
-  }
-
-  const response = await fetch("/api/cloudinary/export", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      fileUrl: directResult.url,
-      basePublicId: directResult.publicId || undefined,
-      filename: file.name,
-      segments,
-      mode,
-    }),
-  });
-
-  const raw = await response.text();
-  let data: any = null;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    data = null;
-  }
-
-  if (!response.ok) {
-    const message =
-      data?.error || raw?.slice(0, 200) || "Cloudinary export failed.";
-    const err = new Error(message) as Error & { status?: number };
-    err.status = response.status;
-    throw err;
-  }
-
-  return data as CloudinaryResult;
-};
+const QUALITY_PRESETS: QualityOption[] = [
+  { id: "fast", label: "Fast (720p)", desc: "Quick export, lower quality", bitrate: 2_500_000, maxHeight: 720, codec: "avc" },
+  { id: "standard", label: "Standard (1080p)", desc: "Good balance of speed and quality", bitrate: 5_000_000, maxHeight: 1080, codec: "avc" },
+  { id: "high", label: "High (Original)", desc: "Best quality, slower export", bitrate: 10_000_000, codec: "avc" }
+];
 
 const fetchClipOrder = async (segments: Segment[]): Promise<number[]> => {
   if (segments.length < 2) return [];
@@ -258,14 +105,13 @@ export default function ExportPanel({
   const [trimmedUrl, setTrimmedUrl] = useState<string | null>(null);
   const [progressMsg, setProgressMsg] = useState("");
   const [progressPct, setProgressPct] = useState(0);
-  const [processingMode, setProcessingMode] = useState<ExportMode | null>(null);
-  const processingModeRef = useRef<ExportMode | null>(null);
-  const [showModePicker, setShowModePicker] = useState(false);
   const [exportSource, setExportSource] = useState<"clips" | "kept" | null>(
     null
   );
   const exportSourceRef = useRef<"clips" | "kept" | null>(null);
   const [showSourcePicker, setShowSourcePicker] = useState(false);
+  const [selectedQuality, setSelectedQuality] = useState<QualityOption["id"]>("standard");
+  const workerRef = useRef<Worker | null>(null);
 
   const remainingExports = Math.max(
     0,
@@ -309,9 +155,7 @@ export default function ExportPanel({
     removedSegmentsRef.current = removedSegments;
   }, [removedSegments]);
 
-  React.useEffect(() => {
-    processingModeRef.current = processingMode;
-  }, [processingMode]);
+
 
   React.useEffect(() => {
     exportSourceRef.current = exportSource;
@@ -362,15 +206,6 @@ export default function ExportPanel({
       return { success: false, error: message };
     }
 
-    const selectedMode = processingModeRef.current;
-    if (!selectedMode) {
-      const message = "Choose a processing mode to export.";
-      setError(message);
-      setShowModePicker(true);
-      return { success: false, error: message };
-    }
-
-    setShowModePicker(false);
     setError(null);
     setExportingState(true);
     setTrimmedUrl(null);
@@ -385,63 +220,57 @@ export default function ExportPanel({
       progressRef.current = reportProgress;
 
       let orderedSegments = currentSegments;
-      if (selectedMode === "ai" && currentSegments.length > 1) {
-        reportProgress(8, "Asking AI to arrange clip order...");
-        try {
-          const order = await fetchClipOrder(currentSegments);
-          orderedSegments = applyClipOrder(currentSegments, order);
-        } catch {
-          orderedSegments = currentSegments;
-        }
-      }
 
-      reportProgress(15, "Uploading to Cloudinary...");
-      reportProgress(
-        20,
-        `Processing ${orderedSegments.length} segments (${selectedMode === "ai" ? "AI mode" : "sequential"})...`
-      );
+      reportProgress(10, "Initializing local Web Worker...");
+      
+      const worker = new Worker(new URL("./export.worker.ts", import.meta.url));
+      workerRef.current = worker;
 
-      let cloudResult: CloudinaryResult | null = null;
-      let cloudError: string | null = null;
+      const qualityPreset = QUALITY_PRESETS.find(q => q.id === selectedQuality) || QUALITY_PRESETS[1];
 
-      try {
-        cloudResult = await exportWithCloudinary(
-          currentVideo,
-          orderedSegments,
-          selectedMode
-        );
-      } catch (error) {
-        cloudError =
-          error instanceof Error ? error.message : "Cloudinary export failed.";
-      }
+      return new Promise<{ success: boolean; error?: string }>((resolve) => {
+        worker.onmessage = (event: MessageEvent<ExportWorkerResponse>) => {
+          const msg = event.data;
+          if (msg.type === "progress") {
+            reportProgress(msg.percent, msg.message);
+          } else if (msg.type === "done") {
+            const url = URL.createObjectURL(msg.blob);
+            setTrimmedUrl(url);
+            triggerDownload(url, msg.name);
+            reportProgress(100, "Done!");
+            onExportSuccessRef.current?.(currentPlanId);
+            setExportingState(false);
+            resolve({ success: true });
+          } else if (msg.type === "error") {
+            setError(msg.error);
+            setExportingState(false);
+            resolve({ success: false, error: msg.error });
+          }
+        };
 
-      if (cloudResult) {
-        setTrimmedUrl(cloudResult.previewUrl);
-        reportProgress(95, "Preparing download...");
-        triggerDownload(cloudResult.downloadUrl, cloudResult.name);
-        reportProgress(100, "Done!");
-        onExportSuccessRef.current?.(currentPlanId);
-        return { success: true };
-      }
-      const message = cloudError ?? "Cloudinary export failed.";
-      setError(message);
-      return { success: false, error: message };
+        worker.onerror = (error) => {
+          const errMsg = "Worker error: " + error.message;
+          setError(errMsg);
+          setExportingState(false);
+          resolve({ success: false, error: errMsg });
+        };
+
+        worker.postMessage({
+          type: "start",
+          file: currentVideo,
+          segments: orderedSegments.map(s => ({ start: s.start, end: s.end })),
+          quality: qualityPreset,
+          label: "sequential"
+        } satisfies ExportWorkerMessage);
+      });
+
     } catch (err) {
       const message = err instanceof Error ? err.message : "Export failed";
       setError(message);
-      return { success: false, error: message };
-    } finally {
       setExportingState(false);
+      return { success: false, error: message };
     }
-  }, []);
-
-  const handleModeSelect = React.useCallback((mode: ExportMode) => {
-    setProcessingMode(mode);
-    processingModeRef.current = mode;
-    setShowModePicker(false);
-    setShowSourcePicker(true);
-    setError(null);
-  }, []);
+  }, [selectedQuality]);
 
   const handleSourceSelect = React.useCallback(
     (source: "clips" | "kept") => {
@@ -455,12 +284,6 @@ export default function ExportPanel({
   );
 
   const handleExportClick = React.useCallback(() => {
-    if (!processingModeRef.current) {
-      const message = "Choose a processing mode to export.";
-      setError(message);
-      setShowModePicker(true);
-      return;
-    }
     if (!exportSourceRef.current) {
       const message = "Choose an export approach to continue.";
       setError(message);
@@ -475,6 +298,17 @@ export default function ExportPanel({
       registerExporter(exportVideos);
     }
   }, [registerExporter, exportVideos]);
+
+  React.useEffect(() => {
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.terminate();
+      }
+      if (trimmedUrl) {
+        URL.revokeObjectURL(trimmedUrl);
+      }
+    };
+  }, [trimmedUrl]);
 
   return (
     <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 shadow-2xl backdrop-blur-xl">
@@ -496,13 +330,6 @@ export default function ExportPanel({
         </button>
       </div>
 
-      {processingMode ? (
-        <div className="text-[11px] text-zinc-500">
-          Processing mode:{" "}
-          {processingMode === "ai" ? "AI (parallel)" : "Sequential"}
-        </div>
-      ) : null}
-
       {exportSource ? (
         <div className="text-[11px] text-zinc-500">
           Export approach:{" "}
@@ -512,30 +339,29 @@ export default function ExportPanel({
         </div>
       ) : null}
 
-      {showModePicker && !isExporting ? (
-        <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
-          <div className="text-xs font-semibold text-zinc-200">
-            Choose processing mode
-          </div>
-          <div className="text-[11px] text-zinc-500">
-            Sequential is more stable for long exports. AI mode runs clips in
-            parallel.
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => handleModeSelect("sequential")}
-              className="rounded-full border border-zinc-700 px-3 py-1 text-[11px] font-semibold text-zinc-200 transition hover:border-zinc-500"
-            >
-              Sequential (Recommended)
-            </button>
-            <button
-              type="button"
-              onClick={() => handleModeSelect("ai")}
-              className="rounded-full border border-blue-500/50 bg-blue-500/10 px-3 py-1 text-[11px] font-semibold text-blue-300 transition hover:bg-blue-500/20"
-            >
-              AI Mode (Parallel)
-            </button>
+      {!isExporting ? (
+        <div className="space-y-4">
+          <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+            <div className="text-xs font-semibold text-zinc-200">
+              Export Quality
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {QUALITY_PRESETS.map((q) => (
+                <button
+                  key={q.id}
+                  type="button"
+                  onClick={() => setSelectedQuality(q.id)}
+                  className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
+                    selectedQuality === q.id
+                      ? "border-emerald-500 bg-emerald-500/20 text-emerald-200"
+                      : "border-zinc-700 text-zinc-400 hover:border-zinc-500 text-zinc-200"
+                  }`}
+                  title={q.desc}
+                >
+                  {q.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       ) : null}

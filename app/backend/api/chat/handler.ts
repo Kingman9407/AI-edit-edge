@@ -71,97 +71,126 @@ type UsageTotals = {
   total_tokens?: number;
 };
 
-const resolveChatModel = (allowThinking?: boolean) => {
-  const defaultModel = "nvidia/nemotron-3-super-120b-a12b";
-  const baseModel = process.env.NVIDIA_CHAT_MODEL ?? defaultModel;
-  const liteModel = process.env.NVIDIA_CHAT_MODEL_LITE ?? baseModel;
-  const thinkingModel = process.env.NVIDIA_CHAT_MODEL_THINKING ?? baseModel;
-  return allowThinking ? thinkingModel : liteModel;
+// ---------------------------------------------------------------------------
+// Tool definitions (OpenAI-compatible function calling schema)
+// ---------------------------------------------------------------------------
+
+const TOOLS = [
+  {
+    type: "function",
+    function: {
+      name: "cut_segment",
+      description:
+        "Remove (cut out) a segment of the video. Use this when the user asks to cut, trim, remove, or delete a specific time range.",
+      parameters: {
+        type: "object",
+        properties: {
+          start: {
+            type: "number",
+            description: "Start time in seconds of the segment to remove.",
+          },
+          end: {
+            type: "number",
+            description: "End time in seconds of the segment to remove.",
+          },
+          clip: {
+            type: "number",
+            description:
+              "1-based clip index when multiple clips are loaded. Omit if only one clip.",
+          },
+          reason: {
+            type: "string",
+            description: "Short human-readable reason for the cut.",
+          },
+        },
+        required: ["start", "end"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "suggest_trims",
+      description:
+        "Suggest one or more trim ranges for the user to review before applying. Use this when the user asks for suggestions, highlights, or key moments.",
+      parameters: {
+        type: "object",
+        properties: {
+          segments: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                start: { type: "number", description: "Start time in seconds." },
+                end: { type: "number", description: "End time in seconds." },
+                reason: {
+                  type: "string",
+                  description: "Why this segment should be trimmed.",
+                },
+              },
+              required: ["start", "end"],
+            },
+          },
+        },
+        required: ["segments"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "export_video",
+      description:
+        "Trigger a video export/render. Use this when the user asks to export, render, or combine clips.",
+      parameters: {
+        type: "object",
+        properties: {},
+      },
+    },
+  },
+] as const;
+
+// ---------------------------------------------------------------------------
+// Model resolution
+// ---------------------------------------------------------------------------
+
+const resolveChatModel = () => {
+  const defaultModel = "openai/gpt-oss-120b";
+  const baseModel = process.env.OPENROUTER_CHAT_MODEL ?? defaultModel;
+  return process.env.OPENROUTER_CHAT_MODEL_LITE ?? baseModel;
 };
 
-type JsonAttempt = {
-  content: string;
-  parsed: ModelJson | null;
+// ---------------------------------------------------------------------------
+// Core request with tool calling
+// ---------------------------------------------------------------------------
+
+type ToolCallResult = {
+  assistantText: string;
+  actions: ModelAction[];
   usage: UsageTotals | null;
+  rawContent: string;
 };
 
-type JsonResponse = {
-  content: string;
-  parsed: ModelJson | null;
-  usage: UsageTotals | null;
-  attempts: number;
-  rawAttempts: string[];
-};
-
-function parseModelJson(value: string): ModelJson | null {
-  try {
-    let cleaned = value.trim();
-    // Strip markdown code fences the model sometimes wraps JSON in
-    if (cleaned.startsWith("```")) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
-    }
-    const parsed = JSON.parse(cleaned) as Partial<ModelJson> | null;
-    if (!parsed || typeof parsed !== "object") return null;
-    if (typeof parsed.assistant_message !== "string") return null;
-    // Default status to "ok" if the model returned an unexpected value
-    const status: ModelJson["status"] =
-      parsed.status === "ok" ||
-      parsed.status === "needs_info" ||
-      parsed.status === "error"
-        ? parsed.status
-        : "ok";
-    // Default actions to [] if missing or non-array
-    const actions = Array.isArray(parsed.actions)
-      ? (parsed.actions as ModelAction[])
-      : [];
-    return {
-      assistant_message: parsed.assistant_message,
-      status,
-      follow_up:
-        typeof parsed.follow_up === "string" ? parsed.follow_up : null,
-      actions,
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function requestJsonAttempt({
+async function requestWithTools({
   messages,
-  allowThinking,
-  temperature,
-  top_p,
-  extraSystem,
 }: {
   messages: ChatMessage[];
-  allowThinking?: boolean;
-  temperature: number;
-  top_p: number;
-  extraSystem?: string;
-}): Promise<JsonAttempt> {
-  const attemptMessages = extraSystem
-    ? [
-        messages[0],
-        { role: "system", content: extraSystem },
-        ...messages.slice(1),
-      ]
-    : messages;
-
+}): Promise<ToolCallResult> {
   const response = await fetch(
-    "https://integrate.api.nvidia.com/v1/chat/completions",
+    "https://openrouter.ai/api/v1/chat/completions",
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: resolveChatModel(allowThinking),
-        messages: attemptMessages,
-        max_tokens: 16384,
-        temperature,
-        top_p,
-        chat_template_kwargs: { enable_thinking: Boolean(allowThinking) },
+        model: resolveChatModel(),
+        messages,
+        tools: TOOLS,
+        tool_choice: "auto",
+        temperature: 0.4,
+        top_p: 0.9,
       }),
     }
   );
@@ -177,110 +206,75 @@ async function requestJsonAttempt({
   if (!response.ok) {
     const message =
       data?.error?.message || raw?.slice(0, 200) || "Chat model request failed";
+    console.error("OpenRouter Response Error:", { status: response.status, message, raw });
     throw new Error(message);
   }
 
-  const content = data?.choices?.[0]?.message?.content ?? raw ?? "";
-  const parsed = parseModelJson(content);
-  return { content, parsed, usage: data?.usage ?? null };
-}
+  const choice = data?.choices?.[0];
+  const usage: UsageTotals | null = data?.usage ?? null;
+  const toolCalls: any[] | undefined = choice?.message?.tool_calls;
+  const assistantText: string = choice?.message?.content ?? "";
 
-async function requestJsonWithRetry({
-  messages,
-  allowThinking,
-}: {
-  messages: ChatMessage[];
-  allowThinking?: boolean;
-}): Promise<JsonResponse> {
-  const attempts: { temperature: number; top_p: number; extraSystem?: string }[] = [
-    { temperature: 0.6, top_p: 0.8 },
-    {
-      temperature: 0,
-      top_p: 0.1,
-      extraSystem:
-        "Your previous response was not valid JSON. Fix it and reply ONLY with the JSON object that matches the schema. No markdown, no backticks, no extra text.",
-    },
-    {
-      temperature: 0,
-      top_p: 0.1,
-      extraSystem:
-        "Return STRICT JSON only. Use double quotes, no trailing commas. Make sure all keys exist and types match the schema exactly.",
-    },
-    {
-      temperature: 0,
-      top_p: 0.1,
-      extraSystem:
-        "Output only the JSON object (no prose). If you are unsure, return status \"needs_info\" with a follow_up question. Always include actions as an array.",
-    },
-    {
-      temperature: 0,
-      top_p: 0.1,
-      extraSystem:
-        "Final attempt: output ONLY a valid JSON object that matches the schema. No extra text.",
-    },
-  ];
-  let last: JsonAttempt | null = null;
-  const rawAttempts: string[] = [];
-  const usageTotals: Required<UsageTotals> = {
-    prompt_tokens: 0,
-    completion_tokens: 0,
-    total_tokens: 0,
-  };
-  const addUsage = (usage: UsageTotals | null | undefined) => {
-    if (!usage) return;
-    if (typeof usage.prompt_tokens === "number") {
-      usageTotals.prompt_tokens += usage.prompt_tokens;
-    }
-    if (typeof usage.completion_tokens === "number") {
-      usageTotals.completion_tokens += usage.completion_tokens;
-    }
-    if (typeof usage.total_tokens === "number") {
-      usageTotals.total_tokens += usage.total_tokens;
-    }
-  };
+  const actions: ModelAction[] = [];
 
-  const buildRepairPrompt = (template: string, raw?: string) => {
-    const snippet =
-      typeof raw === "string" && raw.trim().length
-        ? raw.trim().slice(0, 1200)
-        : "No response content.";
-    return `${template}\nInvalid response:\n${snippet}`;
-  };
+  if (toolCalls?.length) {
+    for (const tc of toolCalls) {
+      const name: string = tc?.function?.name ?? "";
+      let args: any = {};
+      try {
+        args = tc?.function?.arguments
+          ? JSON.parse(tc.function.arguments)
+          : {};
+      } catch {
+        args = {};
+      }
 
-  for (let i = 0; i < attempts.length; i += 1) {
-    const attempt = attempts[i];
-    const extraSystem =
-      attempt.extraSystem && i > 0
-        ? buildRepairPrompt(attempt.extraSystem, last?.content)
-        : attempt.extraSystem;
-    last = await requestJsonAttempt({
-      messages,
-      allowThinking,
-      temperature: attempt.temperature,
-      top_p: attempt.top_p,
-      extraSystem,
-    });
-    rawAttempts.push(last.content);
-    addUsage(last.usage);
-    if (last.parsed) {
-      return {
-        content: last.content,
-        parsed: last.parsed,
-        usage: usageTotals,
-        attempts: i + 1,
-        rawAttempts,
-      };
+      if (name === "cut_segment") {
+        const start = Number(args.start);
+        const end = Number(args.end);
+        if (Number.isFinite(start) && Number.isFinite(end) && start < end) {
+          actions.push({
+            type: "cut",
+            start,
+            end,
+            clip: typeof args.clip === "number" ? args.clip : null,
+            reason: args.reason ?? null,
+          });
+        }
+      } else if (name === "suggest_trims") {
+        const segments: any[] = Array.isArray(args.segments)
+          ? args.segments
+          : [];
+        for (const seg of segments) {
+          const start = Number(seg.start);
+          const end = Number(seg.end);
+          if (Number.isFinite(start) && Number.isFinite(end) && start < end) {
+            actions.push({
+              type: "trim",
+              start,
+              end,
+              clip: null,
+              reason: seg.reason ?? null,
+            });
+          }
+        }
+      } else if (name === "export_video") {
+        actions.push({ type: "export", start: null, end: null, clip: null, reason: null });
+      }
     }
   }
 
   return {
-    content: last?.content ?? "",
-    parsed: null,
-    usage: usageTotals,
-    attempts: attempts.length,
-    rawAttempts,
+    assistantText,
+    actions,
+    usage,
+    rawContent: raw,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Frame description (vision)
+// ---------------------------------------------------------------------------
 
 function formatSeconds(value: number) {
   return `${value.toFixed(2)}s`;
@@ -288,23 +282,22 @@ function formatSeconds(value: number) {
 
 async function describeFrame(frameDataUrl: string) {
   const response = await fetch(
-    "https://integrate.api.nvidia.com/v1/chat/completions",
+    "https://openrouter.ai/api/v1/chat/completions",
     {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
+        Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "microsoft/phi-4-multimodal-instruct",
+        model: "openai/gpt-oss-120b",
         messages: [
           {
             role: "user",
             content: [
               {
                 type: "text",
-                text:
-                  "Describe this video frame for editing. Focus on people, actions, objects, and setting.",
+                text: "Describe this video frame for editing. Focus on people, actions, objects, and setting.",
               },
               {
                 type: "image_url",
@@ -334,6 +327,10 @@ async function describeFrame(frameDataUrl: string) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// POST handler
+// ---------------------------------------------------------------------------
+
 export async function POST(req: Request) {
   const {
     message,
@@ -356,10 +353,11 @@ export async function POST(req: Request) {
     clips?: ClipContext;
     history?: HistoryMessage[];
     memory?: MemoryContext;
-    allowThinking?: boolean;
     multiClips?: MultiClipSummary[];
     suggestions?: SuggestionContext[];
   };
+
+
   const usageTotals: Required<UsageTotals> = {
     prompt_tokens: 0,
     completion_tokens: 0,
@@ -378,6 +376,7 @@ export async function POST(req: Request) {
     }
   };
 
+  // Build video context lines
   const contextLines: string[] = [];
   if (video?.name) contextLines.push(`File: ${video.name}`);
   if (video?.type) contextLines.push(`Type: ${video.type}`);
@@ -418,33 +417,28 @@ export async function POST(req: Request) {
     contextLines.push(`Editor mode: ${video.isEditorMode ? "on" : "off"}`);
   }
 
-  if (audio?.summary) {
-    contextLines.push(`Audio context:
-${audio.summary}`);
-  } else if (audio?.status && audio.status !== "done") {
-    const statusLine = audio.error
-      ? `Audio status: ${audio.status} (${audio.error})`
-      : `Audio status: ${audio.status}`;
-    contextLines.push(statusLine);
-  }
+  // DISABLED: audio context
+  // if (audio?.summary) {
+  //   contextLines.push(`Audio context:\n${audio.summary}`);
+  // } else if (audio?.status && audio.status !== "done") {
+  //   const statusLine = audio.error
+  //     ? `Audio status: ${audio.status} (${audio.error})`
+  //     : `Audio status: ${audio.status}`;
+  //   contextLines.push(statusLine);
+  // }
 
   if (clips?.summary) {
-    contextLines.push(`Clip stack:
-${clips.summary}`);
+    contextLines.push(`Clip stack:\n${clips.summary}`);
   }
 
   if (visual?.summary) {
-    contextLines.push(`Visual context:
-${visual.summary}`);
+    contextLines.push(`Visual context:\n${visual.summary}`);
   }
 
   if (memory?.summary) {
     contextLines.push(`User memory: ${memory.summary}`);
   }
 
-  if (typeof allowThinking === "boolean") {
-    contextLines.push(`Thinking mode: ${allowThinking ? "on" : "off"}`);
-  }
 
   if (multiClips && multiClips.length) {
     const summaries = multiClips
@@ -463,18 +457,20 @@ ${visual.summary}`);
     contextLines.push(`Current trim suggestions:\n${lines.join("\n")}`);
   }
 
-  if (typeof frame === "string" && frame.startsWith("data:image/")) {
-    try {
-      const frameResult = await describeFrame(frame);
-      addUsage(frameResult.usage);
-      if (frameResult.description) {
-        contextLines.push(`Frame description: ${frameResult.description}`);
-      }
-    } catch {
-      contextLines.push("Frame description: unavailable");
-    }
-  }
+  // DISABLED: frame description (video analysis)
+  // if (typeof frame === "string" && frame.startsWith("data:image/")) {
+  //   try {
+  //     const frameResult = await describeFrame(frame);
+  //     addUsage(frameResult.usage);
+  //     if (frameResult.description) {
+  //       contextLines.push(`Frame description: ${frameResult.description}`);
+  //     }
+  //   } catch {
+  //     contextLines.push("Frame description: unavailable");
+  //   }
+  // }
 
+  // Build messages array
   const messages: ChatMessage[] = [
     {
       role: "system",
@@ -485,38 +481,22 @@ ${visual.summary}`);
         "Use ONLY the provided video context, audio context, clip stack, user memory, multi-clip summaries, and frame description.",
         "Do NOT infer or guess content from the file name, title, or metadata.",
         "The user is a casual, non-technical editor: avoid jargon like \"timestamps\" unless necessary.",
-        "If they don't know exact times, offer simple choices like \"beginning / middle / end\" or \"about how long\" and suggest they can move the playhead and say \"use current time\" or adjust the trim handles and say \"use current trim range.\"",
-        "Thinking mode rule: if Thinking mode is off, keep responses short and do not add reasoning or multi-step explanations. If Thinking mode is on, you may add at most 1-2 short rationale lines.",
-        "One-mode-per-reply: respond in exactly one of these modes unless the user explicitly asks otherwise: Summarize OR Suggest OR Apply.",
-        "Summarize mode (highlights/key moments): provide 3-6 key moments max. Each item should have a short title and a one-line reason. Include a time range if available. End with one short question like \"Want me to trim any of these?\" Do NOT include trim suggestions or extra lists in the same reply.",
-        "Suggest mode (trim options): only provide trim suggestions if the user asked for suggestions or highlights. Provide a single list once. Do not repeat the list on confirmation.",
-        "Apply mode (trim/export): if the user requests a trim/cut/remove with an explicit range, apply it. If they confirm after you already suggested items, do not re-list; if only one option exists, apply it, otherwise ask which number.",
-        "If the user asks to show/describe/what happens in a moment, do NOT create trim actions. Reply with a summary or suggestions only.",
-        "IMPORTANT: In this app, actions represent sections to REMOVE (cut out), not sections to keep.",
-        "Use natural language understanding to infer intent from phrasing. Treat remove-like verbs (remove, cut out, delete, drop, trim out, get rid of) as removing that exact range.",
-        "Treat keep-like phrases (keep only, select this part, use only, retain, focus on just this part) as keep-only: remove everything outside the range.",
-        "If the user provides a time range but does not include a clear remove-like or keep-like intent (for example \"1:20 to 2:00\"), ask one short clarification question before creating actions.",
-        "If the user says \"trim\" with an explicit range and no keep-only phrasing, assume they want to remove that range (do NOT keep-only).",
-        "If the user asks to remove the first or last N seconds/minutes and the duration is known, compute the exact start/end times from duration. If duration is missing, ask a short follow-up question.",
-        "Only create keep-only actions (remove before and after) when the user clearly asks to keep only a specific range.",
-        "Keep-only confirmation rule: if the user asks to keep only a range, first ask a short confirmation that everything else will be removed. Do NOT create actions until the user confirms.",
-        "After confirmation, create actions that remove everything outside that range (0-start and end-duration). Use the video duration to compute the end.",
-        "If the intent is ambiguous between keeping and removing, ask one short clarification question and do NOT create actions yet.",
-        "If current trim suggestions are provided, only use them when the user references a suggestion (like \"trim 2\") or confirms they want to apply one. If multiple suggestions exist and the user says \"trim it\" or \"yes\", ask which number.",
-        "When using a current trim suggestion, copy its exact start/end times and include them in the action; do not invent new timestamps.",
-        "If multi-clip summaries are provided and a trim belongs to a specific clip, include the 1-based clip number in the action's \"clip\" field.",
-        "If multi-clip summaries are provided, assume multiple videos are uploaded. Do not say there is only one video unless explicitly told.",
-        "Multi-clip summaries are brief key points. Go deeper only when the user asks about a specific incident or clip, and ask one short follow-up if needed.",
-        "If the user describes an incident, use the multi-clip summaries to pick the most likely clip and either provide a time range or ask a short clarifying question. When you pick a clip, include its 1-based clip number in the action's \"clip\" field.",
-        "If the user asks to trim/cut/remove and does not provide an explicit time range, use the last mentioned range if it exists and confirm briefly; otherwise ask one short follow-up question and do not guess.",
-        "If the user references a clip without specifying which one, ask which clip number.",
-        "If the request requires content you do not have (e.g., transcript still processing), say so briefly and ask whether to wait or proceed with visual-only suggestions.",
-        "If the user asks to export/merge, say you are starting the export and include an action with type \"export\". Do not claim it is complete.",
+        "If they don't know exact times, offer simple choices like \"beginning / middle / end\" or suggest they move the playhead and say \"use current time\".",
+        "Keep responses short and do not add lengthy rationales.",
+        "One-mode-per-reply: respond in exactly one of these modes: Summarize OR Suggest OR Apply.",
+        "Summarize mode: provide 3-6 key moments max with a short title and one-line reason each. End with one short question like \"Want me to trim any of these?\"",
+        "Suggest mode: call the suggest_trims tool with trim ranges. Only do this if the user asked for suggestions or highlights.",
+        "Apply mode: if the user requests a cut/trim/remove with an explicit range, call the cut_segment tool. If they confirm a single suggestion, call cut_segment. If multiple suggestions exist and intent is unclear, ask which number.",
+        "IMPORTANT: cut_segment and suggest_trims represent sections to REMOVE (cut out), not keep.",
+        "Treat remove-like verbs (remove, cut out, delete, drop, trim out, get rid of) as removing that exact range.",
+        "Treat keep-like phrases (keep only, use only, retain, focus on just this part) as keep-only: call cut_segment twice to remove before and after the range.",
+        "Keep-only confirmation rule: first ask a short confirmation before calling cut_segment for keep-only operations.",
+        "If the user asks to remove the first or last N seconds/minutes and the duration is known, compute exact times from duration.",
+        "If current trim suggestions are provided, only use them when the user references a suggestion (like \"trim 2\") or confirms. If multiple exist and the user says \"yes\", ask which number.",
+        "If multi-clip summaries are provided and a trim belongs to a specific clip, use the clip parameter in cut_segment.",
         "Never fabricate timestamps.",
-        "Formatting rules: output must be a single JSON object with double quotes only. No trailing commas. Do not wrap in markdown or backticks.",
-        "Always include all keys: assistant_message, status, follow_up, actions. follow_up must be null unless you ask a question. actions must be an array (can be empty).",
-        "Numbers must be finite (no NaN/Infinity).",
-        "Return ONLY strict JSON (no markdown, no extra keys) using this schema: {\"assistant_message\": string, \"status\": \"ok\"|\"needs_info\"|\"error\", \"follow_up\": string|null, \"actions\": [{\"type\": string, \"start\": number|null, \"end\": number|null, \"clip\": number|null, \"reason\": string|null}]}."
+        "If the user asks to export/merge/render, call the export_video tool.",
+        "If the request is ambiguous, reply with plain text asking a short clarifying question — do NOT call any tool.",
       ].join(" "),
     },
   ];
@@ -524,8 +504,7 @@ ${visual.summary}`);
   if (contextLines.length > 0) {
     messages.push({
       role: "system",
-      content: `Video context:
-${contextLines.join("\n")}`,
+      content: `Video context:\n${contextLines.join("\n")}`,
     });
   }
 
@@ -535,34 +514,40 @@ ${contextLines.join("\n")}`,
     messages.push({ role: "user", content: message });
   }
 
-  let jsonResult: JsonResponse;
+  // Call model with tools
+  let toolResult: ToolCallResult;
   try {
-    jsonResult = await requestJsonWithRetry({
-      messages,
-      allowThinking,
-    });
+    toolResult = await requestWithTools({ messages });
   } catch (error) {
-    const message =
+    const errMessage =
       error instanceof Error ? error.message : "Chat model request failed";
-    return Response.json({ error: { message } }, { status: 500 });
+    console.error("Chat API Request Error:", error);
+    return Response.json({ error: { message: errMessage } }, { status: 500 });
   }
-  addUsage(jsonResult.usage);
-  const content = jsonResult.content;
-  let parsed = jsonResult.parsed;
 
-  if (!parsed) {
-    parsed = {
-      assistant_message:
-        "I couldn't return a valid JSON response. Please rephrase your request.",
-      status: "error",
-      follow_up: "Please rephrase your request or try again.",
-      actions: [],
-    };
-  }
+  addUsage(toolResult.usage);
 
   const assistantMessage =
-    parsed.assistant_message || parsed.follow_up || "No response from AI";
+    toolResult.assistantText ||
+    (toolResult.actions.length > 0
+      ? toolResult.actions
+          .map((a) =>
+            a.type === "export"
+              ? "Starting export..."
+              : `Cutting ${formatSeconds(a.start ?? 0)} – ${formatSeconds(a.end ?? 0)}.`
+          )
+          .join(" ")
+      : "Done.");
 
+  // Build the parsed shape the frontend expects (ModelJson-compatible)
+  const parsed: ModelJson = {
+    assistant_message: assistantMessage,
+    status: "ok",
+    follow_up: null,
+    actions: toolResult.actions,
+  };
+
+  // Persist last response for debugging
   const record = {
     savedAt: new Date().toISOString(),
     request: {
@@ -576,9 +561,8 @@ ${contextLines.join("\n")}`,
       suggestions,
     },
     response: {
-      raw: content,
-      attempts: jsonResult.attempts,
-      rawAttempts: jsonResult.rawAttempts,
+      raw: toolResult.rawContent,
+      toolActions: toolResult.actions,
       parsed,
     },
   };

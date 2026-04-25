@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { Send, Bot, User } from "lucide-react";
 import { formatTime } from "@/app/backend/functions/formatTime";
 import { normalizeSegments } from "@/app/backend/functions/segments";
-import { PLAN_CONFIGS, PlanId } from "@/app/backend/functions/plans";
+import { PLAN_CONFIGS, PlanId, PLAN_ORDER } from "@/app/backend/functions/plans";
 
 interface Message {
   id: string;
@@ -128,6 +128,13 @@ interface ChatProps {
     completion_tokens?: number;
     total_tokens?: number;
   } | null) => void;
+  onPlanSelect?: (planId: PlanId) => void;
+  tokenUsage?: {
+    total: number;
+    chat: number;
+    audio: number;
+    vision: number;
+  };
 }
 
 const createMessageId = () => {
@@ -181,6 +188,8 @@ export default function Chat({
   onRequestExport,
   onAddEdit,
   onTokenUsage,
+  onPlanSelect,
+  tokenUsage,
 }: ChatProps) {
   const planConfig = PLAN_CONFIGS[planId];
   const defaultMessages = useMemo<Message[]>(
@@ -204,7 +213,6 @@ export default function Chat({
   const includeAudioContext = planConfig.chat.includeAudio;
   const includeVisualContext = planConfig.chat.includeVisual;
   const includeClipContext = planConfig.chat.includeClips;
-  const allowThinking = planConfig.allowThinking;
   const maxTrimFraction = planConfig.maxTrimFraction;
   const nextPlanLabel = planConfig.nextPlanLabel;
   const hasLoadedRef = useRef(false);
@@ -932,7 +940,6 @@ export default function Chat({
         message: currentInput,
         history: historyForModel,
         memory: memorySnapshot ? { summary: memorySnapshot } : undefined,
-        allowThinking,
         multiClips:
           multiClipMode === "all" && multiClipSummaries.length
             ? multiClipSummaries
@@ -1203,28 +1210,48 @@ export default function Chat({
       {/* Header */}
       <div className="border-b border-zinc-800/60 bg-gradient-to-r from-zinc-950/80 via-zinc-900/50 to-zinc-950/80 px-6 py-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-500 shadow-lg shadow-blue-500/20">
-              <Bot size={18} className="text-white" />
-              <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-zinc-950 bg-emerald-400"></span>
-            </span>
-            <div>
-              <h2 className="text-lg font-semibold text-white">AI Assistant</h2>
-              <div className="text-[11px] text-zinc-400">
-                Ask for trims, highlights, or exports in plain language.
+          {tokenUsage && (
+            <div className="flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-wider">
+              <div className="flex items-center gap-1.5 rounded-full border border-zinc-800/50 bg-zinc-900/40 px-2 py-1 shadow-sm">
+                <span className="text-zinc-500 font-medium">Total</span>
+                <span className="font-mono font-bold text-blue-400">{tokenUsage.total.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
+                <span className="text-zinc-500">Chat</span>
+                <span className="font-mono text-zinc-300">{tokenUsage.chat.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
+                <span className="text-zinc-500">Audio</span>
+                <span className="font-mono text-zinc-300">{tokenUsage.audio.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
+                <span className="text-zinc-500">Vision</span>
+                <span className="font-mono text-zinc-300">{tokenUsage.vision.toLocaleString()}</span>
               </div>
             </div>
-          </div>
+          )}
           <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`rounded-full border px-3 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors ${
-                allowThinking
-                  ? "border-emerald-400/60 bg-emerald-500/10 text-emerald-300"
-                  : "border-zinc-700/60 text-zinc-500"
-              }`}
-            >
-              Thinking {allowThinking ? "On" : "Off"}
-            </span>
+            {onPlanSelect ? (
+              <div className="flex items-center rounded-full border border-zinc-800 bg-zinc-900/70 p-1 shadow-inner">
+                {PLAN_ORDER.map((planOption) => {
+                  const isActive = planOption === planId;
+                  return (
+                    <button
+                      key={planOption}
+                      type="button"
+                      onClick={() => onPlanSelect(planOption)}
+                      className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide transition ${
+                        isActive
+                          ? "bg-blue-600 text-white shadow"
+                          : "text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      {PLAN_CONFIGS[planOption].label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
             <button
               type="button"
               onClick={() => setIsHistoryOpen((prev) => !prev)}
