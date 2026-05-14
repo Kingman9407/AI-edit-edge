@@ -255,6 +255,7 @@ export async function POST(req: Request) {
     clips?: ClipContext;
     history?: HistoryMessage[];
     memory?: MemoryContext;
+    allowThinking?: boolean;
     multiClips?: MultiClipSummary[];
     suggestions?: SuggestionContext[];
     audioFiles?: { name: string; sizeBytes: number; index: number }[];
