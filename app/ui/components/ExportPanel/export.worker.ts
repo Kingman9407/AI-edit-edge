@@ -134,7 +134,7 @@ async function negotiateVideoCodec(
   outH: number,
   bitrate: number
 ): Promise<VideoCodec> {
-  const preferenceOrder: VideoCodec[] = ["hevc", "vp9", "avc"];
+  const preferenceOrder: VideoCodec[] = ["avc", "hevc", "vp9"];
   const codec = await getFirstEncodableVideoCodec(preferenceOrder, {
     width: outW,
     height: outH,
