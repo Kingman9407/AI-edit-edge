@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Send, Bot, User } from "lucide-react";
+import { Send, Bot, User, ChevronDown } from "lucide-react";
 import { formatTime } from "@/app/backend/functions/formatTime";
 import { normalizeSegments, type Segment } from "@/app/backend/functions/segments";
 import { PLAN_CONFIGS, PlanId, PLAN_ORDER } from "@/app/backend/functions/plans";
@@ -231,6 +231,7 @@ export default function Chat({
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [memory, setMemory] = useState<ChatMemory | null>(null);
+  const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
 
   useEffect(() => {
     if (!allowSuggestions) {
@@ -1427,29 +1428,66 @@ export default function Chat({
   return (
     <div className="flex h-full min-h-[520px] max-h-[82vh] flex-col overflow-hidden rounded-3xl border border-zinc-800/70 bg-gradient-to-b from-zinc-900/90 via-zinc-950/95 to-zinc-950/98 backdrop-blur-2xl shadow-2xl shadow-black/40">
       {/* Header */}
-      <div className="border-b border-zinc-800/60 bg-gradient-to-r from-zinc-950/80 via-zinc-900/50 to-zinc-950/80 px-6 py-5">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          {tokenUsage && (
-            <div className="flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-wider">
-              <div className="flex items-center gap-1.5 rounded-full border border-zinc-800/50 bg-zinc-900/40 px-2 py-1 shadow-sm">
-                <span className="text-zinc-500 font-medium">Total</span>
-                <span className="font-mono font-bold text-blue-400">{tokenUsage.total.toLocaleString()}</span>
+      <div className="border-b border-zinc-800/60 bg-gradient-to-r from-zinc-950/80 via-zinc-900/50 to-zinc-950/80 px-6 py-4">
+        <div className="flex flex-col w-full">
+          {/* Top Row: Toggle and Chat Actions */}
+          <div className="flex items-center justify-between w-full">
+            <button
+              onClick={() => setIsHeaderExpanded(!isHeaderExpanded)}
+              className="flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/40 px-3 py-1.5 text-[10px] uppercase tracking-wider text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all"
+            >
+              <span>{isHeaderExpanded ? "Hide Details" : "Tokens & Plans"}</span>
+              <div className={`transform transition-transform duration-300 ${isHeaderExpanded ? "rotate-180" : "rotate-0"}`}>
+                <ChevronDown size={12} />
               </div>
-              <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
-                <span className="text-zinc-500">Chat</span>
-                <span className="font-mono text-zinc-300">{tokenUsage.chat.toLocaleString()}</span>
-              </div>
-              <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
-                <span className="text-zinc-500">Audio</span>
-                <span className="font-mono text-zinc-300">{tokenUsage.audio.toLocaleString()}</span>
-              </div>
-              <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
-                <span className="text-zinc-500">Vision</span>
-                <span className="font-mono text-zinc-300">{tokenUsage.vision.toLocaleString()}</span>
-              </div>
+            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsHistoryOpen((prev) => !prev)}
+                className="inline-flex items-center gap-2 rounded-full border border-zinc-700/60 bg-zinc-800/40 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-all hover:border-blue-500/60 hover:bg-blue-500/10 hover:text-white"
+              >
+                <span className="flex flex-col gap-[3px]">
+                  <span className="h-[2px] w-3.5 rounded-full bg-current"></span>
+                  <span className="h-[2px] w-3.5 rounded-full bg-current"></span>
+                  <span className="h-[2px] w-3.5 rounded-full bg-current"></span>
+                </span>
+                History
+              </button>
+              <button
+                type="button"
+                onClick={handleNewChat}
+                className="rounded-full border border-zinc-700/60 bg-zinc-800/40 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-all hover:border-emerald-400/60 hover:bg-emerald-500/10 hover:text-white"
+              >
+                + New Chat
+              </button>
             </div>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
+          </div>
+
+          {/* Collapsible Area: Token Usage and Plans */}
+          <div className={`w-full overflow-hidden transition-all duration-300 ease-in-out flex flex-wrap items-center justify-between gap-4 ${isHeaderExpanded ? "max-h-40 opacity-100 mt-4" : "max-h-0 opacity-0 mt-0"}`}>
+            {tokenUsage ? (
+              <div className="flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-wider">
+                <div className="flex items-center gap-1.5 rounded-full border border-zinc-800/50 bg-zinc-900/40 px-2 py-1 shadow-sm">
+                  <span className="text-zinc-500 font-medium">Total</span>
+                  <span className="font-mono font-bold text-blue-400">{tokenUsage.total.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
+                  <span className="text-zinc-500">Chat</span>
+                  <span className="font-mono text-zinc-300">{tokenUsage.chat.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
+                  <span className="text-zinc-500">Audio</span>
+                  <span className="font-mono text-zinc-300">{tokenUsage.audio.toLocaleString()}</span>
+                </div>
+                <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
+                  <span className="text-zinc-500">Vision</span>
+                  <span className="font-mono text-zinc-300">{tokenUsage.vision.toLocaleString()}</span>
+                </div>
+              </div>
+            ) : <div />}
+
             {onPlanSelect ? (
               <div className="flex items-center rounded-full border border-zinc-800 bg-zinc-900/70 p-1 shadow-inner">
                 {PLAN_ORDER.map((planOption) => {
@@ -1471,25 +1509,6 @@ export default function Chat({
                 })}
               </div>
             ) : null}
-            <button
-              type="button"
-              onClick={() => setIsHistoryOpen((prev) => !prev)}
-              className="inline-flex items-center gap-2 rounded-full border border-zinc-700/60 bg-zinc-800/40 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-all hover:border-blue-500/60 hover:bg-blue-500/10 hover:text-white"
-            >
-              <span className="flex flex-col gap-[3px]">
-                <span className="h-[2px] w-3.5 rounded-full bg-current"></span>
-                <span className="h-[2px] w-3.5 rounded-full bg-current"></span>
-                <span className="h-[2px] w-3.5 rounded-full bg-current"></span>
-              </span>
-              History
-            </button>
-            <button
-              type="button"
-              onClick={handleNewChat}
-              className="rounded-full border border-zinc-700/60 bg-zinc-800/40 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-all hover:border-emerald-400/60 hover:bg-emerald-500/10 hover:text-white"
-            >
-              + New Chat
-            </button>
           </div>
         </div>
       </div>

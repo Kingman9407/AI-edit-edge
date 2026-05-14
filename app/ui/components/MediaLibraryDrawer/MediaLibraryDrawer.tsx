@@ -1,9 +1,10 @@
 import React from "react";
-import { X, Video, Music, Plus } from "lucide-react";
+import { X, Video, Music, Plus, Library, ChevronRight } from "lucide-react";
 
 interface MediaLibraryDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpen: () => void;
   multiFiles: File[];
   audioFiles: File[];
   activeIndex: number;
@@ -17,6 +18,7 @@ interface MediaLibraryDrawerProps {
 export default function MediaLibraryDrawer({
   isOpen,
   onClose,
+  onOpen,
   multiFiles,
   audioFiles,
   activeIndex,
@@ -38,6 +40,30 @@ export default function MediaLibraryDrawer({
 
       {/* Drawer */}
       <div className={`fixed left-0 top-0 z-50 h-full w-80 transform bg-zinc-950 border-r border-zinc-800 shadow-2xl transition-transform duration-500 ease-out ${isOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        
+        {/* Toggle Button (Attached to right edge) */}
+        <div className="absolute left-full top-1/2 -translate-y-1/2 ml-[-1px]">
+          <button
+            onClick={isOpen ? onClose : onOpen}
+            className="flex flex-col items-center gap-3 rounded-r-2xl bg-zinc-950 border-y border-r border-zinc-800 p-3 text-xs font-bold text-zinc-300 shadow-2xl backdrop-blur-xl transition-all hover:bg-zinc-900 hover:text-white group"
+          >
+            <div className="relative">
+              <Library size={22} className="text-emerald-500 group-hover:scale-110 transition-transform" />
+              <div className={`absolute -right-2 -bottom-2 transform transition-transform duration-500 ${isOpen ? "rotate-180" : "rotate-0"}`}>
+                <ChevronRight size={14} className="text-zinc-500" />
+              </div>
+            </div>
+            
+            <span className="[writing-mode:vertical-lr] rotate-180 py-1 tracking-widest uppercase text-[9px] text-zinc-500 group-hover:text-zinc-300 transition-colors">Media Library</span>
+            
+            {(multiFiles.length + audioFiles.length > 0) && (
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-black text-black ring-2 ring-zinc-950">
+                {multiFiles.length + audioFiles.length}
+              </span>
+            )}
+          </button>
+        </div>
+
         <div className="flex h-full flex-col">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-zinc-800 p-6">

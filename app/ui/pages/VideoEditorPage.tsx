@@ -16,7 +16,7 @@ import { formatTime } from "@/app/backend/functions/formatTime";
 import { analyzeAudioFile, getVideoMetadata } from "@/app/backend/functions/mediaAnalysis";
 import TimelineControls from "../components/TimelineControls/TimelineControls";
 import MediaLibraryDrawer from "../components/MediaLibraryDrawer/MediaLibraryDrawer";
-import { Library } from "lucide-react";
+import { Library, ChevronDown, List } from "lucide-react";
 export type AudioOverlay = {
   id: string;
   file: File;
@@ -177,6 +177,7 @@ export default function VideoEditor() {
     analysis: planConfig.analysis,
   });
 
+  const [isBottomBarOpen, setIsBottomBarOpen] = useState(true);
   const [multiFiles, setMultiFiles] = useState<File[]>([]);
   const [audioFiles, setAudioFiles] = useState<File[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -985,10 +986,10 @@ export default function VideoEditor() {
       <div className="flex min-h-screen w-full items-center justify-center bg-zinc-950 p-4">
         <div className="flex w-full max-w-2xl flex-col items-center justify-center gap-8 rounded-3xl border border-zinc-800 bg-zinc-900/30 p-12 text-center backdrop-blur-2xl shadow-2xl">
           <div className="space-y-3">
-            <h1 className="text-4xl font-bold tracking-tight text-zinc-100">
-              Welcome to AI Video Editor
+            <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-100">
+              Welcome
             </h1>
-            <p className="text-zinc-400 text-lg">
+            <p className="text-zinc-400 text-sm md:text-lg">
               Upload your media to begin your creative journey.
             </p>
           </div>
@@ -1076,33 +1077,8 @@ export default function VideoEditor() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-2 pb-48">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-2 pt-12 pb-48">
       <div className="mx-auto max-w-[1400px]">
-        {/* Header */}
-        <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
-          <div className="space-y-1">
-            <h1 className="text-3xl font-black tracking-tighter text-zinc-100">
-              AI Video <span className="text-emerald-500">Editor</span>
-            </h1>
-            <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Powered by Antigravity Engine</p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsDrawerOpen(true)}
-              className="flex items-center gap-2 rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-2.5 text-xs font-bold text-zinc-300 shadow-xl transition-all hover:bg-zinc-800 hover:text-white"
-            >
-              <Library size={18} className="text-emerald-500" />
-              Media Library
-              {multiFiles.length + audioFiles.length > 0 && (
-                <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-black text-black">
-                  {multiFiles.length + audioFiles.length}
-                </span>
-              )}
-            </button>
-          </div>
-        </header>
-
         {/* Layout Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column (Video + Trim Editor) - Takes up 2 columns */}
@@ -1146,29 +1122,6 @@ export default function VideoEditor() {
 
           {/* Right Column (Sidebar + Chat) - Takes up 1 column */}
           <div className="lg:col-span-1 flex flex-col gap-6">
-            <MediaSidebar
-              planId={planId}
-              videoContext={{
-                name: videoFile?.name ?? "unknown",
-                type: videoFile?.type ?? "unknown",
-                sizeBytes: videoFile?.size ?? 0,
-                duration: activeDuration,
-                width: activeWidth,
-                height: activeHeight,
-              }}
-              audioSegments={activeAudioSegments}
-              audioStatus={activeAudioStatus}
-              audioError={activeAudioError}
-              audioProgress={activeAudioProgress}
-              videoInsights={activeVideoInsights}
-              videoInsightStatus={activeVideoInsightStatus}
-              videoInsightError={activeVideoInsightError}
-              sceneChanges={activeSceneChanges}
-              sceneStatus={activeSceneStatus}
-              sceneError={activeSceneError}
-              activeTimeline={keptSegments}
-              removedSegments={removedSegments}
-            />
             <div className="h-full min-h-[500px]">
               <Chat
                 planId={planId}
@@ -1239,10 +1192,25 @@ export default function VideoEditor() {
 
       </div>
 
-      {/* Sticky Clip Stack bar - always visible */}
-      <div className="fixed bottom-0 inset-x-0 z-50 border-t border-zinc-700/60 bg-zinc-950/80 backdrop-blur-xl shadow-2xl shadow-black/50">
-        <div className="mx-auto max-w-[1400px] px-2 py-3">
-          <EditList
+      {/* Collapsible Clip Stack bar */}
+      <div className={`fixed bottom-0 inset-x-0 z-50 transform transition-transform duration-500 ease-out ${isBottomBarOpen ? "translate-y-0" : "translate-y-full"}`}>
+        {/* Toggle Button (Attached to top edge) */}
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-[-1px]">
+          <button
+            onClick={() => setIsBottomBarOpen(!isBottomBarOpen)}
+            className="flex items-center gap-2 rounded-t-2xl bg-zinc-950/90 border-x border-t border-zinc-700/60 px-6 py-2 text-xs font-bold text-zinc-300 shadow-2xl backdrop-blur-xl transition-all hover:bg-zinc-900 hover:text-white group"
+          >
+            <List size={16} className="text-emerald-500 group-hover:scale-110 transition-transform" />
+            <span className="tracking-widest uppercase text-[10px] text-zinc-400 group-hover:text-zinc-200 transition-colors">Clip Stack</span>
+            <div className={`transform transition-transform duration-500 ${isBottomBarOpen ? "rotate-0" : "rotate-180"}`}>
+              <ChevronDown size={14} className="text-zinc-500 ml-1" />
+            </div>
+          </button>
+        </div>
+
+        <div className="border-t border-zinc-700/60 bg-zinc-950/90 backdrop-blur-xl shadow-2xl shadow-black/50">
+          <div className="mx-auto max-w-[1400px] px-2 py-3">
+            <EditList
             edits={edits}
             activeTimeline={keptSegments}
             videoSrc={videoSrc}
@@ -1285,10 +1253,12 @@ export default function VideoEditor() {
           />
         </div>
       </div>
+      </div>
 
       <MediaLibraryDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
+        onOpen={() => setIsDrawerOpen(true)}
         multiFiles={multiFiles}
         audioFiles={audioFiles}
         activeIndex={activeIndex}
