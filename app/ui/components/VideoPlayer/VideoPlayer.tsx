@@ -9,6 +9,15 @@ import {
 } from "lucide-react";
 import { formatTime } from "@/app/backend/functions/formatTime";
 
+export type AudioOverlay = {
+  id: string;
+  file: File;
+  videoStart: number;
+  videoEnd: number;
+  volume: number;
+  label?: string;
+};
+
 interface VideoPlayerProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   progressRef: React.RefObject<HTMLDivElement | null>;
@@ -16,9 +25,19 @@ interface VideoPlayerProps {
   isPlaying: boolean;
   duration: number;
   currentTime: number;
+  timelineDuration: number;
+  timelineCurrentTime: number;
   volume: number;
+  isMuted: boolean;
+  onTogglePlay: () => void;
+  onTimeUpdate: () => void;
+  onLoadedMetadata: () => void;
+  onEnded: () => void;
+  onProgressClick: (e: React.MouseEvent<HTMLDivElement>) => void;
+  onVolumeChange: (e: ChangeEvent<HTMLInputElement>) => void;
   onToggleMute: () => void;
   onRequestFullscreen: () => void;
+  audioOverlays?: AudioOverlay[];
 }
 
 export default function VideoPlayer({
@@ -28,6 +47,8 @@ export default function VideoPlayer({
   isPlaying,
   duration,
   currentTime,
+  timelineDuration,
+  timelineCurrentTime,
   volume,
   isMuted,
   onTogglePlay,
@@ -38,7 +59,64 @@ export default function VideoPlayer({
   onVolumeChange,
   onToggleMute,
   onRequestFullscreen,
+  audioOverlays = [],
 }: VideoPlayerProps) {
+  // Use timeline metrics for display if available, otherwise fallback to physical metrics
+  const displayTime = timelineCurrentTime ?? currentTime;
+  const displayDuration = timelineDuration ?? duration;
+  
+  // Real-time audio overlay synchronization
+  const audioRefs = React.useRef<{ [id: string]: HTMLAudioElement }>({});
+
+  React.useEffect(() => {
+    // Cleanup removed audio refs
+    const currentIds = new Set(audioOverlays.map(o => o.id));
+    Object.keys(audioRefs.current).forEach(id => {
+      if (!currentIds.has(id)) {
+        if (audioRefs.current[id]) {
+          audioRefs.current[id].pause();
+          URL.revokeObjectURL(audioRefs.current[id].src);
+          delete audioRefs.current[id];
+        }
+      }
+    });
+
+    // Initialize new audio refs
+    audioOverlays.forEach(overlay => {
+      if (!audioRefs.current[overlay.id]) {
+        const audio = new Audio(URL.createObjectURL(overlay.file));
+        audio.preload = "auto";
+        audioRefs.current[overlay.id] = audio;
+      }
+      
+      const audio = audioRefs.current[overlay.id];
+      // Update volume with master mute override
+      audio.volume = isMuted ? 0 : Math.max(0, Math.min(1, overlay.volume * volume));
+      const naturalEnd = Number.isFinite(audio.duration)
+        ? overlay.videoStart + audio.duration
+        : overlay.videoEnd;
+      const overlayEnd = Math.min(overlay.videoEnd, naturalEnd);
+      
+      // Calculate where the audio should be playing based on physical video time
+      if (currentTime >= overlay.videoStart && currentTime < overlayEnd) {
+        const expectedAudioTime = currentTime - overlay.videoStart;
+        if (Math.abs(audio.currentTime - expectedAudioTime) > 0.25) {
+          audio.currentTime = expectedAudioTime;
+        }
+        if (isPlaying && audio.paused) {
+          audio.play().catch(() => {});
+        } else if (!isPlaying && !audio.paused) {
+          audio.pause();
+        }
+      } else {
+        if (!audio.paused) {
+          audio.pause();
+        }
+        audio.currentTime = 0;
+      }
+    });
+  }, [audioOverlays, currentTime, isPlaying, volume, isMuted]);
+
   return (
     <div className="group relative aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-2xl ring-1 ring-white/10">
       <video
@@ -53,26 +131,6 @@ export default function VideoPlayer({
 
       {/* Controls Overlay */}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-4 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
-        {/* Progress Bar */}
-        <div className="mb-4 flex items-center gap-4">
-          <span className="text-xs font-medium text-zinc-300 w-12 text-right">
-            {formatTime(currentTime)}
-          </span>
-          <div
-            ref={progressRef}
-            className="relative h-1.5 flex-1 cursor-pointer rounded-full bg-white/20"
-            onClick={onProgressClick}
-          >
-            <div
-              className="absolute left-0 top-0 h-full rounded-full bg-blue-500 transition-all ease-linear"
-              style={{ width: `${(currentTime / duration) * 100}%` }}
-            />
-          </div>
-          <span className="text-xs font-medium text-zinc-300 w-12">
-            {formatTime(duration)}
-          </span>
-        </div>
-
         {/* Buttons Row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">

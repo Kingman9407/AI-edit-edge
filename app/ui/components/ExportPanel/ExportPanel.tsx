@@ -4,10 +4,20 @@ import React, { useMemo, useRef, useState } from "react";
 import { Segment } from "@/app/backend/functions/segments";
 import { PLAN_CONFIGS, PlanId } from "@/app/backend/functions/plans";
 
+/** Shape coming from the parent (VideoEditorPage) — contains raw File objects */
+type AudioOverlayInput = {
+  file: File;
+  videoStart: number;
+  videoEnd: number;
+  volume: number;
+};
+
 interface ExportPanelProps {
   videoFile: File | null;
   keptSegments: Segment[];
   removedSegments: Segment[];
+  mutedSegments?: MutedSegment[];
+  audioOverlays?: AudioOverlayInput[];
   planId: PlanId;
   exportCount: number;
   onExportSuccess?: (planId: PlanId) => void;
@@ -22,13 +32,87 @@ type ClipOrderResponse = {
   order: number[];
 };
 
-import { QualityOption, ExportWorkerMessage, ExportWorkerResponse } from "./export.worker";
+import {
+  QualityOption,
+  ExportWorkerMessage,
+  ExportWorkerResponse,
+  MutedSegment,
+  DecodedPCM,
+  AudioOverlayPCM,
+} from "./export.worker";
+
 
 const QUALITY_PRESETS: QualityOption[] = [
   { id: "fast", label: "Fast (720p)", desc: "Quick export, lower quality", bitrate: 2_500_000, maxHeight: 720, codec: "avc" },
   { id: "standard", label: "Standard (1080p)", desc: "Good balance of speed and quality", bitrate: 5_000_000, maxHeight: 1080, codec: "avc" },
   { id: "high", label: "High (Original)", desc: "Best quality, slower export", bitrate: 10_000_000, codec: "avc" }
 ];
+
+const DECODE_SAMPLE_RATE = 44100;
+
+/**
+ * Decode an audio/video File to raw PCM Float32Array channels on the main thread.
+ * Uses OfflineAudioContext which IS available on the main thread.
+ */
+async function decodeFileToPCM(
+  file: File,
+  targetSampleRate = DECODE_SAMPLE_RATE
+): Promise<DecodedPCM | null> {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    if (typeof OfflineAudioContext === "undefined") {
+      console.warn("[ExportPanel] OfflineAudioContext not available");
+      return null;
+    }
+
+    // Decode the audio data
+    const probeCtx = new OfflineAudioContext(1, 1, targetSampleRate);
+    let decoded: AudioBuffer;
+    try {
+      decoded = await new Promise<AudioBuffer>((resolve, reject) => {
+        const promise = probeCtx.decodeAudioData(
+          arrayBuffer.slice(0),
+          (buffer: AudioBuffer) => resolve(buffer),
+          (error: DOMException) => reject(error)
+        );
+        if (promise && typeof promise.catch === "function") {
+          promise.catch(reject);
+        }
+      });
+    } catch (e) {
+      console.warn("[ExportPanel] decodeAudioData failed:", e);
+      return null;
+    }
+
+    // Resample to target sample rate
+    const numCh = decoded.numberOfChannels;
+    const numSamples = Math.ceil(decoded.duration * targetSampleRate);
+    const offCtx = new OfflineAudioContext(numCh, numSamples, targetSampleRate);
+    const src = offCtx.createBufferSource();
+    src.buffer = decoded;
+    src.connect(offCtx.destination);
+    src.start(0);
+    const resampled = await offCtx.startRendering();
+
+    // Extract channels as Float32Arrays
+    const channels: Float32Array[] = [];
+    for (let ch = 0; ch < resampled.numberOfChannels; ch++) {
+      // Copy the channel data so we can transfer ownership to the worker
+      channels.push(new Float32Array(resampled.getChannelData(ch)));
+    }
+
+    return {
+      channels,
+      sampleRate: resampled.sampleRate,
+      numberOfChannels: resampled.numberOfChannels,
+      length: resampled.length,
+      duration: resampled.duration,
+    };
+  } catch (err) {
+    console.warn("[ExportPanel] decodeFileToPCM error:", err);
+    return null;
+  }
+}
 
 const fetchClipOrder = async (segments: Segment[]): Promise<number[]> => {
   if (segments.length < 2) return [];
@@ -85,6 +169,8 @@ export default function ExportPanel({
   videoFile,
   keptSegments,
   removedSegments,
+  mutedSegments = [],
+  audioOverlays = [],
   planId,
   exportCount,
   onExportSuccess,
@@ -94,6 +180,8 @@ export default function ExportPanel({
   const videoFileRef = useRef<File | null>(videoFile);
   const keptSegmentsRef = useRef<Segment[]>(keptSegments);
   const removedSegmentsRef = useRef<Segment[]>(removedSegments);
+  const mutedSegmentsRef = useRef<MutedSegment[]>(mutedSegments);
+  const audioOverlaysRef = useRef<AudioOverlayInput[]>(audioOverlays);
   const planIdRef = useRef<PlanId>(planId);
   const exportLimitRef = useRef(planConfig.exportLimit);
   const exportCountRef = useRef(exportCount);
@@ -105,11 +193,8 @@ export default function ExportPanel({
   const [trimmedUrl, setTrimmedUrl] = useState<string | null>(null);
   const [progressMsg, setProgressMsg] = useState("");
   const [progressPct, setProgressPct] = useState(0);
-  const [exportSource, setExportSource] = useState<"clips" | "kept" | null>(
-    null
-  );
-  const exportSourceRef = useRef<"clips" | "kept" | null>(null);
-  const [showSourcePicker, setShowSourcePicker] = useState(false);
+  const [exportSource, setExportSource] = useState<"kept">("kept");
+  const exportSourceRef = useRef<"kept">("kept");
   const [selectedQuality, setSelectedQuality] = useState<QualityOption["id"]>("standard");
   const workerRef = useRef<Worker | null>(null);
 
@@ -117,17 +202,16 @@ export default function ExportPanel({
     0,
     planConfig.exportLimit - exportCount
   );
-  const limitReached =
-    planConfig.exportLimit > 0 && exportCount >= planConfig.exportLimit;
+  const limitReached = false;
 
   const canExport = useMemo(
     () =>
       Boolean(
         videoFile &&
-          (keptSegments.length || removedSegments.length) &&
+          (keptSegments.length || removedSegments.length || audioOverlays.length) &&
           !limitReached
       ),
-    [videoFile, keptSegments.length, removedSegments.length, limitReached]
+    [videoFile, keptSegments.length, removedSegments.length, audioOverlays.length, limitReached]
   );
 
   React.useEffect(() => {
@@ -155,6 +239,13 @@ export default function ExportPanel({
     removedSegmentsRef.current = removedSegments;
   }, [removedSegments]);
 
+  React.useEffect(() => {
+    mutedSegmentsRef.current = mutedSegments;
+  }, [mutedSegments]);
+
+  React.useEffect(() => {
+    audioOverlaysRef.current = audioOverlays;
+  }, [audioOverlays]);
 
 
   React.useEffect(() => {
@@ -169,7 +260,6 @@ export default function ExportPanel({
   const exportVideos = React.useCallback(async () => {
     const currentVideo = videoFileRef.current;
     const currentKept = keptSegmentsRef.current;
-    const currentRemoved = removedSegmentsRef.current;
     const currentPlanId = planIdRef.current;
     const limit = exportLimitRef.current;
     const count = exportCountRef.current;
@@ -180,28 +270,11 @@ export default function ExportPanel({
     if (isExportingRef.current) {
       return { success: false, error: "Export already running." };
     }
-    if (limit > 0 && count >= limit) {
-      const planLabel = PLAN_CONFIGS[currentPlanId].label;
-      const errorMessage = `Export limit reached for the ${planLabel} plan.`;
-      setError(errorMessage);
-      return { success: false, error: errorMessage };
-    }
-    const selectedSource = exportSourceRef.current;
-    if (!selectedSource) {
-      const message = "Choose an export approach to continue.";
-      setError(message);
-      setShowSourcePicker(true);
-      return { success: false, error: message };
-    }
-
-    const currentSegments =
-      selectedSource === "clips" ? currentRemoved : currentKept;
+    // Export limit check removed
+    const currentSegments = currentKept;
 
     if (!currentSegments.length) {
-      const message =
-        selectedSource === "clips"
-          ? "No clips to export."
-          : "No kept segments to export.";
+      const message = "No timeline clips to export.";
       setError(message);
       return { success: false, error: message };
     }
@@ -219,7 +292,40 @@ export default function ExportPanel({
       };
       progressRef.current = reportProgress;
 
-      let orderedSegments = currentSegments;
+      const orderedSegments = currentSegments;
+      const currentOverlays = audioOverlaysRef.current;
+      const currentMuted = mutedSegmentsRef.current;
+      const needsMixing = currentOverlays.length > 0 || currentMuted.length > 0;
+
+      // ── Pre-decode audio on the main thread if mixing is needed ──
+      const nativeAudioPCM: DecodedPCM | null = null;
+      const audioOverlaysPCM: AudioOverlayPCM[] = [];
+      const transferables: Transferable[] = [];
+
+      if (needsMixing) {
+        reportProgress(3, "Preparing modified audio…");
+
+        // Decode overlay audio files
+        for (let i = 0; i < currentOverlays.length; i++) {
+          const ov = currentOverlays[i];
+          reportProgress(5, `Decoding overlay audio ${i + 1}/${currentOverlays.length}…`);
+          console.log(`[ExportPanel] Decoding overlay ${i + 1}: ${ov.file.name}`);
+          const pcm = await decodeFileToPCM(ov.file);
+          if (pcm) {
+            const naturalEnd = ov.videoStart + pcm.duration;
+            pcm.channels.forEach((ch) => transferables.push(ch.buffer));
+            audioOverlaysPCM.push({
+              pcm,
+              videoStart: ov.videoStart,
+              videoEnd: Math.min(ov.videoEnd, naturalEnd),
+              volume: ov.volume,
+            });
+            console.log(`[ExportPanel] Overlay ${i + 1} decoded: ${pcm.duration.toFixed(2)}s`);
+          } else {
+            console.warn(`[ExportPanel] Overlay ${i + 1} decode failed, skipping`);
+          }
+        }
+      }
 
       reportProgress(10, "Initializing local Web Worker...");
       
@@ -255,13 +361,19 @@ export default function ExportPanel({
           resolve({ success: false, error: errMsg });
         };
 
-        worker.postMessage({
+        const message: ExportWorkerMessage = {
           type: "start",
           file: currentVideo,
           segments: orderedSegments.map(s => ({ start: s.start, end: s.end })),
           quality: qualityPreset,
-          label: "sequential"
-        } satisfies ExportWorkerMessage);
+          label: "sequential",
+          mutedSegments: currentMuted,
+          audioOverlaysPCM: needsMixing ? audioOverlaysPCM : undefined,
+          nativeAudioPCM: needsMixing ? nativeAudioPCM : undefined,
+        };
+
+        // Transfer Float32Array buffers to avoid copying (zero-copy)
+        worker.postMessage(message, transferables);
       });
 
     } catch (err) {
@@ -272,24 +384,10 @@ export default function ExportPanel({
     }
   }, [selectedQuality]);
 
-  const handleSourceSelect = React.useCallback(
-    (source: "clips" | "kept") => {
-      setExportSource(source);
-      exportSourceRef.current = source;
-      setShowSourcePicker(false);
-      setError(null);
-      void exportVideos();
-    },
-    [exportVideos]
-  );
-
   const handleExportClick = React.useCallback(() => {
-    if (!exportSourceRef.current) {
-      const message = "Choose an export approach to continue.";
-      setError(message);
-      setShowSourcePicker(true);
-      return;
-    }
+    setExportSource("kept");
+    exportSourceRef.current = "kept";
+    setError(null);
     void exportVideos();
   }, [exportVideos]);
 
@@ -311,129 +409,24 @@ export default function ExportPanel({
   }, [trimmedUrl]);
 
   return (
-    <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-5 shadow-2xl backdrop-blur-xl">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="space-y-1">
-          <div className="text-sm font-semibold text-zinc-200">Export</div>
-          <div className="text-[11px] text-zinc-500">
-            {planConfig.label} plan - {remainingExports} of{" "}
-            {planConfig.exportLimit} exports remaining
-          </div>
-        </div>
+    <div className="flex items-center gap-2">
+      {isExporting ? (
+        <span className="text-xs font-semibold text-blue-400">
+          Exporting {Math.round(progressPct)}%...
+        </span>
+      ) : (
         <button
           type="button"
           onClick={handleExportClick}
           disabled={!canExport || isExporting}
-          className="rounded-full bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-full bg-blue-600/80 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {isExporting ? "Exporting..." : "Export Final Video"}
+          Export Timeline
         </button>
-      </div>
-
-      {exportSource ? (
-        <div className="text-[11px] text-zinc-500">
-          Export approach:{" "}
-          {exportSource === "clips"
-            ? "Clip stack only (removed segments)"
-            : "Kept timeline (remaining video)"}
-        </div>
-      ) : null}
-
-      {!isExporting ? (
-        <div className="space-y-4">
-          <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
-            <div className="text-xs font-semibold text-zinc-200">
-              Export Quality
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {QUALITY_PRESETS.map((q) => (
-                <button
-                  key={q.id}
-                  type="button"
-                  onClick={() => setSelectedQuality(q.id)}
-                  className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
-                    selectedQuality === q.id
-                      ? "border-emerald-500 bg-emerald-500/20 text-emerald-200"
-                      : "border-zinc-700 text-zinc-400 hover:border-zinc-500 text-zinc-200"
-                  }`}
-                  title={q.desc}
-                >
-                  {q.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {showSourcePicker && !isExporting ? (
-        <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
-          <div className="text-xs font-semibold text-zinc-200">
-            Choose export approach
-          </div>
-          <div className="text-[11px] text-zinc-500">
-            Export either the clip stack only or the remaining timeline.
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => handleSourceSelect("clips")}
-              className="rounded-full border border-emerald-500/50 bg-emerald-500/10 px-3 py-1 text-[11px] font-semibold text-emerald-200 transition hover:bg-emerald-500/20"
-            >
-              Clip Stack Only
-            </button>
-            <button
-              type="button"
-              onClick={() => handleSourceSelect("kept")}
-              className="rounded-full border border-zinc-700 px-3 py-1 text-[11px] font-semibold text-zinc-200 transition hover:border-zinc-500"
-            >
-              Kept Timeline
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {isExporting && (
-        <div className="space-y-1.5">
-          <div className="flex justify-between text-[11px] text-zinc-400">
-            <span>{progressMsg || "Exporting..."}</span>
-            <span>{Math.round(progressPct)}%</span>
-          </div>
-          <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-400 transition-all duration-300"
-              style={{ width: `${Math.max(2, Math.min(progressPct, 100))}%` }}
-            />
-          </div>
-        </div>
       )}
-
-      {error ? <div className="text-xs text-red-400">{error}</div> : null}
-      {limitReached ? (
-        <div className="text-xs text-amber-400">
-          Export limit reached for the {planConfig.label} plan.
-        </div>
-      ) : null}
-
-      <div className="grid grid-cols-1 gap-4">
-        <div className="space-y-2">
-          <div className="text-xs font-medium text-zinc-400">Final Export</div>
-          {trimmedUrl ? (
-            <video
-              src={trimmedUrl}
-              className="w-full rounded-xl bg-black"
-              controls
-            />
-          ) : (
-            <div className="rounded-xl border border-dashed border-zinc-700 bg-zinc-950/60 p-6 text-center text-xs text-zinc-500">
-              Export to generate the final video.
-            </div>
-          )}
-        </div>
-      </div>
+      
+      {error && <span className="text-[10px] text-red-400 truncate max-w-[150px]" title={error}>{error}</span>}
+      {limitReached && <span className="text-[10px] text-amber-400">Limit reached</span>}
     </div>
   );
 }
-
-
-

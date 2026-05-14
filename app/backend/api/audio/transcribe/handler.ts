@@ -130,26 +130,26 @@ export async function POST(req: Request) {
     const messages =
       mode === "input_audio"
         ? [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: prompt },
-                {
-                  type: "input_audio",
-                  input_audio: {
-                    data: base64Audio,
-                    format: "wav",
-                  },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              {
+                type: "input_audio",
+                input_audio: {
+                  data: base64Audio,
+                  format: "wav",
                 },
-              ],
-            },
-          ]
+              },
+            ],
+          },
+        ]
         : [
-            {
-              role: "user",
-              content: `${prompt}\n<audio src="${audio}" />`,
-            },
-          ];
+          {
+            role: "user",
+            content: `${prompt}\n<audio src="${audio}" />`,
+          },
+        ];
 
     const response = await fetch(
       "https://openrouter.ai/api/v1/chat/completions",

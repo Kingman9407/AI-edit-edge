@@ -80,6 +80,7 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
   >("idle");
   const [sceneError, setSceneError] = useState<string | null>(null);
   const [edits, setEdits] = useState<EditSegment[]>([]);
+  const [isSkippingEdits, setIsSkippingEdits] = useState(true);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -237,14 +238,14 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
             const rawCategory = data?.category;
             const category: "speech" | "music" | "sfx" =
               rawCategory === "speech" ||
-              rawCategory === "music" ||
-              rawCategory === "sfx"
+                rawCategory === "music" ||
+                rawCategory === "sfx"
                 ? rawCategory
                 : data?.isMusic
-                ? "music"
-                : transcript
-                ? "speech"
-                : "sfx";
+                  ? "music"
+                  : transcript
+                    ? "speech"
+                    : "sfx";
             const segment = {
               start: startTime,
               end: endTime,
@@ -666,6 +667,18 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
         }
       }
 
+      // Automatically skip removed segments (edits) if enabled
+      if (isSkippingEdits && edits.length > 0) {
+        const sortedEdits = [...edits].sort((a, b) => a.start - b.start);
+        const currentEdit = sortedEdits.find(
+          (e) => current >= e.start - 0.01 && current < e.end
+        );
+        if (currentEdit) {
+          videoRef.current.currentTime = currentEdit.end;
+          return;
+        }
+      }
+
       if (isEditorMode && duration > 0) {
         const endSeconds = (trimEnd / 100) * duration;
         if (current >= endSeconds && isPlaying) {
@@ -700,6 +713,14 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
       setIsMuted(true);
     } else if (isMuted) {
       setIsMuted(false);
+    }
+  };
+
+  const handleEnded = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = 0;
+      void videoRef.current.play();
+      setIsPlaying(true);
     }
   };
 
@@ -756,7 +777,7 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     }
   };
 
-  const addEdit = (edit: Omit<EditSegment, "id">) => {
+  const addEdit = useCallback((edit: Omit<EditSegment, "id">) => {
     setEdits((prev) => [
       ...prev,
       {
@@ -764,7 +785,7 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
         ...edit,
       },
     ]);
-  };
+  }, []);
 
   const clearEdits = () => setEdits([]);
   const undoLastEdit = () =>
@@ -813,6 +834,25 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     return canvas.toDataURL("image/jpeg", 0.7);
   };
 
+  // Calculate active timeline metrics
+  const timelineDuration = duration - edits.reduce((acc, e) => acc + (e.end - e.start), 0);
+  
+  const getTimelineCurrentTime = () => {
+    if (!edits.length) return currentTime;
+    const sortedEdits = [...edits].sort((a, b) => a.start - b.start);
+    let removedBefore = 0;
+    for (const edit of sortedEdits) {
+      if (currentTime >= edit.end) {
+        removedBefore += (edit.end - edit.start);
+      } else if (currentTime > edit.start) {
+        removedBefore += (currentTime - edit.start);
+      }
+    }
+    return Math.max(0, currentTime - removedBefore);
+  };
+
+  const timelineCurrentTime = getTimelineCurrentTime();
+
   return {
     // State
     videoFile,
@@ -820,6 +860,9 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     isPlaying,
     duration,
     currentTime,
+    timelineDuration,
+    timelineCurrentTime,
+    isSkippingEdits,
     volume,
     isMuted,
     trimStart,
@@ -847,11 +890,13 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     togglePlay,
     handleTimeUpdate,
     handleLoadedMetadata,
+    handleEnded,
     handleProgressClick,
     handleVolumeChange,
     toggleMute,
     handleTrimStartChange,
     handleTrimEndChange,
+    toggleIsSkippingEdits: () => setIsSkippingEdits((prev) => !prev),
     resetTrim,
     clearVideo,
     toggleEditorMode,

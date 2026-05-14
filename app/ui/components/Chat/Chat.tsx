@@ -60,6 +60,8 @@ type ModelAction = {
   end?: number | null;
   clip?: number | null;
   reason?: string | null;
+  audioFileIndex?: number | null;
+  volume?: number | null;
 };
 
 type MultiClipFile = {
@@ -112,7 +114,15 @@ interface ChatProps {
     end: number,
     reason?: string
   ) => string;
+  onQueueClipMute?: (
+    clipIndex: number,
+    start: number,
+    end: number,
+    reason?: string
+  ) => string;
   videoContext?: VideoContext;
+  audioFiles?: File[];
+  onAddOverlay?: (overlay: { file: File; videoStart: number; videoEnd: number; volume: number; label?: string }) => void;
   captureFrame?: () => string | null;
   audioSegments?: AudioSegment[];
   audioStatus?: "idle" | "processing" | "done" | "error" | "no-audio";
@@ -123,12 +133,14 @@ interface ChatProps {
   memoryKey?: string;
   onRequestExport?: () => Promise<{ success: boolean; error?: string }>;
   onAddEdit?: (segment: { start: number; end: number; reason?: string }) => void;
+  onAddMute?: (segment: { start: number; end: number; reason?: string }) => void;
   onTokenUsage?: (usage?: {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
   } | null) => void;
   onPlanSelect?: (planId: PlanId) => void;
+  activeTimeline?: Segment[];
   tokenUsage?: {
     total: number;
     chat: number;
@@ -160,14 +172,6 @@ const ensureUniqueMessages = (input: MessageLike[]) => {
   });
 };
 
-const hasDuplicateMessageIds = (input: Message[]) => {
-  const seen = new Set<string>();
-  return input.some((message) => {
-    if (seen.has(message.id)) return true;
-    seen.add(message.id);
-    return false;
-  });
-};
 
 export default function Chat({
   planId,
@@ -175,7 +179,10 @@ export default function Chat({
   multiClipFiles = [],
   multiClipSnapshots = [],
   activeClipIndex = 0,
+  audioFiles = [],
   onQueueClipTrim,
+  onQueueClipMute,
+  onAddOverlay,
   videoContext,
   captureFrame,
   audioSegments = [],
@@ -187,9 +194,11 @@ export default function Chat({
   memoryKey,
   onRequestExport,
   onAddEdit,
+  onAddMute,
   onTokenUsage,
   onPlanSelect,
   tokenUsage,
+  activeTimeline = [],
 }: ChatProps) {
   const planConfig = PLAN_CONFIGS[planId];
   const defaultMessages = useMemo<Message[]>(
@@ -279,29 +288,6 @@ export default function Chat({
     );
   }, [memoryKey, memory]);
 
-  const lastEdit = edits.length ? edits[edits.length - 1] : null;
-  const lastEditStart = lastEdit?.start ?? null;
-  const lastEditEnd = lastEdit?.end ?? null;
-
-  useEffect(() => {
-    if (!memoryKey) return;
-    const clipCount = edits.length;
-    const nextTrim =
-      clipCount && lastEditStart !== null && lastEditEnd !== null
-        ? { start: lastEditStart, end: lastEditEnd }
-        : undefined;
-
-    setMemory((prev) => {
-      const sameCount = (prev?.clipCount ?? 0) === clipCount;
-      const sameTrim = nextTrim
-        ? prev?.lastTrim?.start === nextTrim.start &&
-          prev?.lastTrim?.end === nextTrim.end
-        : !prev?.lastTrim;
-      if (sameCount && sameTrim) return prev;
-      return { ...(prev ?? {}), clipCount, lastTrim: nextTrim };
-    });
-  }, [memoryKey, edits.length, lastEditStart, lastEditEnd]);
-
   useEffect(() => {
     if (!memoryKey) {
       setMessages(defaultMessages);
@@ -374,33 +360,57 @@ export default function Chat({
     hasLoadedRef.current = true;
   }, [memoryKey]);
 
+  // Refs to track latest messages and last-saved signature without reactive deps.
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const lastSavedMsgSigRef = useRef<string>("");
+  const lastMsgCountRef = useRef(0);
+
+  // Session-save: triggered by currentSessionId/memoryKey changes only.
+  // Uses messagesRef to read latest messages without subscribing to them.
   useEffect(() => {
     if (!memoryKey || !hasLoadedRef.current || !currentSessionId) return;
     if (typeof window === "undefined") return;
+    const msgs = messagesRef.current;
+    const sig = msgs.map((m) => m.id).join(",");
+    if (sig === lastSavedMsgSigRef.current) return;
+    lastSavedMsgSigRef.current = sig;
     const sessionsKey = `chat:sessions:${memoryKey}`;
     const currentKey = `chat:current:${memoryKey}`;
-    setSessions((prev) => {
-      const updated = prev.map((session) => {
+    try {
+      const raw = window.localStorage.getItem(sessionsKey);
+      const stored: ChatSession[] = raw ? JSON.parse(raw) : [];
+      const updated = stored.map((session) => {
         if (session.id !== currentSessionId) return session;
-        const nextMessages = messages;
-        return {
-          ...session,
-          messages: nextMessages,
-          title: buildSessionTitle(nextMessages),
-          updatedAt: Date.now(),
-        };
+        return { ...session, messages: msgs, title: buildSessionTitle(msgs), updatedAt: Date.now() };
       });
       window.localStorage.setItem(sessionsKey, JSON.stringify(updated));
       window.localStorage.setItem(currentKey, currentSessionId);
-      return updated;
-    });
-  }, [messages, memoryKey, currentSessionId]);
+    } catch { /* ignore */ }
+  }, [memoryKey, currentSessionId]);
 
+  // Flush the save when messages actually change (write-through via ref).
   useEffect(() => {
-    if (!messages.length) return;
-    if (!hasDuplicateMessageIds(messages)) return;
-    setMessages((prev) => ensureUniqueMessages(prev));
-  }, [messages]);
+    const sig = messages.map((m) => m.id).join(",");
+    if (sig === lastSavedMsgSigRef.current) return;
+    if (!memoryKey || !hasLoadedRef.current || !currentSessionId) return;
+    if (typeof window === "undefined") return;
+    lastSavedMsgSigRef.current = sig;
+    lastMsgCountRef.current = messages.length;
+    const sessionsKey = `chat:sessions:${memoryKey}`;
+    const currentKey = `chat:current:${memoryKey}`;
+    try {
+      const raw = window.localStorage.getItem(sessionsKey);
+      const stored: ChatSession[] = raw ? JSON.parse(raw) : [];
+      const updated = stored.map((session) => {
+        if (session.id !== currentSessionId) return session;
+        return { ...session, messages, title: buildSessionTitle(messages), updatedAt: Date.now() };
+      });
+      window.localStorage.setItem(sessionsKey, JSON.stringify(updated));
+      window.localStorage.setItem(currentKey, currentSessionId);
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages.length, memoryKey, currentSessionId]);
 
   useEffect(() => {
     if (!statusScrollRef.current) return;
@@ -476,22 +486,6 @@ export default function Chat({
     return parts.join(" - ");
   };
 
-  const getTotalTrimmedSeconds = (
-    extraSegments: { start: number; end: number }[] = []
-  ) => {
-    const duration = videoContext?.duration ?? 0;
-    if (!duration) return 0;
-    const combined = [
-      ...edits.map((edit) => ({ start: edit.start, end: edit.end })),
-      ...extraSegments,
-    ];
-    const normalized = normalizeSegments(combined, duration);
-    return normalized.reduce(
-      (total, segment) => total + (segment.end - segment.start),
-      0
-    );
-  };
-
   const buildTrimLimitMessage = () => {
     const percent = Math.round(maxTrimFraction * 100);
     const base = `${planConfig.label} plan allows trimming up to ${percent}% of the video.`;
@@ -499,16 +493,6 @@ export default function Chat({
       return `${base} Upgrade to ${nextPlanLabel} to trim more.`;
     }
     return base;
-  };
-
-  const canQueueTrimSegments = (
-    segments: { start: number; end: number }[]
-  ) => {
-    const duration = videoContext?.duration ?? 0;
-    if (!duration || maxTrimFraction >= 1) return true;
-    const limitSeconds = duration * maxTrimFraction;
-    const nextTotal = getTotalTrimmedSeconds(segments);
-    return nextTotal <= limitSeconds + 0.001;
   };
 
   const buildActionSuggestions = (
@@ -570,44 +554,257 @@ export default function Chat({
     });
   };
 
+  const getClipDurationForAction = (clipIndex: number | null) => {
+    if (clipIndex === null || clipIndex === activeClipIndex || !multiClipFiles.length) {
+      return videoContext?.duration ?? 0;
+    }
+    const targetFile = multiClipFiles[clipIndex];
+    const targetSnapshot = targetFile
+      ? multiClipSnapshots.find((snapshot) => snapshot.id === targetFile.id)
+      : null;
+    return targetSnapshot?.duration ?? 0;
+  };
+
+  const buildKeepCuts = (start: number, end: number, duration: number) => {
+    const cuts: Array<{ start: number; end: number }> = [];
+    if (start > 0) {
+      cuts.push({ start: 0, end: start });
+    }
+    if (duration > end) {
+      cuts.push({ start: end, end: duration });
+    }
+    return cuts.filter((segment) => segment.end - segment.start > 0.001);
+  };
+
+  const buildSilenceCuts = (
+    segments: AudioSegment[],
+    duration: number
+  ) => {
+    const removable = segments
+      .filter(
+        (segment) =>
+          segment.category === "sfx" && segment.transcript.trim().length === 0
+      )
+      .map((segment) => ({ start: segment.start, end: segment.end }));
+
+    return normalizeSegments(removable, duration).filter(
+      (segment) => segment.end - segment.start > 0.001
+    );
+  };
+
   const applyActionsFromJson = (actions: ModelAction[] | undefined | null) => {
     if (!actions?.length || !onAddEdit) return 0;
     let applied = 0;
     let limitHit = false;
-    actions.forEach((action) => {
-      const actionType = (action?.type ?? "").toLowerCase();
-      if (!["trim", "cut", "remove", "delete"].includes(actionType)) return;
-      const start = Number(action?.start);
-      const end = Number(action?.end);
-      if (!Number.isFinite(start) || !Number.isFinite(end)) return;
-      if (start >= end) return;
-      const clipIndex = resolveActionClipIndex(action?.clip);
-      if (
-        clipIndex !== null &&
-        multiClipFiles.length &&
-        typeof onQueueClipTrim === "function"
-      ) {
-        if (clipIndex !== activeClipIndex) {
-          const message = onQueueClipTrim(
-            clipIndex,
-            start,
-            end,
-            action?.reason ?? `AI ${actionType}`
+    const snapshotById = new Map(
+      multiClipSnapshots.map((snapshot) => [snapshot.id, snapshot])
+    );
+    const timelineByClipIndex = new Map<number, Array<{ start: number; end: number }>>();
+
+    const getTimelineForClip = (clipIndex: number | null) => {
+      if (clipIndex === null || clipIndex === activeClipIndex || !multiClipFiles.length) {
+        if (!timelineByClipIndex.has(activeClipIndex)) {
+          timelineByClipIndex.set(
+            activeClipIndex,
+            edits.map((edit) => ({ start: edit.start, end: edit.end }))
           );
-          pushSystemMessage(message);
-          return;
         }
+        return timelineByClipIndex.get(activeClipIndex) ?? [];
       }
-      if (!canQueueTrimSegments([{ start, end }])) {
-        limitHit = true;
+
+      if (!timelineByClipIndex.has(clipIndex)) {
+        const targetFile = multiClipFiles[clipIndex];
+        const targetSnapshot = targetFile
+          ? snapshotById.get(targetFile.id)
+          : null;
+        timelineByClipIndex.set(
+          clipIndex,
+          (targetSnapshot?.edits ?? []).map((edit) => ({
+            start: edit.start,
+            end: edit.end,
+          }))
+        );
+      }
+      return timelineByClipIndex.get(clipIndex) ?? [];
+    };
+
+    const updateTimelineForClip = (
+      clipIndex: number | null,
+      nextTimeline: Array<{ start: number; end: number }>
+    ) => {
+      if (clipIndex === null || clipIndex === activeClipIndex || !multiClipFiles.length) {
+        timelineByClipIndex.set(activeClipIndex, nextTimeline);
         return;
       }
-      onAddEdit({
-        start,
-        end,
-        reason: action?.reason ?? `AI ${actionType}`,
-      });
-      applied += 1;
+      timelineByClipIndex.set(clipIndex, nextTimeline);
+    };
+
+    const canQueueTrimSegmentsForClip = (
+      clipIndex: number | null,
+      segments: { start: number; end: number }[]
+    ) => {
+      const duration = getClipDurationForAction(clipIndex);
+      if (!duration || maxTrimFraction >= 1) return true;
+      const timeline = getTimelineForClip(clipIndex);
+      const normalized = normalizeSegments([...timeline, ...segments], duration);
+      const total = normalized.reduce(
+        (sum, segment) => sum + (segment.end - segment.start),
+        0
+      );
+      const limit = duration * maxTrimFraction;
+      return total <= limit + 0.001;
+    };
+
+    actions.forEach((action) => {
+      const actionType = (action?.type ?? "").toLowerCase();
+      const clipIndex = resolveActionClipIndex(action?.clip);
+      const queueOrApplyCuts = (
+        segments: Array<{ start: number; end: number }>,
+        reason: string,
+        targetClipIndex: number | null
+      ) => {
+        if (!segments.length) return;
+        if (
+          targetClipIndex !== null &&
+          targetClipIndex !== activeClipIndex &&
+          multiClipFiles.length
+        ) {
+          if (segments.length > 1) {
+            pushSystemMessage(
+              "Keep-only and silence cleanup currently work on the open clip. Open that clip and ask again."
+            );
+            return;
+          }
+          if (typeof onQueueClipTrim === "function") {
+            const segment = segments[0];
+            const message = onQueueClipTrim(
+              targetClipIndex,
+              segment.start,
+              segment.end,
+              reason
+            );
+            const timeline = getTimelineForClip(targetClipIndex);
+            updateTimelineForClip(targetClipIndex, [...timeline, segment]);
+            pushSystemMessage(message);
+          }
+          return;
+        }
+        if (!canQueueTrimSegmentsForClip(targetClipIndex, segments)) {
+          limitHit = true;
+          return;
+        }
+        const timeline = getTimelineForClip(targetClipIndex);
+        updateTimelineForClip(targetClipIndex, [...timeline, ...segments]);
+        segments.forEach((segment) => {
+          onAddEdit({
+            start: segment.start,
+            end: segment.end,
+            reason,
+          });
+          applied += 1;
+        });
+      };
+
+      if (["trim", "cut", "remove", "delete"].includes(actionType)) {
+        const start = Number(action?.start);
+        const end = Number(action?.end);
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+          return;
+        }
+        queueOrApplyCuts(
+          [{ start, end }],
+          action?.reason ?? `AI ${actionType}`,
+          clipIndex
+        );
+        return;
+      }
+
+      if (actionType === "keep") {
+        const start = Number(action?.start);
+        const end = Number(action?.end);
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+          return;
+        }
+        const duration = getClipDurationForAction(clipIndex);
+        if (!duration || end > duration + 0.001) return;
+        const keepCuts = buildKeepCuts(start, end, duration);
+        queueOrApplyCuts(
+          keepCuts,
+          action?.reason ?? "AI keep only",
+          clipIndex
+        );
+        return;
+      }
+
+      if (actionType === "remove_silence") {
+        if (clipIndex !== null && clipIndex !== activeClipIndex && multiClipFiles.length) {
+          pushSystemMessage(
+            "Silence cleanup currently works on the open clip only. Open that clip and ask again."
+          );
+          return;
+        }
+        const duration = getClipDurationForAction(clipIndex);
+        const silenceCuts = buildSilenceCuts(audioSegments, duration);
+        if (!silenceCuts.length) {
+          pushSystemMessage("I couldn't find any silent ranges to remove.");
+          return;
+        }
+        queueOrApplyCuts(
+          silenceCuts,
+          action?.reason ?? "AI silence removal",
+          clipIndex
+        );
+        return;
+      }
+
+      if (actionType === "add_audio_overlay") {
+        const fileIndex = action?.audioFileIndex ?? 0;
+        const file = audioFiles[fileIndex];
+        if (!file) {
+          pushSystemMessage(`Audio file index ${fileIndex + 1} not found.`);
+          return;
+        }
+        const start = Number(action?.start) || 0;
+        const end = Number(action?.end) || 10;
+        const vol = Number(action?.volume) ?? 0.8;
+        if (onAddOverlay) {
+          onAddOverlay({
+            file,
+            videoStart: start,
+            videoEnd: end,
+            volume: vol,
+            label: file.name
+          });
+          applied += 1;
+        } else {
+          pushSystemMessage("Audio overlays are not supported here.");
+        }
+        return;
+      }
+
+      if (actionType === "mute") {
+        const start = Number(action?.start);
+        const end = Number(action?.end);
+        if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
+          return;
+        }
+        if (onAddMute) {
+          onAddMute({
+            start,
+            end,
+            reason: action?.reason ?? "AI mute segment",
+          });
+          applied += 1;
+        } else {
+          pushSystemMessage("Muting segments is not supported in this view.");
+        }
+        return;
+      }
+
+      if (actionType === "export") {
+        void handleExportRequest();
+        return;
+      }
     });
     if (limitHit) {
       pushSystemMessage(buildTrimLimitMessage());
@@ -883,7 +1080,7 @@ export default function Chat({
           msg.text.startsWith("Export ")
         ))
     );
-    const maxHistoryMessages = 10;
+    const maxHistoryMessages = 4;
     const trimmedHistory = relevantMessages.length > maxHistoryMessages
       ? relevantMessages.slice(-maxHistoryMessages)
       : relevantMessages;
@@ -929,9 +1126,12 @@ export default function Chat({
         : "";
       const clipSummary = includeClipContext ? buildClipSummary() : "";
       const visualSummary = includeVisualContext ? buildVisualSummary() : "";
+      const snapshotLastEdit = edits.length ? edits[edits.length - 1] : null;
       const memorySnapshot = buildMemorySummary({
         ...(memory ?? {}),
         lastIntent: currentInput.trim(),
+        clipCount: edits.length,
+        lastTrim: snapshotLastEdit ? { start: snapshotLastEdit.start, end: snapshotLastEdit.end } : undefined,
       });
 
       pushStatus("Sending context to the AI...");
@@ -965,6 +1165,9 @@ export default function Chat({
               isEditorMode: videoContext.isEditorMode,
             }
           : undefined,
+        activeTimeline: activeTimeline.length
+          ? activeTimeline.map((s) => ({ start: s.start, end: s.end }))
+          : undefined,
         frame: frameDataUrl,
         audio: audioSummary
           ? {
@@ -983,6 +1186,9 @@ export default function Chat({
               summary: clipSummary,
             }
           : undefined,
+        audioFiles: audioFiles.length
+          ? audioFiles.map((f, index) => ({ name: f.name, sizeBytes: f.size, index }))
+          : undefined,
       };
 
       let res: Response | null = null;
@@ -991,6 +1197,12 @@ export default function Chat({
       const maxParseRetries = 5;
 
       for (let attempt = 1; attempt <= maxParseRetries; attempt += 1) {
+        console.log("AI Request:", {
+          url: "/api/chat",
+          attempt,
+          payload: requestBody
+        });
+
         res = await fetch("/api/chat", {
           method: "POST",
           headers: {
@@ -1000,6 +1212,7 @@ export default function Chat({
         });
 
         raw = await res.text();
+        console.log("AI Raw Response:", raw);
         try {
           data = raw ? JSON.parse(raw) : null;
         } catch {
@@ -1129,7 +1342,12 @@ export default function Chat({
     return `Explain what happens in ${range} (${note}).`;
   };
 
-  const memorySummary = buildMemorySummary(memory);
+  const lastEdit = edits.length ? edits[edits.length - 1] : null;
+  const memorySummary = buildMemorySummary({
+    ...(memory ?? {}),
+    clipCount: edits.length,
+    lastTrim: lastEdit ? { start: lastEdit.start, end: lastEdit.end } : undefined,
+  });
 
   const multiClipSummaries = useMemo(() => {
     if (multiClipMode !== "all" || !multiClipFiles.length) return [];

@@ -120,6 +120,13 @@ export async function analyzeAudioFile(
         const startTime = startSample / sampleRate;
         const endTime = endSample / sampleRate;
 
+        const payload = {
+          audio: audioDataUrl.slice(0, 50) + "...",
+          startTime,
+          endTime,
+        };
+        console.log("Transcribe Request:", payload);
+
         const res = await fetch("/api/audio/transcribe", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -131,6 +138,7 @@ export async function analyzeAudioFile(
         });
 
         const data = await res.json();
+        console.log("Transcribe Response:", data);
         if (!res.ok) {
           throw new Error(data?.error || "Audio transcription failed");
         }

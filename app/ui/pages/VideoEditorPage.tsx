@@ -14,6 +14,17 @@ import MediaSidebar from "../components/MediaSidebar/MediaSidebar";
 import { PLAN_CONFIGS, PLAN_ORDER, PlanId } from "@/app/backend/functions/plans";
 import { formatTime } from "@/app/backend/functions/formatTime";
 import { analyzeAudioFile, getVideoMetadata } from "@/app/backend/functions/mediaAnalysis";
+import TimelineControls from "../components/TimelineControls/TimelineControls";
+import MediaLibraryDrawer from "../components/MediaLibraryDrawer/MediaLibraryDrawer";
+import { Library } from "lucide-react";
+export type AudioOverlay = {
+  id: string;
+  file: File;
+  videoStart: number;
+  videoEnd: number;
+  volume: number;
+  label?: string;
+};
 
 type TokenUsage = {
   prompt_tokens?: number;
@@ -22,6 +33,43 @@ type TokenUsage = {
 };
 
 type TokenSource = "chat" | "audio" | "vision";
+
+type TimelineEdit = {
+  id: string;
+  start: number;
+  end: number;
+  reason?: string;
+};
+
+type ClipSnapshot = {
+  id: string;
+  name: string;
+  type: string;
+  sizeBytes: number;
+  duration: number;
+  width: number;
+  height: number;
+  audioSegments: {
+    start: number;
+    end: number;
+    transcript: string;
+    category: "speech" | "music" | "sfx";
+  }[];
+  audioStatus: "idle" | "processing" | "done" | "error" | "no-audio";
+  audioError: string | null;
+  audioProgress: number;
+  videoInsights: {
+    time: number;
+    description: string;
+  }[];
+  videoInsightStatus: "idle" | "processing" | "done" | "error";
+  videoInsightError: string | null;
+  sceneChanges: number[];
+  sceneStatus: "idle" | "processing" | "done" | "error";
+  sceneError: string | null;
+  edits: TimelineEdit[];
+  muteEdits: TimelineEdit[];
+};
 
 export default function VideoEditor() {
   const [editMode, setEditMode] = useState<"single" | "multi">("multi");
@@ -56,6 +104,7 @@ export default function VideoEditor() {
     audio: 0,
     vision: 0,
   });
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
   const addTokenUsage = useCallback((source: TokenSource, usage?: TokenUsage | null) => {
     if (!usage) return;
@@ -77,6 +126,9 @@ export default function VideoEditor() {
     isPlaying,
     duration,
     currentTime,
+    timelineDuration,
+    timelineCurrentTime,
+    isSkippingEdits,
     volume,
     isMuted,
     trimStart,
@@ -102,6 +154,7 @@ export default function VideoEditor() {
     togglePlay,
     handleTimeUpdate,
     handleLoadedMetadata,
+    handleEnded,
     handleProgressClick,
     handleVolumeChange,
     toggleMute,
@@ -118,74 +171,192 @@ export default function VideoEditor() {
     captureFrame,
     seekToTime,
     replaceEdits,
+    toggleIsSkippingEdits,
   } = useVideoPlayer({
     onTokenUsage: addTokenUsage,
     analysis: planConfig.analysis,
   });
 
   const [multiFiles, setMultiFiles] = useState<File[]>([]);
+  const [audioFiles, setAudioFiles] = useState<File[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
   const multiInputRef = useRef<HTMLInputElement | null>(null);
+  const audioInputRef = useRef<HTMLInputElement | null>(null);
   const lastActiveKeyRef = useRef<string | null>(null);
+  const lastRestoredClipKeyRef = useRef<string | null>(null);
   const clipSignatureRef = useRef<Record<string, string>>({});
+  const processedPendingTrimRef = useRef<string | null>(null);
+  const processedPendingMuteRef = useRef<string | null>(null);
+  const [muteEdits, setMuteEdits] = useState<TimelineEdit[]>([]);
+  const [audioOverlays, setAudioOverlays] = useState<AudioOverlay[]>([]);
   const [pendingClipTrim, setPendingClipTrim] = useState<{
     clipIndex: number;
     start: number;
     end: number;
     reason?: string;
   } | null>(null);
-  const [clipSnapshots, setClipSnapshots] = useState<
-    Record<
-      string,
-      {
-        id: string;
-        name: string;
-        type: string;
-        sizeBytes: number;
-        duration: number;
-        width: number;
-        height: number;
-        audioSegments: typeof audioSegments;
-        audioStatus: typeof audioStatus;
-        audioError: typeof audioError;
-        audioProgress: number;
-        videoInsights: typeof videoInsights;
-        videoInsightStatus: typeof videoInsightStatus;
-        videoInsightError: typeof videoInsightError;
-        sceneChanges: typeof sceneChanges;
-        sceneStatus: typeof sceneStatus;
-        sceneError: typeof sceneError;
-        edits: typeof edits;
-      }
-    >
-  >({});
+  const [pendingClipMute, setPendingClipMute] = useState<{
+    clipIndex: number;
+    start: number;
+    end: number;
+    reason?: string;
+  } | null>(null);
+  const [clipSnapshots, setClipSnapshots] = useState<Record<string, ClipSnapshot>>({});
   const clipSnapshotsRef = useRef(clipSnapshots);
   const [multiAnalysisTick, setMultiAnalysisTick] = useState(0);
   const analysisInFlightRef = useRef<Set<string>>(new Set());
   const startedAnalysisRef = useRef<Set<string>>(new Set());
+
 
   const getFileKey = useCallback(
     (file: File) => `${file.name}-${file.size}-${file.lastModified}`,
     []
   );
 
-  const areEditsEquivalent = useCallback(
-    (
-      left: { start: number; end: number; reason?: string }[],
-      right: { start: number; end: number; reason?: string }[]
-    ) => {
-      if (left.length !== right.length) return false;
-      for (let i = 0; i < left.length; i += 1) {
-        const a = left[i];
-        const b = right[i];
-        if (a.start !== b.start || a.end !== b.end) return false;
-        if ((a.reason ?? "") !== (b.reason ?? "")) return false;
-      }
-      return true;
+  const buildClipSnapshotSignature = useCallback(
+    (snapshot: ClipSnapshot, mode: "single" | "multi") => {
+      const audioSignature = snapshot.audioSegments
+        .map(
+          (segment) =>
+            `${segment.start}-${segment.end}-${segment.category}-${segment.transcript.slice(
+              0,
+              32
+            )}`
+        )
+        .join("|");
+      const insightSignature = snapshot.videoInsights
+        .map(
+          (insight) => `${insight.time}-${insight.description.slice(0, 32)}`
+        )
+        .join("|");
+      const sceneSignature = snapshot.sceneChanges.join("|");
+      const editSignature = snapshot.edits
+        .map(
+          (edit) =>
+            `${edit.start}-${edit.end}-${(edit.reason ?? "").slice(0, 32)}`
+        )
+        .join("|");
+      const muteSignature = snapshot.muteEdits
+        .map(
+          (edit) =>
+            `${edit.start}-${edit.end}-${(edit.reason ?? "").slice(0, 32)}`
+        )
+        .join("|");
+
+      return [
+        snapshot.duration,
+        snapshot.width,
+        snapshot.height,
+        snapshot.audioStatus,
+        snapshot.audioError ?? "",
+        snapshot.audioProgress,
+        snapshot.videoInsightStatus,
+        snapshot.videoInsightError ?? "",
+        snapshot.sceneStatus,
+        snapshot.sceneError ?? "",
+        audioSignature,
+        insightSignature,
+        sceneSignature,
+        editSignature,
+        muteSignature,
+        mode,
+      ].join("||");
     },
     []
   );
 
+  const createTimelineEdit = useCallback(
+    (start: number, end: number, reason?: string): TimelineEdit => ({
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      start,
+      end,
+      reason,
+    }),
+    []
+  );
+
+  const addMuteEdit = useCallback(
+    (edit: { start: number; end: number; reason?: string }) => {
+      setMuteEdits((prev) => [
+        ...prev,
+        createTimelineEdit(edit.start, edit.end, edit.reason),
+      ]);
+    },
+    [createTimelineEdit]
+  );
+
+  const removeMuteEdit = useCallback((id: string) => {
+    setMuteEdits((prev) => prev.filter((e) => e.id !== id));
+  }, []);
+
+  const clearMuteEdits = useCallback(() => setMuteEdits([]), []);
+
+  const replaceMuteEdits = useCallback((next: TimelineEdit[]) => {
+    setMuteEdits(
+      next.map((edit) => ({
+        id: edit.id ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        start: edit.start,
+        end: edit.end,
+        reason: edit.reason,
+      }))
+    );
+  }, []);
+
+  // Audio overlays CRUD
+  const addAudioOverlay = useCallback((overlay: Omit<AudioOverlay, "id">) => {
+    setAudioOverlays((prev) => [
+      ...prev,
+      { ...overlay, id: `${Date.now()}-${Math.random().toString(16).slice(2)}` },
+    ]);
+  }, []);
+
+  const removeAudioOverlay = useCallback((id: string) => {
+    setAudioOverlays((prev) => prev.filter((o) => o.id !== id));
+  }, []);
+
+  const updateAudioOverlay = useCallback(
+    (id: string, patch: Partial<Pick<AudioOverlay, "volume" | "videoStart" | "videoEnd">>) => {
+      setAudioOverlays((prev) =>
+        prev.map((o) => (o.id === id ? { ...o, ...patch } : o))
+      );
+    },
+    []
+  );
+
+  const clearAudioOverlays = useCallback(() => setAudioOverlays([]), []);
+
+  const handleClearAllChanges = useCallback(() => {
+    clearEdits();
+    clearMuteEdits();
+    clearAudioOverlays();
+  }, [clearAudioOverlays, clearEdits, clearMuteEdits]);
+
+  const handleUndoLastChange = useCallback(() => {
+    const toTime = (id: string) => {
+      const value = Number(id.split("-")[0]);
+      return Number.isFinite(value) ? value : 0;
+    };
+
+    const candidates = [
+      ...edits.map((edit) => ({ type: "edit" as const, id: edit.id, time: toTime(edit.id) })),
+      ...muteEdits.map((edit) => ({ type: "mute" as const, id: edit.id, time: toTime(edit.id) })),
+      ...audioOverlays.map((overlay) => ({
+        type: "overlay" as const,
+        id: overlay.id,
+        time: toTime(overlay.id),
+      })),
+    ];
+    const latest = candidates.sort((a, b) => b.time - a.time)[0];
+    if (!latest) return;
+
+    if (latest.type === "edit") {
+      undoLastEdit();
+    } else if (latest.type === "mute") {
+      removeMuteEdit(latest.id);
+    } else {
+      removeAudioOverlay(latest.id);
+    }
+  }, [audioOverlays, edits, muteEdits, removeAudioOverlay, removeMuteEdit, undoLastEdit]);
 
 
   useEffect(() => {
@@ -284,90 +455,66 @@ export default function VideoEditor() {
       duration > 0
         ? duration
         : editMode === "multi" && existingSnapshot?.duration
-        ? existingSnapshot.duration
-        : duration;
+          ? existingSnapshot.duration
+          : duration;
     const nextWidth =
       videoWidth > 0
         ? videoWidth
         : editMode === "multi" && existingSnapshot?.width
-        ? existingSnapshot.width
-        : videoWidth;
+          ? existingSnapshot.width
+          : videoWidth;
     const nextHeight =
       videoHeight > 0
         ? videoHeight
         : editMode === "multi" && existingSnapshot?.height
-        ? existingSnapshot.height
-        : videoHeight;
+          ? existingSnapshot.height
+          : videoHeight;
 
     const safeEdits =
       editMode === "multi" && !isSameClip ? existingSnapshot?.edits ?? [] : edits;
-    const audioSignature = nextAudioSegments
-      .map(
-        (segment) =>
-          `${segment.start}-${segment.end}-${segment.category}-${segment.transcript.slice(
-            0,
-            32
-          )}`
-      )
-      .join("|");
-    const insightSignature = nextVideoInsights
-      .map(
-        (insight) =>
-          `${insight.time}-${insight.description.slice(0, 32)}`
-      )
-      .join("|");
-    const sceneSignature = nextSceneChanges.join("|");
-    const editSignature = safeEdits
-      .map(
-        (edit) =>
-          `${edit.start}-${edit.end}-${(edit.reason ?? "").slice(0, 32)}`
-      )
-      .join("|");
-    const nextSignature = [
-      nextDuration,
-      nextWidth,
-      nextHeight,
-      nextAudioStatus,
-      nextAudioError ?? "",
-      nextAudioProgress,
-      nextVideoInsightStatus,
-      nextVideoInsightError ?? "",
-      nextSceneStatus,
-      nextSceneError ?? "",
-      audioSignature,
-      insightSignature,
-      sceneSignature,
-      editSignature,
-      editMode,
-    ].join("||");
+    const safeMuteEdits =
+      editMode === "multi" && !isSameClip ? existingSnapshot?.muteEdits ?? [] : muteEdits;
+    const nextSnapshot: ClipSnapshot = {
+      id,
+      name: videoFile.name,
+      type: videoFile.type,
+      sizeBytes: videoFile.size,
+      duration: nextDuration,
+      width: nextWidth,
+      height: nextHeight,
+      audioSegments: nextAudioSegments,
+      audioStatus: nextAudioStatus,
+      audioError: nextAudioError,
+      audioProgress: nextAudioProgress,
+      videoInsights: nextVideoInsights,
+      videoInsightStatus: nextVideoInsightStatus,
+      videoInsightError: nextVideoInsightError,
+      sceneChanges: nextSceneChanges,
+      sceneStatus: nextSceneStatus,
+      sceneError: nextSceneError,
+      edits: safeEdits,
+      muteEdits: safeMuteEdits,
+    };
+    const nextSignature = buildClipSnapshotSignature(nextSnapshot, editMode);
     if (clipSignatureRef.current[id] === nextSignature) {
       return;
     }
     clipSignatureRef.current[id] = nextSignature;
     setClipSnapshots((prev) => {
-      return {
+      const prevSnapshot = prev[id];
+      if (
+        prevSnapshot &&
+        buildClipSnapshotSignature(prevSnapshot, editMode) === nextSignature
+      ) {
+        clipSnapshotsRef.current = prev;
+        return prev;
+      }
+      const next = {
         ...prev,
-        [id]: {
-          id,
-          name: videoFile.name,
-          type: videoFile.type,
-          sizeBytes: videoFile.size,
-          duration: nextDuration,
-          width: nextWidth,
-          height: nextHeight,
-          audioSegments: nextAudioSegments,
-          audioStatus: nextAudioStatus,
-          audioError: nextAudioError,
-          audioProgress: nextAudioProgress,
-          videoInsights: nextVideoInsights,
-          videoInsightStatus: nextVideoInsightStatus,
-          videoInsightError: nextVideoInsightError,
-          sceneChanges: nextSceneChanges,
-          sceneStatus: nextSceneStatus,
-          sceneError: nextSceneError,
-          edits: safeEdits,
-        },
+        [id]: nextSnapshot,
       };
+      clipSnapshotsRef.current = next;
+      return next;
     });
   }, [
     videoFile,
@@ -385,8 +532,10 @@ export default function VideoEditor() {
     sceneStatus,
     sceneError,
     edits,
+    muteEdits,
     getFileKey,
     editMode,
+    buildClipSnapshotSignature,
   ]);
 
   useEffect(() => {
@@ -394,54 +543,88 @@ export default function VideoEditor() {
   }, [clipSnapshots]);
 
   useEffect(() => {
-    if (editMode !== "multi" || !videoFile) return;
-    const key = getFileKey(videoFile);
-    const snapshot = clipSnapshots[key];
-    if (!snapshot) {
-      if (edits.length) {
-        replaceEdits([]);
-      }
+    if (editMode !== "multi" || !videoFile) {
+      lastRestoredClipKeyRef.current = null;
       return;
     }
-    if (snapshot.edits === edits) return;
-    const snapshotEdits = snapshot.edits ?? [];
-    if (areEditsEquivalent(snapshotEdits, edits)) return;
-    replaceEdits(snapshotEdits);
-  }, [
-    editMode,
-    videoFile,
-    clipSnapshots,
-    getFileKey,
-    edits,
-    replaceEdits,
-    areEditsEquivalent,
-  ]);
+    const key = getFileKey(videoFile);
+    if (lastRestoredClipKeyRef.current === key) {
+      return;
+    }
+    lastRestoredClipKeyRef.current = key;
+    const snapshot = clipSnapshotsRef.current[key];
+    replaceEdits(snapshot?.edits ?? []);
+    replaceMuteEdits(snapshot?.muteEdits ?? []);
+  }, [editMode, videoFile, getFileKey, replaceEdits, replaceMuteEdits]);
 
   useEffect(() => {
-    if (!pendingClipTrim) return;
+    if (!pendingClipTrim) {
+      processedPendingTrimRef.current = null;
+      return;
+    }
     const targetFile = multiFiles[pendingClipTrim.clipIndex];
     if (!targetFile || !videoFile) return;
     const targetKey = getFileKey(targetFile);
     const activeKey = getFileKey(videoFile);
     if (targetKey !== activeKey) return;
+    const trimRequestKey = [
+      targetKey,
+      pendingClipTrim.start,
+      pendingClipTrim.end,
+      pendingClipTrim.reason ?? "",
+    ].join("::");
+    if (processedPendingTrimRef.current === trimRequestKey) return;
+    processedPendingTrimRef.current = trimRequestKey;
+    setPendingClipTrim(null);
     addEdit({
       start: pendingClipTrim.start,
       end: pendingClipTrim.end,
       reason: pendingClipTrim.reason ?? "AI clip trim",
     });
-    setPendingClipTrim(null);
   }, [pendingClipTrim, multiFiles, videoFile, addEdit, getFileKey]);
+
+  useEffect(() => {
+    if (!pendingClipMute) {
+      processedPendingMuteRef.current = null;
+      return;
+    }
+    const targetFile = multiFiles[pendingClipMute.clipIndex];
+    if (!targetFile || !videoFile) return;
+    const targetKey = getFileKey(targetFile);
+    const activeKey = getFileKey(videoFile);
+    if (targetKey !== activeKey) return;
+    const muteRequestKey = [
+      targetKey,
+      pendingClipMute.start,
+      pendingClipMute.end,
+      pendingClipMute.reason ?? "",
+    ].join("::");
+    if (processedPendingMuteRef.current === muteRequestKey) return;
+    processedPendingMuteRef.current = muteRequestKey;
+    setPendingClipMute(null);
+    addMuteEdit({
+      start: pendingClipMute.start,
+      end: pendingClipMute.end,
+      reason: pendingClipMute.reason ?? "AI mute segment",
+    });
+  }, [pendingClipMute, multiFiles, videoFile, addMuteEdit, getFileKey]);
 
   useEffect(() => {
     if (editMode !== "multi") return;
     const allowed = new Set(multiFiles.map((file) => getFileKey(file)));
     setClipSnapshots((prev) => {
+      let changed = false;
       const next: typeof prev = {};
       Object.entries(prev).forEach(([key, value]) => {
         if (allowed.has(key)) {
           next[key] = value;
+        } else {
+          changed = true;
         }
       });
+      if (!changed && Object.keys(prev).length === Object.keys(next).length) {
+        return prev;
+      }
       return next;
     });
   }, [editMode, multiFiles, getFileKey]);
@@ -471,6 +654,7 @@ export default function VideoEditor() {
         sceneStatus: "idle" as const,
         sceneError: null,
         edits: [],
+        muteEdits: [],
       };
 
       setClipSnapshots((prev) => ({
@@ -587,6 +771,19 @@ export default function VideoEditor() {
     event.target.value = "";
   };
 
+  const handleAudioUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []).filter((file) =>
+      file.type.startsWith("audio/") || file.type.startsWith("video/")
+    );
+    if (!files.length) return;
+    setAudioFiles((prev) => [...prev, ...files]);
+    event.target.value = "";
+  };
+
+  const handleRemoveAudioFile = (index: number) => {
+    setAudioFiles((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
   const handleSelectFile = (index: number) => {
     if (index < 0 || index >= multiFiles.length) return;
     setActiveIndex(index);
@@ -677,16 +874,40 @@ export default function VideoEditor() {
       setActiveIndex(0);
       setClipSnapshots({});
     }
+    setAudioFiles([]);
+    setMuteEdits([]);
+    setAudioOverlays([]);
     clearVideo();
   };
 
+  const handleQueueClipMute = useCallback(
+    (clipIndex: number, start: number, end: number, reason?: string) => {
+      if (clipIndex < 0 || clipIndex >= multiFiles.length) {
+        return "I couldn't find that clip in the multi-video queue.";
+      }
+      const targetFile = multiFiles[clipIndex];
+      const key = getFileKey(targetFile);
+      const snapshot = clipSnapshots[key];
+      if (!snapshot || !snapshot.duration) {
+        return `Open "${targetFile.name}" so I can analyze it, then ask again.`;
+      }
+      setPendingClipMute({ clipIndex, start, end, reason });
+      setActiveIndex(clipIndex);
+      loadVideoFile(targetFile);
+      return `Switching to clip #${clipIndex + 1} (${targetFile.name}) and queuing mute ${formatTime(
+        start
+      )}-${formatTime(end)}.`;
+    },
+    [clipSnapshots, getFileKey, loadVideoFile, multiFiles]
+  );
+
   const multiClipFiles = editMode === "multi" && planId === "pro"
     ? multiFiles.map((file) => ({
-        id: getFileKey(file),
-        name: file.name,
-        type: file.type,
-        sizeBytes: file.size,
-      }))
+      id: getFileKey(file),
+      name: file.name,
+      type: file.type,
+      sizeBytes: file.size,
+    }))
     : [];
 
   const multiClipSnapshots = editMode === "multi" && planId === "pro"
@@ -761,86 +982,29 @@ export default function VideoEditor() {
 
   if (!videoSrc) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-zinc-950 p-4">
-        <div className="flex max-w-lg flex-col items-center justify-center gap-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-12 text-center backdrop-blur-xl">
-          <div className="text-2xl font-semibold text-zinc-100">
-            Upload Video
-          </div>
-          <p className="text-zinc-400">
-            Add one or more clips to start editing.
-          </p>
-          <label className="group relative inline-flex cursor-pointer items-center justify-center overflow-hidden rounded-full bg-blue-600 px-8 py-3 font-medium text-white transition-all hover:bg-blue-500 active:scale-95">
-            <span>Choose Videos</span>
-            <input
-              ref={multiInputRef}
-              type="file"
-              accept="video/mp4,video/webm"
-              multiple
-              className="absolute inset-0 hidden"
-              onChange={handleMultiUpload}
-            />
-          </label>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-zinc-950 p-4 text-zinc-100 sm:p-8">
-      <div className="mx-auto max-w-[1400px]">
-        {/* Header */}
-        <header className="mb-8 flex flex-wrap items-center gap-4">
-          <div className="flex-1 space-y-1">
-
-
-
+      <div className="flex min-h-screen w-full items-center justify-center bg-zinc-950 p-4">
+        <div className="flex w-full max-w-2xl flex-col items-center justify-center gap-8 rounded-3xl border border-zinc-800 bg-zinc-900/30 p-12 text-center backdrop-blur-2xl shadow-2xl">
+          <div className="space-y-3">
+            <h1 className="text-4xl font-bold tracking-tight text-zinc-100">
+              Welcome to AI Video Editor
+            </h1>
+            <p className="text-zinc-400 text-lg">
+              Upload your media to begin your creative journey.
+            </p>
           </div>
 
-
-        </header>
-
-
-
-        {/* Layout Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column (Video + Trim Editor) - Takes up 2 columns */}
-          <div className="lg:col-span-2 flex flex-col gap-6">
-            {multiFiles.length > 0 && (
-              <div className="flex flex-wrap items-center gap-3">
-                {multiFiles.map((file, i) => (
-                  <div
-                    key={`${file.name}-${file.size}-${file.lastModified}`}
-                    onClick={() => handleSelectFile(i)}
-                    className={`group relative flex h-16 w-28 flex-shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-xl border bg-zinc-900/40 shadow-xl transition-all hover:shadow-2xl ${
-                      activeIndex === i
-                        ? "border-emerald-500 ring-2 ring-emerald-500/50"
-                        : "border-zinc-800 hover:border-zinc-700"
-                    }`}
-                  >
-                    <video 
-                      src={URL.createObjectURL(file)} 
-                      className="h-full w-full object-cover" 
-                    />
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveFile(i);
-                      }}
-                      className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-red-500"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-                    </button>
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => multiInputRef.current?.click()}
-                  className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-xl border border-dashed border-zinc-700 bg-zinc-900/40 text-zinc-400 transition-all hover:border-blue-500 hover:bg-blue-500/10 hover:text-blue-400 shadow-xl"
-                  title="Add another video"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-                </button>
+          <div className="grid w-full grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Video Upload Section */}
+            <div className="flex flex-col items-center gap-4 p-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 hover:border-blue-500/50 transition-colors">
+              <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11" /><rect width="12" height="10" x="2" y="7" rx="2" /></svg>
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-semibold text-zinc-200 text-lg">Video Clips</h3>
+                <p className="text-xs text-zinc-500">MP4, WebM supported</p>
+              </div>
+              <label className="cursor-pointer inline-flex items-center justify-center rounded-full bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-blue-500 active:scale-95 shadow-lg shadow-blue-600/20">
+                <span>Add Videos</span>
                 <input
                   ref={multiInputRef}
                   type="file"
@@ -849,26 +1013,135 @@ export default function VideoEditor() {
                   className="hidden"
                   onChange={handleMultiUpload}
                 />
+              </label>
+            </div>
+
+            {/* Audio Upload Section */}
+            <div className="flex flex-col items-center gap-4 p-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 hover:border-purple-500/50 transition-colors">
+              <div className="h-12 w-12 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-500">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
               </div>
-            )}
-            <VideoPlayer
-              videoRef={videoRef}
-              progressRef={progressRef}
-              videoSrc={videoSrc}
-              isPlaying={isPlaying}
-              duration={duration}
-              currentTime={currentTime}
-              volume={volume}
-              isMuted={isMuted}
-              onTogglePlay={togglePlay}
-              onTimeUpdate={handleTimeUpdate}
-              onLoadedMetadata={handleLoadedMetadata}
-              onEnded={() => {}}
-              onProgressClick={handleProgressClick}
-              onVolumeChange={handleVolumeChange}
-              onToggleMute={toggleMute}
-              onRequestFullscreen={requestFullscreen}
-            />
+              <div className="space-y-1">
+                <h3 className="font-semibold text-zinc-200 text-lg">Audio Assets</h3>
+                <p className="text-xs text-zinc-500">MP3, WAV, Background Music</p>
+              </div>
+              <label className="cursor-pointer inline-flex items-center justify-center rounded-full bg-purple-600 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-purple-500 active:scale-95 shadow-lg shadow-purple-600/20">
+                <span>Add Audio</span>
+                <input
+                  ref={audioInputRef}
+                  type="file"
+                  accept="audio/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleAudioUpload}
+                />
+              </label>
+            </div>
+          </div>
+
+          {(multiFiles.length > 0 || audioFiles.length > 0) && (
+            <div className="w-full space-y-4 pt-4 border-t border-zinc-800">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-zinc-400">Queue</h4>
+                <span className="text-xs text-zinc-500">
+                  {multiFiles.length} videos, {audioFiles.length} audio files
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                {multiFiles.map((f, i) => (
+                  <div key={`v-${i}`} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-400">
+                    <span className="opacity-60 font-bold mr-1">#{i + 1}</span>
+                    <span className="truncate max-w-[120px]">{f.name}</span>
+                    <button onClick={() => handleRemoveFile(i)} className="hover:text-blue-200">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                    </button>
+                  </div>
+                ))}
+                {audioFiles.map((f, i) => (
+                  <div key={`a-${i}`} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs text-purple-400">
+                    <span className="opacity-60 font-bold mr-1">#{i + 1}</span>
+                    <span className="truncate max-w-[120px]">{f.name}</span>
+                    <button onClick={() => handleRemoveAudioFile(i)} className="hover:text-purple-200">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-2 pb-48">
+      <div className="mx-auto max-w-[1400px]">
+        {/* Header */}
+        <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h1 className="text-3xl font-black tracking-tighter text-zinc-100">
+              AI Video <span className="text-emerald-500">Editor</span>
+            </h1>
+            <p className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Powered by Antigravity Engine</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsDrawerOpen(true)}
+              className="flex items-center gap-2 rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-2.5 text-xs font-bold text-zinc-300 shadow-xl transition-all hover:bg-zinc-800 hover:text-white"
+            >
+              <Library size={18} className="text-emerald-500" />
+              Media Library
+              {multiFiles.length + audioFiles.length > 0 && (
+                <span className="ml-1 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-[10px] font-black text-black">
+                  {multiFiles.length + audioFiles.length}
+                </span>
+              )}
+            </button>
+          </div>
+        </header>
+
+        {/* Layout Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column (Video + Trim Editor) - Takes up 2 columns */}
+          <div className="lg:col-span-2 flex flex-col gap-6">
+            <div className="space-y-4">
+              <VideoPlayer
+                videoRef={videoRef}
+                progressRef={progressRef}
+                videoSrc={videoSrc}
+                isPlaying={isPlaying}
+                duration={duration}
+                currentTime={currentTime}
+                activeDuration={timelineDuration}
+                activeCurrentTime={timelineCurrentTime}
+                volume={volume}
+                isMuted={isMuted}
+                onTogglePlay={togglePlay}
+                onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={handleLoadedMetadata}
+                onEnded={handleEnded}
+                onProgressClick={handleProgressClick}
+                onVolumeChange={handleVolumeChange}
+                onToggleMute={toggleMute}
+                onRequestFullscreen={requestFullscreen}
+                audioOverlays={audioOverlays}
+              />
+
+              <TimelineControls
+                progressRef={progressRef}
+                currentTime={currentTime}
+                duration={duration}
+                timelineCurrentTime={timelineCurrentTime}
+                timelineDuration={timelineDuration}
+                edits={edits}
+                isSkippingEdits={isSkippingEdits}
+                toggleIsSkippingEdits={toggleIsSkippingEdits}
+                onProgressClick={handleProgressClick}
+              />
+            </div>
           </div>
 
           {/* Right Column (Sidebar + Chat) - Takes up 1 column */}
@@ -893,101 +1166,137 @@ export default function VideoEditor() {
               sceneChanges={activeSceneChanges}
               sceneStatus={activeSceneStatus}
               sceneError={activeSceneError}
+              activeTimeline={keptSegments}
+              removedSegments={removedSegments}
             />
             <div className="h-full min-h-[500px]">
-             <Chat
-               planId={planId}
-               memoryKey={
-                 videoFile
-                   ? `${videoFile.name}-${videoFile.size}-${videoFile.lastModified}`
-                   : undefined
-               }
-               multiClipMode={
-                 editMode === "multi" && planId === "pro" ? multiAiScope : "active"
-               }
-               activeClipIndex={
-                 editMode === "multi" && planId === "pro" ? activeIndex : 0
-               }
-               onQueueClipTrim={
-                 editMode === "multi" && planId === "pro"
-                   ? handleQueueClipTrim
-                   : undefined
-               }
-               multiClipFiles={multiClipFiles}
-               multiClipSnapshots={multiClipSnapshots}
-               tokenUsage={tokenUsage}
-               videoContext={{
-                 name: videoFile?.name ?? "unknown",
-                 type: videoFile?.type ?? "unknown",
-                 sizeBytes: videoFile?.size ?? 0,
-                 duration: activeDuration,
-                 width: activeWidth,
-                 height: activeHeight,
-                 currentTime,
-                 trimStart,
-                 trimEnd,
-               }}
-               captureFrame={captureFrame}
-               audioSegments={activeAudioSegments}
-               audioStatus={activeAudioStatus}
-               audioError={activeAudioError}
-               videoInsights={activeVideoInsights}
-               sceneChanges={activeSceneChanges}
-              edits={edits}
-              onTokenUsage={(usage) => addTokenUsage("chat", usage)}
-              onRequestExport={async () => {
-                if (!exporter) {
-                  return {
-                    success: false,
-                     error: "Exporter not ready. Click Load FFmpeg & Export once.",
-                   };
-                 }
-                 return exporter();
-               }}
-               onAddEdit={addEdit}
-               onPlanSelect={setPlanId}
-             />
+              <Chat
+                planId={planId}
+                memoryKey={
+                  videoFile
+                    ? `${videoFile.name}-${videoFile.size}-${videoFile.lastModified}`
+                    : undefined
+                }
+                multiClipMode={
+                  editMode === "multi" && planId === "pro" ? multiAiScope : "active"
+                }
+                activeClipIndex={
+                  editMode === "multi" && planId === "pro" ? activeIndex : 0
+                }
+                onQueueClipTrim={
+                  editMode === "multi" && planId === "pro"
+                    ? handleQueueClipTrim
+                    : undefined
+                }
+                onQueueClipMute={
+                  editMode === "multi" && planId === "pro"
+                    ? handleQueueClipMute
+                    : undefined
+                }
+                multiClipFiles={multiClipFiles}
+                multiClipSnapshots={multiClipSnapshots}
+                audioFiles={audioFiles}
+                onAddOverlay={addAudioOverlay}
+                tokenUsage={tokenUsage}
+                videoContext={{
+                  name: videoFile?.name ?? "unknown",
+                  type: videoFile?.type ?? "unknown",
+                  sizeBytes: videoFile?.size ?? 0,
+                  duration: activeDuration,
+                  width: activeWidth,
+                  height: activeHeight,
+                  currentTime,
+                  trimStart,
+                  trimEnd,
+                }}
+                captureFrame={captureFrame}
+                audioSegments={activeAudioSegments}
+                audioStatus={activeAudioStatus}
+                audioError={activeAudioError}
+                videoInsights={activeVideoInsights}
+                sceneChanges={activeSceneChanges}
+                edits={edits}
+                mutedSegments={muteEdits}
+                onTokenUsage={(usage) => addTokenUsage("chat", usage)}
+                onRequestExport={async () => {
+                  if (!exporter) {
+                    return {
+                      success: false,
+                      error: "Exporter not ready. Click Load FFmpeg & Export once.",
+                    };
+                  }
+                  return exporter();
+                }}
+                onAddEdit={addEdit}
+                onAddMute={addMuteEdit}
+                onPlanSelect={setPlanId}
+                activeTimeline={keptSegments}
+              />
             </div>
           </div>
         </div>
 
-        <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <SegmentedPreview
-            title="Trimmed Preview"
-            videoSrc={videoSrc}
-            segments={keptSegments}
-            emptyLabel="No trims yet. Ask the AI to remove a segment."
-          />
-          <SegmentedPreview
-            title="Removed Preview"
-            videoSrc={videoSrc}
-            segments={removedSegments}
-            emptyLabel="No removed segments yet."
-          />
-        </div>
+      </div>
 
-        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {/* Sticky Clip Stack bar - always visible */}
+      <div className="fixed bottom-0 inset-x-0 z-50 border-t border-zinc-700/60 bg-zinc-950/80 backdrop-blur-xl shadow-2xl shadow-black/50">
+        <div className="mx-auto max-w-[1400px] px-2 py-3">
           <EditList
             edits={edits}
+            activeTimeline={keptSegments}
             videoSrc={videoSrc}
-            previewSegments={normalizedEdits}
             planId={planId}
             onSelect={(time) => seekToTime(time, true)}
-            onUndoLast={undoLastEdit}
+            onUndoLast={handleUndoLastChange}
             onRemove={removeEdit}
-            onClear={clearEdits}
-          />
-          <ExportPanel
-            videoFile={videoFile}
-            keptSegments={keptSegments}
-            removedSegments={removedSegments}
-            planId={planId}
-            exportCount={exportCount}
-            onExportSuccess={handleExportSuccess}
-            registerExporter={handleRegisterExporter}
+            onClear={handleClearAllChanges}
+            mutedSegments={muteEdits}
+            audioOverlays={audioOverlays.map((o) => ({
+              id: o.id,
+              label: o.label,
+              videoStart: o.videoStart,
+              videoEnd: o.videoEnd,
+              volume: o.volume,
+            }))}
+            onRemoveMute={removeMuteEdit}
+            onRemoveAudioOverlay={removeAudioOverlay}
+            onUpdateAudioOverlayVolume={(id, volume) =>
+              updateAudioOverlay(id, { volume })
+            }
+            exportNode={
+              <ExportPanel
+                videoFile={videoFile}
+                keptSegments={keptSegments}
+                removedSegments={removedSegments}
+                mutedSegments={muteEdits.map((e) => ({ start: e.start, end: e.end }))}
+                audioOverlays={audioOverlays.map((o) => ({
+                  file: o.file,
+                  videoStart: o.videoStart,
+                  videoEnd: o.videoEnd,
+                  volume: o.volume,
+                }))}
+                planId={planId}
+                exportCount={exportCount}
+                onExportSuccess={handleExportSuccess}
+                registerExporter={handleRegisterExporter}
+              />
+            }
           />
         </div>
       </div>
+
+      <MediaLibraryDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        multiFiles={multiFiles}
+        audioFiles={audioFiles}
+        activeIndex={activeIndex}
+        onSelectFile={handleSelectFile}
+        onRemoveFile={handleRemoveFile}
+        onRemoveAudioFile={handleRemoveAudioFile}
+        onAddVideo={handleMultiUpload}
+        onAddAudio={handleAudioUpload}
+      />
     </div>
   );
 }

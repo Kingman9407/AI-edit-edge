@@ -1,3 +1,6 @@
+import { TOOLS, parseToolCallToAction } from "@/app/backend/api/chat/tools";
+import type { ModelAction } from "@/app/backend/api/chat/types";
+
 type VideoContext = {
   name?: string;
   type?: string;
@@ -50,14 +53,6 @@ type ChatMessage = {
   content: string;
 };
 
-type ModelAction = {
-  type: string;
-  start?: number | null;
-  end?: number | null;
-  clip?: number | null;
-  reason?: string | null;
-};
-
 type ModelJson = {
   assistant_message: string;
   status: "ok" | "needs_info" | "error";
@@ -70,85 +65,6 @@ type UsageTotals = {
   completion_tokens?: number;
   total_tokens?: number;
 };
-
-// ---------------------------------------------------------------------------
-// Tool definitions (OpenAI-compatible function calling schema)
-// ---------------------------------------------------------------------------
-
-const TOOLS = [
-  {
-    type: "function",
-    function: {
-      name: "cut_segment",
-      description:
-        "Remove (cut out) a segment of the video. Use this when the user asks to cut, trim, remove, or delete a specific time range.",
-      parameters: {
-        type: "object",
-        properties: {
-          start: {
-            type: "number",
-            description: "Start time in seconds of the segment to remove.",
-          },
-          end: {
-            type: "number",
-            description: "End time in seconds of the segment to remove.",
-          },
-          clip: {
-            type: "number",
-            description:
-              "1-based clip index when multiple clips are loaded. Omit if only one clip.",
-          },
-          reason: {
-            type: "string",
-            description: "Short human-readable reason for the cut.",
-          },
-        },
-        required: ["start", "end"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "suggest_trims",
-      description:
-        "Suggest one or more trim ranges for the user to review before applying. Use this when the user asks for suggestions, highlights, or key moments.",
-      parameters: {
-        type: "object",
-        properties: {
-          segments: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                start: { type: "number", description: "Start time in seconds." },
-                end: { type: "number", description: "End time in seconds." },
-                reason: {
-                  type: "string",
-                  description: "Why this segment should be trimmed.",
-                },
-              },
-              required: ["start", "end"],
-            },
-          },
-        },
-        required: ["segments"],
-      },
-    },
-  },
-  {
-    type: "function",
-    function: {
-      name: "export_video",
-      description:
-        "Trigger a video export/render. Use this when the user asks to export, render, or combine clips.",
-      parameters: {
-        type: "object",
-        properties: {},
-      },
-    },
-  },
-] as const;
 
 // ---------------------------------------------------------------------------
 // Model resolution
@@ -169,6 +85,19 @@ type ToolCallResult = {
   actions: ModelAction[];
   usage: UsageTotals | null;
   rawContent: string;
+};
+
+type OpenRouterToolResponse = {
+  choices?: Array<{
+    message?: {
+      content?: string;
+      tool_calls?: Array<{ function?: { name?: string; arguments?: string } }>;
+    };
+  }>;
+  usage?: UsageTotals | null;
+  error?: {
+    message?: string;
+  };
 };
 
 async function requestWithTools({
@@ -196,9 +125,9 @@ async function requestWithTools({
   );
 
   const raw = await response.text();
-  let data: any = null;
+  let data: OpenRouterToolResponse | null = null;
   try {
-    data = raw ? JSON.parse(raw) : null;
+    data = raw ? (JSON.parse(raw) as OpenRouterToolResponse) : null;
   } catch {
     data = null;
   }
@@ -212,7 +141,7 @@ async function requestWithTools({
 
   const choice = data?.choices?.[0];
   const usage: UsageTotals | null = data?.usage ?? null;
-  const toolCalls: any[] | undefined = choice?.message?.tool_calls;
+  const toolCalls = choice?.message?.tool_calls;
   const assistantText: string = choice?.message?.content ?? "";
 
   const actions: ModelAction[] = [];
@@ -220,46 +149,17 @@ async function requestWithTools({
   if (toolCalls?.length) {
     for (const tc of toolCalls) {
       const name: string = tc?.function?.name ?? "";
-      let args: any = {};
+      let args: Record<string, unknown> = {};
       try {
         args = tc?.function?.arguments
-          ? JSON.parse(tc.function.arguments)
+          ? (JSON.parse(tc.function.arguments) as Record<string, unknown>)
           : {};
       } catch {
         args = {};
       }
-
-      if (name === "cut_segment") {
-        const start = Number(args.start);
-        const end = Number(args.end);
-        if (Number.isFinite(start) && Number.isFinite(end) && start < end) {
-          actions.push({
-            type: "cut",
-            start,
-            end,
-            clip: typeof args.clip === "number" ? args.clip : null,
-            reason: args.reason ?? null,
-          });
-        }
-      } else if (name === "suggest_trims") {
-        const segments: any[] = Array.isArray(args.segments)
-          ? args.segments
-          : [];
-        for (const seg of segments) {
-          const start = Number(seg.start);
-          const end = Number(seg.end);
-          if (Number.isFinite(start) && Number.isFinite(end) && start < end) {
-            actions.push({
-              type: "trim",
-              start,
-              end,
-              clip: null,
-              reason: seg.reason ?? null,
-            });
-          }
-        }
-      } else if (name === "export_video") {
-        actions.push({ type: "export", start: null, end: null, clip: null, reason: null });
+      const parsedAction = parseToolCallToAction(name, args);
+      if (parsedAction) {
+        actions.push(parsedAction);
       }
     }
   }
@@ -344,6 +244,8 @@ export async function POST(req: Request) {
     allowThinking,
     multiClips,
     suggestions,
+    audioFiles,
+    activeTimeline,
   } = (await req.json()) as {
     message?: string;
     video?: VideoContext;
@@ -355,6 +257,8 @@ export async function POST(req: Request) {
     memory?: MemoryContext;
     multiClips?: MultiClipSummary[];
     suggestions?: SuggestionContext[];
+    audioFiles?: { name: string; sizeBytes: number; index: number }[];
+    activeTimeline?: { start: number; end: number }[];
   };
 
 
@@ -457,6 +361,20 @@ export async function POST(req: Request) {
     contextLines.push(`Current trim suggestions:\n${lines.join("\n")}`);
   }
 
+  if (audioFiles && audioFiles.length) {
+    const lines = audioFiles.map(
+      (f) => `Index ${f.index}: ${f.name} (${(f.sizeBytes / 1024 / 1024).toFixed(2)}MB)`
+    );
+    contextLines.push(`Uploaded Audio Files:\n${lines.join("\n")}`);
+  }
+
+  if (activeTimeline && activeTimeline.length) {
+    const lines = activeTimeline.map(
+      (s, i) => `#${i + 1}: ${formatSeconds(s.start)} - ${formatSeconds(s.end)}`
+    );
+    contextLines.push(`Active Timeline (remaining video parts):\n${lines.join("\n")}`);
+  }
+
   // DISABLED: frame description (video analysis)
   // if (typeof frame === "string" && frame.startsWith("data:image/")) {
   //   try {
@@ -478,25 +396,27 @@ export async function POST(req: Request) {
         "You are an AI video editing assistant inside a video editor.",
         "Respond as if the edit will happen in this app. Do not suggest external apps, websites, or OS-level steps.",
         "Keep replies concise, friendly, and action-focused.",
-        "Use ONLY the provided video context, audio context, clip stack, user memory, multi-clip summaries, and frame description.",
-        "Do NOT infer or guess content from the file name, title, or metadata.",
-        "The user is a casual, non-technical editor: avoid jargon like \"timestamps\" unless necessary.",
-        "If they don't know exact times, offer simple choices like \"beginning / middle / end\" or suggest they move the playhead and say \"use current time\".",
-        "Keep responses short and do not add lengthy rationales.",
-        "One-mode-per-reply: respond in exactly one of these modes: Summarize OR Suggest OR Apply.",
-        "Summarize mode: provide 3-6 key moments max with a short title and one-line reason each. End with one short question like \"Want me to trim any of these?\"",
-        "Suggest mode: call the suggest_trims tool with trim ranges. Only do this if the user asked for suggestions or highlights.",
-        "Apply mode: if the user requests a cut/trim/remove with an explicit range, call the cut_segment tool. If they confirm a single suggestion, call cut_segment. If multiple suggestions exist and intent is unclear, ask which number.",
-        "IMPORTANT: cut_segment and suggest_trims represent sections to REMOVE (cut out), not keep.",
-        "Treat remove-like verbs (remove, cut out, delete, drop, trim out, get rid of) as removing that exact range.",
-        "Treat keep-like phrases (keep only, use only, retain, focus on just this part) as keep-only: call cut_segment twice to remove before and after the range.",
-        "Keep-only confirmation rule: first ask a short confirmation before calling cut_segment for keep-only operations.",
-        "If the user asks to remove the first or last N seconds/minutes and the duration is known, compute exact times from duration.",
-        "If current trim suggestions are provided, only use them when the user references a suggestion (like \"trim 2\") or confirms. If multiple exist and the user says \"yes\", ask which number.",
-        "If multi-clip summaries are provided and a trim belongs to a specific clip, use the clip parameter in cut_segment.",
+        "Use only the provided context. Do not infer content from file names or metadata.",
+        "Prefer tools over prose whenever the user's intent is clear.",
+        "Use cut_segment for explicit trim/cut/remove/delete requests and for confirmed suggestions.",
+        "Use keep_segment for keep-only requests that preserve one exact range.",
+        "Use remove_silence for requests about silence, pauses, dead air, or low-signal cleanup.",
+        "Use export_video when the user asks to export, render, merge, or combine.",
+        "Use mute_segment when the user wants to silence, mute, or remove the audio from a specific time range — this KEEPS the video but mutes its audio.",
+        "Use add_audio_overlay when the user wants to add background music, overlay audio, mix in a sound file, or play an uploaded audio file over the video. Only use this if audio files are listed in the context.",
+        "NEVER use cut_segment when the user wants to add audio or overlay music — that removes video, not adds audio.",
+        "The tool schemas define the action details and parameters; follow them.",
+        "cut_segment always refers to ranges to remove, not keep.",
+        "If the user asks to keep only a range, prefer keep_segment.",
+        "If the user asks to remove the first or last N seconds/minutes and duration is known, compute the exact range.",
+        "If current suggestions exist and the user says 'yes' or confirms ambiguously, ask which suggestion number.",
+        "If a trim belongs to a specific clip in multi-clip mode, include the clip parameter.",
         "Never fabricate timestamps.",
-        "If the user asks to export/merge/render, call the export_video tool.",
-        "If the request is ambiguous, reply with plain text asking a short clarifying question — do NOT call any tool.",
+        "The Active Timeline context describes the parts of the video that currently remain after edits.",
+        "Prioritize making future edits (like removing silence or cutting segments) within these active regions.",
+        "If the user asks to remove something, compute the range relative to the original video timeline, but ensure it overlaps with the Active Timeline.",
+        "If the user is happy with the current edit, suggest 'export_video' to finalize.",
+        "The user is non-technical, so avoid jargon and keep the response short.",
       ].join(" "),
     },
   ];
@@ -531,12 +451,20 @@ export async function POST(req: Request) {
     toolResult.assistantText ||
     (toolResult.actions.length > 0
       ? toolResult.actions
-          .map((a) =>
-            a.type === "export"
-              ? "Starting export..."
-              : `Cutting ${formatSeconds(a.start ?? 0)} – ${formatSeconds(a.end ?? 0)}.`
-          )
-          .join(" ")
+        .map((a) =>
+          a.type === "export"
+            ? "Starting export..."
+            : a.type === "keep"
+              ? `Keeping ${formatSeconds(a.start ?? 0)} – ${formatSeconds(a.end ?? 0)}.`
+              : a.type === "remove_silence"
+                ? "Removing silence..."
+                : a.type === "mute"
+                  ? `Muting ${formatSeconds(a.start ?? 0)} – ${formatSeconds(a.end ?? 0)}.`
+                  : a.type === "add_audio_overlay"
+                    ? `Adding audio overlay (file #${(a.audioFileIndex ?? 0) + 1}) from ${formatSeconds(a.start ?? 0)} – ${formatSeconds(a.end ?? 0)}.`
+                    : `Cutting ${formatSeconds(a.start ?? 0)} – ${formatSeconds(a.end ?? 0)}.`
+        )
+        .join(" ")
       : "Done.");
 
   // Build the parsed shape the frontend expects (ModelJson-compatible)

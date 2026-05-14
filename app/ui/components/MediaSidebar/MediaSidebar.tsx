@@ -1,77 +1,27 @@
 import React from "react";
-import { formatTime } from "@/app/backend/functions/formatTime";
-import { PLAN_CONFIGS, PlanId } from "@/app/backend/functions/plans";
-
-type AudioSegment = {
-  start: number;
-  end: number;
-  transcript: string;
-  category: "speech" | "music" | "sfx";
-};
-
-type VideoContext = {
-  name: string;
-  type: string;
-  sizeBytes: number;
-  duration: number;
-  width: number;
-  height: number;
-};
-
-type VideoInsight = {
-  time: number;
-  description: string;
-};
+import { PlanId } from "@/app/backend/functions/plans";
 
 interface MediaSidebarProps {
   planId: PlanId;
-  videoContext?: VideoContext;
-  audioSegments?: AudioSegment[];
   audioStatus?: "idle" | "processing" | "done" | "error" | "no-audio";
-  audioError?: string | null;
-  audioProgress?: number;
-  videoInsights?: VideoInsight[];
-  videoInsightStatus?: "idle" | "processing" | "done" | "error";
-  videoInsightError?: string | null;
-  sceneChanges?: number[];
-  sceneStatus?: "idle" | "processing" | "done" | "error";
-  sceneError?: string | null;
 }
 
-const formatSize = (bytes: number) => {
-  if (!bytes) return "0 MB";
-  const mb = bytes / (1024 * 1024);
-  return `${mb.toFixed(2)} MB`;
-};
-
-const buildSegmentLines = (segments: AudioSegment[], limit?: number) =>
-  (typeof limit === "number" ? segments.slice(0, limit) : segments).map(
-    (segment) => {
-      const range = `${formatTime(segment.start)}-${formatTime(segment.end)}`;
-      if (segment.category === "music") {
-        return `${range} music`;
-      }
-      if (segment.category === "sfx") {
-        return `${range} background sound`;
-      }
-      const text = segment.transcript.trim() || "speech";
-      return `${range} ${text}`;
-    }
-  );
-
 export default function MediaSidebar({
-  planId,
-  videoContext,
-  audioSegments = [],
   audioStatus = "idle",
-  audioError = null,
-  audioProgress = 0,
-  videoInsights = [],
-  videoInsightStatus = "idle",
-  videoInsightError = null,
-  sceneChanges = [],
-  sceneStatus = "idle",
-  sceneError = null,
 }: MediaSidebarProps) {
-  return null;
+  return (
+    <div className="flex flex-col gap-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 shadow-2xl backdrop-blur-xl">
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-zinc-200">AI Engine Status</span>
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${audioStatus === "done" ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"}`}>
+            {audioStatus === "done" ? "READY" : audioStatus.toUpperCase()}
+          </span>
+        </div>
+        <p className="text-[10px] text-zinc-500 italic leading-relaxed">
+          The AI is currently processing your video's audio for transcription and silence detection.
+        </p>
+      </section>
+    </div>
+  );
 }

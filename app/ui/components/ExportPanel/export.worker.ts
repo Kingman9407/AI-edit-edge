@@ -3,12 +3,13 @@
 /**
  * export.worker.ts
  *
- * Off-main-thread WebCodecs export pipeline using Mediabunny v1.40.1.
+ * Off-main-thread WebCodecs export pipeline using Mediabunny v1.44.2.
  *
  * Architecture:
  *  - Demux source with Mediabunny Input + EncodedPacketSink
- *  - Decode via VideoDecoder, render to OffscreenCanvas, encode via CanvasSource (VideoSampleSource under the hood)
- *  - Audio: decode entire file with OfflineAudioContext, feed segments via AudioBufferSource
+ *  - Decode via VideoDecoder, render to OffscreenCanvas, encode via CanvasSource
+ *  - Audio passthrough: EncodedAudioPacketSource (no decode, fastest)
+ *  - Audio mixing: pre-decoded PCM from main thread → AudioSampleSource
  *  - Mux with Mediabunny Output → Mp4OutputFormat → BufferTarget
  *  - Hardware fallback: getFirstEncodableVideoCodec(['hevc','vp9','avc'])
  *  - Memory: frame.close() immediately after use; backpressure via decoder/encoder queue monitoring
@@ -21,13 +22,15 @@ import {
   BufferTarget,
   BlobSource,
   EncodedPacketSink,
-  AudioBufferSink,
-  AudioBufferSource,
+  EncodedAudioPacketSource,
+  AudioSample,
+  AudioSampleSink,
+  AudioSampleSource,
   CanvasSource,
   MP4,
   getFirstEncodableVideoCodec,
 } from "mediabunny";
-import type { VideoCodec, InputAudioTrack } from "mediabunny";
+import type { VideoCodec, AudioCodec, InputAudioTrack } from "mediabunny";
 
 export interface QualityOption {
   id: "fast" | "standard" | "high";
@@ -38,6 +41,28 @@ export interface QualityOption {
   codec: string;
 }
 
+export type MutedSegment = { start: number; end: number };
+
+/** Raw PCM data pre-decoded on the main thread */
+export type DecodedPCM = {
+  channels: Float32Array[];
+  sampleRate: number;
+  numberOfChannels: number;
+  length: number; // number of sample frames
+  duration: number; // seconds
+};
+
+export type AudioOverlayPCM = {
+  /** Pre-decoded PCM data (decoded on main thread) */
+  pcm: DecodedPCM;
+  /** Start time in the VIDEO timeline (seconds) */
+  videoStart: number;
+  /** End time in the VIDEO timeline (seconds) */
+  videoEnd: number;
+  /** Mix volume 0–1 */
+  volume: number;
+};
+
 export type ExportWorkerMessage =
   | {
       type: "start";
@@ -45,6 +70,12 @@ export type ExportWorkerMessage =
       segments: { start: number; end: number }[];
       quality: QualityOption;
       label: string;
+      /** Ranges inside kept segments whose audio should be silenced */
+      mutedSegments?: MutedSegment[];
+      /** Pre-decoded overlay audio PCM data */
+      audioOverlaysPCM?: AudioOverlayPCM[];
+      /** Pre-decoded native audio PCM (from the source video file) */
+      nativeAudioPCM?: DecodedPCM | null;
     }
   | { type: "abort" };
 
@@ -54,12 +85,19 @@ export type ExportWorkerResponse =
   | { type: "error"; error: string; label: string };
 
 const MAX_DECODE_QUEUE = 30;
-const AUDIO_CHUNK_FRAMES = 4096;
 
 self.onmessage = async (event: MessageEvent<ExportWorkerMessage>) => {
   if (event.data.type !== "start") return;
 
-  const { file, segments, quality, label } = event.data;
+  const {
+    file,
+    segments,
+    quality,
+    label,
+    mutedSegments = [],
+    audioOverlaysPCM = [],
+    nativeAudioPCM = null,
+  } = event.data;
 
   const progress = (percent: number, message: string) => {
     self.postMessage({
@@ -71,7 +109,10 @@ self.onmessage = async (event: MessageEvent<ExportWorkerMessage>) => {
   };
 
   try {
-    const blob = await runExportPipeline(file, segments, quality, progress);
+    const blob = await runExportPipeline(
+      file, segments, quality, progress,
+      mutedSegments, audioOverlaysPCM, nativeAudioPCM
+    );
     const baseName = file.name.replace(/\.[^.]+$/, "");
     self.postMessage({
       type: "done",
@@ -119,7 +160,10 @@ async function runExportPipeline(
   file: File,
   segments: { start: number; end: number }[],
   quality: QualityOption,
-  onProgress: (pct: number, msg: string) => void
+  onProgress: (pct: number, msg: string) => void,
+  mutedSegments: MutedSegment[] = [],
+  audioOverlaysPCM: AudioOverlayPCM[] = [],
+  nativeAudioPCM: DecodedPCM | null = null
 ): Promise<Blob> {
   onProgress(2, "Opening input file…");
 
@@ -168,18 +212,45 @@ async function runExportPipeline(
   });
 
   const audioTrack = await input.getPrimaryAudioTrack();
-  const hasAudio = audioTrack !== null && typeof AudioContext !== "undefined";
+  const hasNativeAudio = audioTrack !== null;
+  const hasMuting = mutedSegments.length > 0;
+  const hasOverlays = audioOverlaysPCM.length > 0;
+  // We need audio if there's a native track OR if overlays need to be mixed in
+  const needsAudio = hasNativeAudio || hasOverlays;
+  // We can use fast passthrough (copy encoded packets) when there's no muting and no overlays
+  const canPassthrough = hasNativeAudio && !hasMuting && !hasOverlays;
 
-  let audioSource: AudioBufferSource | null = null;
-  if (hasAudio) {
-    audioSource = new AudioBufferSource({
+  console.log("[Worker Audio] audioTrack:", audioTrack ? "found" : "null");
+  console.log("[Worker Audio] hasNativeAudio:", hasNativeAudio);
+  console.log("[Worker Audio] hasMuting:", hasMuting, "hasOverlays:", hasOverlays);
+  console.log("[Worker Audio] needsAudio:", needsAudio, "canPassthrough:", canPassthrough);
+
+  // --- Audio source setup ---
+  let encodedAudioSource: EncodedAudioPacketSource | null = null;
+  let decodedAudioSource: AudioSampleSource | null = null;
+
+  if (needsAudio && canPassthrough && audioTrack) {
+    const decoderConfig = await audioTrack.getDecoderConfig();
+    const rawCodec = decoderConfig?.codec?.split(".")[0] ?? "aac";
+    const codecMap: Record<string, string> = { mp4a: "aac", mp3: "mp3", opus: "opus", vorbis: "vorbis", flac: "flac", ac3: "ac3", "ec-3": "eac3" };
+    const audioCodec = (codecMap[rawCodec] ?? rawCodec) as AudioCodec;
+    console.log(`[Worker Audio] Raw codec: "${decoderConfig?.codec}", mapped to: "${audioCodec}"`);
+    encodedAudioSource = new EncodedAudioPacketSource(audioCodec);
+    output.addVideoTrack(videoSource);
+    output.addAudioTrack(encodedAudioSource);
+    console.log("[Worker Audio] Using PASSTHROUGH mode with codec:", audioCodec);
+  } else if (needsAudio) {
+    decodedAudioSource = new AudioSampleSource({
       codec: "aac",
       bitrate: 128_000,
     });
+    output.addVideoTrack(videoSource);
+    output.addAudioTrack(decodedAudioSource);
+    console.log("[Worker Audio] Using DECODE mode (muting/overlays present)");
+  } else {
+    output.addVideoTrack(videoSource);
+    console.log("[Worker Audio] No audio processing needed");
   }
-
-  output.addVideoTrack(videoSource);
-  if (audioSource) output.addAudioTrack(audioSource);
 
   await output.start();
 
@@ -283,17 +354,91 @@ async function runExportPipeline(
   videoDecoder.close();
   videoSource.close();
 
-  if (hasAudio && audioSource) {
-    onProgress(82, "Processing audio…");
+  // ─── Audio pass ───
+  if (encodedAudioSource && audioTrack) {
+    // PASSTHROUGH: copy encoded audio packets directly (no decode/re-encode)
+    onProgress(82, "Copying audio…");
+    console.log("[Worker Audio] Starting PASSTHROUGH audio copy...");
     try {
-      await processAudio(audioTrack, segments, audioSource);
+      const audioPacketSink = new EncodedPacketSink(audioTrack);
+      let packetCount = 0;
+      let isFirstPacket = true;
+
+      for (const seg of segments) {
+        // Get the first key packet at or before segment start
+        const firstPacket = await audioPacketSink.getKeyPacket(seg.start);
+        if (!firstPacket) {
+          console.log(`[Worker Audio] No audio packets found for segment ${seg.start}-${seg.end}`);
+          continue;
+        }
+
+        for await (const packet of audioPacketSink.packets(firstPacket)) {
+          if (packet.timestamp > seg.end) break;
+          if (packet.timestamp + packet.duration < seg.start) continue;
+
+          // For the first packet, pass metadata so the muxer knows the codec config
+          if (isFirstPacket) {
+            const config = await audioTrack.getDecoderConfig();
+            const meta: EncodedAudioChunkMetadata = {
+              decoderConfig: config ? {
+                codec: config.codec,
+                sampleRate: config.sampleRate,
+                numberOfChannels: config.numberOfChannels,
+                description: config.description,
+              } : undefined,
+            };
+            await encodedAudioSource.add(packet, meta);
+            isFirstPacket = false;
+          } else {
+            await encodedAudioSource.add(packet);
+          }
+          packetCount++;
+        }
+      }
+      console.log(`[Worker Audio] PASSTHROUGH done. ${packetCount} audio packets copied.`);
     } catch (err) {
-      console.warn(
-        "[Worker] Audio processing failed, exporting without audio:",
-        err
-      );
+      console.error("[Worker Audio] PASSTHROUGH audio copy FAILED:", err);
+      throw err;
     }
-    audioSource.close();
+    encodedAudioSource.close();
+  } else if (decodedAudioSource) {
+    // DECODE MODE: mix pre-decoded PCM from main thread
+    onProgress(82, "Processing audio…");
+    console.log("[Worker Audio] Starting PCM mixing mode...");
+    try {
+      let sourceAudioPCM = nativeAudioPCM;
+      if (!sourceAudioPCM && hasNativeAudio && audioTrack) {
+        onProgress(82, "Decoding source audio in worker…");
+        sourceAudioPCM = await decodeNativeAudioTrackToPCM(audioTrack, (msg) => {
+          console.log("[Worker Audio]", msg);
+        });
+      }
+
+      if (hasNativeAudio && !sourceAudioPCM) {
+        throw new Error("Could not decode the source audio for the modified export.");
+      }
+
+      await processAudioPCM(
+        sourceAudioPCM,
+        segments,
+        decodedAudioSource,
+        mutedSegments,
+        audioOverlaysPCM,
+        totalDuration,
+        (msg) => {
+          console.log("[Worker Audio]", msg);
+          onProgress(82, msg);
+        }
+      );
+      console.log("[Worker Audio] PCM mixing completed successfully");
+    } catch (err) {
+      console.error("[Worker Audio] PCM mixing FAILED:", err);
+      onProgress(82, "Audio processing failed: " + String(err));
+      throw err;
+    }
+    decodedAudioSource.close();
+  } else {
+    console.log("[Worker Audio] No audio to process");
   }
 
   onProgress(95, "Finalizing MP4…");
@@ -306,53 +451,238 @@ async function runExportPipeline(
   return new Blob([buffer], { type: "video/mp4" });
 }
 
-async function processAudio(
+/**
+ * Returns true if the absolute time falls inside any muted segment.
+ */
+function isSampleMuted(
+  absSec: number,
+  mutedSegments: MutedSegment[]
+): boolean {
+  return mutedSegments.some((m) => absSec >= m.start && absSec < m.end);
+}
+
+async function decodeNativeAudioTrackToPCM(
   audioTrack: InputAudioTrack,
-  segments: { start: number; end: number }[],
-  audioSource: AudioBufferSource
-): Promise<void> {
-  const audioSink = new AudioBufferSink(audioTrack);
+  onLog?: (msg: string) => void
+): Promise<DecodedPCM | null> {
+  const sink = new AudioSampleSink(audioTrack);
+  const chunks: {
+    timestamp: number;
+    channels: Float32Array[];
+    frameCount: number;
+  }[] = [];
 
-  for (const seg of segments) {
-    for await (const wrapped of audioSink.buffers(seg.start, seg.end)) {
-      const buffer = wrapped.buffer;
-      const bufStart = wrapped.timestamp;
-      const bufEnd = bufStart + wrapped.duration;
+  let sampleRate = 0;
+  let numberOfChannels = 0;
+  let totalFrames = 0;
+  let sampleCount = 0;
 
-      let startOffsetSec = 0;
-      let endOffsetSec = wrapped.duration;
+  for await (const sample of sink.samples()) {
+    try {
+      if (!sampleRate) sampleRate = sample.sampleRate;
+      if (!numberOfChannels) numberOfChannels = sample.numberOfChannels;
 
-      if (bufStart < seg.start) {
-        startOffsetSec = seg.start - bufStart;
+      if (
+        sample.sampleRate !== sampleRate ||
+        sample.numberOfChannels !== numberOfChannels
+      ) {
+        throw new Error("Source audio parameters changed during decode.");
       }
-      if (bufEnd > seg.end) {
-        endOffsetSec = seg.end - bufStart;
+
+      const channels: Float32Array[] = [];
+      for (let ch = 0; ch < numberOfChannels; ch++) {
+        const channelData = new Float32Array(sample.numberOfFrames);
+        sample.copyTo(channelData, {
+          planeIndex: ch,
+          format: "f32-planar",
+        });
+        channels.push(channelData);
       }
 
-      if (startOffsetSec > 0 || endOffsetSec < wrapped.duration) {
-        const startSample = Math.floor(startOffsetSec * buffer.sampleRate);
-        const endSample = Math.floor(endOffsetSec * buffer.sampleRate);
-        const numFrames = endSample - startSample;
+      const startFrame = Math.round(sample.timestamp * sampleRate);
+      const endFrame = startFrame + sample.numberOfFrames;
+      if (endFrame > totalFrames) totalFrames = endFrame;
 
-        if (numFrames > 0) {
-          const croppedBuffer = new AudioBuffer({
-            length: numFrames,
-            numberOfChannels: buffer.numberOfChannels,
-            sampleRate: buffer.sampleRate,
-          });
-          for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-            croppedBuffer.copyToChannel(
-              buffer.getChannelData(ch).subarray(startSample, endSample),
-              ch
-            );
-          }
-          await audioSource.add(croppedBuffer);
-        }
-      } else {
-        await audioSource.add(buffer);
-      }
+      chunks.push({
+        timestamp: sample.timestamp,
+        channels,
+        frameCount: sample.numberOfFrames,
+      });
+      sampleCount++;
+    } finally {
+      sample.close();
     }
   }
+
+  if (!sampleRate || !numberOfChannels || !totalFrames) {
+    onLog?.("Worker source audio decode produced no samples.");
+    return null;
+  }
+
+  const channels = Array.from(
+    { length: numberOfChannels },
+    () => new Float32Array(totalFrames)
+  );
+
+  for (const chunk of chunks) {
+    const startFrame = Math.max(0, Math.round(chunk.timestamp * sampleRate));
+    const sourceOffset =
+      chunk.timestamp < 0
+        ? Math.min(chunk.frameCount, -Math.round(chunk.timestamp * sampleRate))
+        : 0;
+    const writableFrames = Math.min(
+      chunk.frameCount - sourceOffset,
+      totalFrames - startFrame
+    );
+    if (writableFrames <= 0) continue;
+
+    for (let ch = 0; ch < numberOfChannels; ch++) {
+      channels[ch].set(
+        chunk.channels[ch].subarray(sourceOffset, sourceOffset + writableFrames),
+        startFrame
+      );
+    }
+  }
+
+  onLog?.(
+    `Worker decoded source audio: ${(totalFrames / sampleRate).toFixed(2)}s, ${numberOfChannels}ch, ${sampleCount} samples`
+  );
+
+  return {
+    channels,
+    sampleRate,
+    numberOfChannels,
+    length: totalFrames,
+    duration: totalFrames / sampleRate,
+  };
 }
+
+/**
+ * Process audio using pre-decoded PCM data from the main thread.
+ * No AudioBuffer or OfflineAudioContext needed — works purely with Float32Arrays
+ * and feeds real AudioSample instances to Mediabunny's AudioSampleSource.
+ */
+async function processAudioPCM(
+  nativePCM: DecodedPCM | null,
+  segments: { start: number; end: number }[],
+  audioSource: AudioSampleSource,
+  mutedSegments: MutedSegment[] = [],
+  overlaysPCM: AudioOverlayPCM[] = [],
+  totalDuration = 0,
+  onLog?: (msg: string) => void
+): Promise<void> {
+  console.log("[Worker Audio PCM] Entry.");
+  console.log("[Worker Audio PCM] nativePCM:", nativePCM ? `${nativePCM.duration.toFixed(2)}s, ${nativePCM.numberOfChannels}ch` : "null");
+  console.log("[Worker Audio PCM] segments:", JSON.stringify(segments));
+  console.log("[Worker Audio PCM] mutedSegments:", JSON.stringify(mutedSegments));
+  console.log("[Worker Audio PCM] overlaysPCM count:", overlaysPCM.length);
+  onLog?.(`Mixing audio — ${totalDuration.toFixed(1)}s total`);
+
+  const SAMPLE_RATE = nativePCM?.sampleRate ?? 44100;
+  const NUM_CHANNELS = 2;
+  const CHUNK_SECONDS = 2; // Process in 2-second chunks
+  let totalBuffersAdded = 0;
+  let currentExportTime = 0;
+
+  for (const seg of segments) {
+    console.log(`[Worker Audio PCM] Segment: ${seg.start.toFixed(2)}s - ${seg.end.toFixed(2)}s`);
+    let t = seg.start;
+
+    while (t < seg.end) {
+      const chunkEnd = Math.min(t + CHUNK_SECONDS, seg.end);
+      const chunkDur = chunkEnd - t;
+      if (chunkDur <= 0) { t = chunkEnd; continue; }
+
+      const chunkSamples = Math.max(1, Math.round(chunkDur * SAMPLE_RATE));
+
+      // Build channel data for this chunk
+      const channels: Float32Array[] = [];
+      for (let ch = 0; ch < NUM_CHANNELS; ch++) {
+        channels.push(new Float32Array(chunkSamples));
+      }
+
+      // 1) Copy native audio into the chunk
+      if (nativePCM) {
+        const srcStart = Math.floor(t * SAMPLE_RATE);
+        const srcNumCh = Math.min(nativePCM.numberOfChannels, NUM_CHANNELS);
+        for (let ch = 0; ch < srcNumCh; ch++) {
+          const src = nativePCM.channels[ch];
+          const dst = channels[ch];
+          for (let i = 0; i < chunkSamples; i++) {
+            const srcIdx = srcStart + i;
+            if (srcIdx >= 0 && srcIdx < src.length) {
+              dst[i] = src[srcIdx];
+            }
+          }
+        }
+      }
+
+      // 2) Apply muting
+      if (mutedSegments.length > 0) {
+        for (let i = 0; i < chunkSamples; i++) {
+          const absSec = t + i / SAMPLE_RATE;
+          if (isSampleMuted(absSec, mutedSegments)) {
+            for (let ch = 0; ch < NUM_CHANNELS; ch++) {
+              channels[ch][i] = 0;
+            }
+          }
+        }
+      }
+
+      // 3) Mix in overlay audio
+      for (const ov of overlaysPCM) {
+        const chunkAbsEnd = t + chunkDur;
+        if (ov.videoEnd <= t || ov.videoStart >= chunkAbsEnd) continue;
+
+        const ovPcm = ov.pcm;
+        const ovNumCh = Math.min(ovPcm.numberOfChannels, NUM_CHANNELS);
+
+        for (let ch = 0; ch < NUM_CHANNELS; ch++) {
+          const dst = channels[ch];
+          const ovSrc = ch < ovNumCh ? ovPcm.channels[ch] : ovPcm.channels[0];
+
+          for (let i = 0; i < chunkSamples; i++) {
+            const absSec = t + i / SAMPLE_RATE;
+            if (absSec < ov.videoStart || absSec >= ov.videoEnd) continue;
+
+            const ovIdx = Math.floor((absSec - ov.videoStart) * ovPcm.sampleRate);
+            if (ovIdx < 0 || ovIdx >= ovSrc.length) continue;
+
+            dst[i] = Math.max(-1, Math.min(1, dst[i] + ovSrc[ovIdx] * ov.volume));
+          }
+        }
+      }
+
+      // 4) Feed the mixed PCM to Mediabunny as planar f32 AudioSample data
+      const planarData = new Float32Array(NUM_CHANNELS * chunkSamples);
+      for (let ch = 0; ch < NUM_CHANNELS; ch++) {
+        planarData.set(channels[ch], ch * chunkSamples);
+      }
+
+      const audioSample = new AudioSample({
+        data: planarData,
+        format: "f32-planar",
+        sampleRate: SAMPLE_RATE,
+        numberOfChannels: NUM_CHANNELS,
+        timestamp: currentExportTime,
+      });
+      const audioSampleDuration = audioSample.duration;
+
+      try {
+        await audioSource.add(audioSample);
+      } finally {
+        audioSample.close();
+      }
+      totalBuffersAdded++;
+      currentExportTime += audioSampleDuration;
+      t = chunkEnd;
+    }
+
+    console.log(`[Worker Audio PCM] Segment ${seg.start.toFixed(2)}-${seg.end.toFixed(2)} done`);
+  }
+
+  console.log(`[Worker Audio PCM] DONE. Buffers: ${totalBuffersAdded}, duration: ${currentExportTime.toFixed(2)}s`);
+}
+
 
 export {};

@@ -1,80 +1,59 @@
 {
-  "savedAt": "2026-04-25T06:42:07.578Z",
+  "savedAt": "2026-05-13T14:17:59.642Z",
   "request": {
-    "message": "remove 3min to 10 min",
+    "message": "keep only the first 1 min",
     "video": {
-      "name": "2026_Renault_Duster_-_Feature_Loaded_With_3_Engine_Options_Faisal_Khan_720P_trimmed.mp4",
+      "name": "2026_Renault_Duster_-_Feature_Loaded_With_3_Engine_Options_Faisal_Khan_720P.mp4",
       "type": "video/mp4",
-      "sizeBytes": 176633683,
-      "duration": 702.666667,
+      "sizeBytes": 117877976,
+      "duration": 762.666667,
       "width": 1280,
       "height": 720,
-      "currentTime": 0,
+      "currentTime": 0.507276,
       "trimStartSeconds": 0,
-      "trimEndSeconds": 702.666667,
-      "isEditorMode": false
+      "trimEndSeconds": 762.666667
     },
     "history": [
       {
+        "role": "assistant",
+        "content": "Adding audio overlay (file #1) from 0.00s – 762.67s."
+      },
+      {
         "role": "user",
-        "content": "hi"
+        "content": "remove the old audio"
       },
       {
         "role": "assistant",
-        "content": "Hey! How can I help you with your video today?"
+        "content": "Muting 0.00s – 762.67s."
       },
       {
         "role": "user",
-        "content": "cut first 1 min"
-      },
-      {
-        "role": "assistant",
-        "content": "Cutting 0.00s – 60.00s."
-      },
-      {
-        "role": "user",
-        "content": "cut last 1min"
-      },
-      {
-        "role": "assistant",
-        "content": "Cutting 642.67s – 702.67s."
-      },
-      {
-        "role": "user",
-        "content": "remove the first 1 min now"
-      },
-      {
-        "role": "assistant",
-        "content": "Cutting 0.00s – 60.00s."
-      },
-      {
-        "role": "user",
-        "content": "remove 3min to 10 min"
+        "content": "keep only the first 1 min"
       }
     ]
   },
   "response": {
-    "raw": "\n         \n\n         \n\n         \n\n         \n\n         \n{\"id\":\"gen-1777099325-sOTmwPUWxIMm3cRcnU6C\",\"object\":\"chat.completion\",\"created\":1777099325,\"model\":\"openai/gpt-oss-120b\",\"provider\":\"DeepInfra\",\"system_fingerprint\":null,\"choices\":[{\"index\":0,\"logprobs\":null,\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"tool_calls\",\"message\":{\"role\":\"assistant\",\"content\":null,\"refusal\":null,\"reasoning\":\"User wants to remove 3min to 10 min. That's 180s to 600s. Need to apply cut_segment.\",\"tool_calls\":[{\"type\":\"function\",\"index\":0,\"id\":\"chatcmpl-tool-3730852b9fe54ffd8b293ea7b3e7598d\",\"function\":{\"name\":\"cut_segment\",\"arguments\":\"{\\n  \\\"start\\\": 180,\\n  \\\"end\\\": 600,\\n  \\\"reason\\\": \\\"Remove segment from 3min to 10min\\\"\\n}\"}}],\"reasoning_details\":[{\"type\":\"reasoning.text\",\"text\":\"User wants to remove 3min to 10 min. That's 180s to 600s. Need to apply cut_segment.\",\"format\":\"unknown\",\"index\":0}]}}],\"usage\":{\"prompt_tokens\":1104,\"completion_tokens\":77,\"total_tokens\":1181,\"cost\":0.000057686,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.000057686,\"upstream_inference_prompt_cost\":0.000043056,\"upstream_inference_completions_cost\":0.00001463},\"completion_tokens_details\":{\"reasoning_tokens\":21,\"image_tokens\":0,\"audio_tokens\":0}}}",
+    "raw": "\n         \n\n         \n\n         \n\n         \n\n         \n\n         \n\n         \n\n         \n{\"id\":\"gen-1778681875-VgnC0O6kndIqP25S00Bg\",\"object\":\"chat.completion\",\"created\":1778681875,\"model\":\"openai/gpt-oss-120b\",\"provider\":\"DeepInfra\",\"system_fingerprint\":null,\"choices\":[{\"index\":0,\"logprobs\":null,\"finish_reason\":\"tool_calls\",\"native_finish_reason\":\"tool_calls\",\"message\":{\"role\":\"assistant\",\"content\":null,\"refusal\":null,\"reasoning\":\"User wants to keep only the first 1 minute (60 seconds). Use keep_segment from 0 to 60 seconds. The active timeline currently is full video 0-762.67. So we keep 0-60, removing rest. Use keep_segment.\",\"tool_calls\":[{\"type\":\"function\",\"index\":0,\"id\":\"chatcmpl-tool-a080a2c3cf854e9a8efefab18abd3102\",\"function\":{\"name\":\"keep_segment\",\"arguments\":\"{\\n  \\\"start\\\": 0,\\n  \\\"end\\\": 60,\\n  \\\"reason\\\": \\\"keep first minute\\\"\\n}\"}}],\"reasoning_details\":[{\"type\":\"reasoning.text\",\"text\":\"User wants to keep only the first 1 minute (60 seconds). Use keep_segment from 0 to 60 seconds. The active timeline currently is full video 0-762.67. So we keep 0-60, removing rest. Use keep_segment.\",\"format\":\"unknown\",\"index\":0}]}}],\"usage\":{\"prompt_tokens\":1264,\"completion_tokens\":97,\"total_tokens\":1361,\"cost\":0.000067726,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.000067726,\"upstream_inference_prompt_cost\":0.000049296,\"upstream_inference_completions_cost\":0.00001843},\"completion_tokens_details\":{\"reasoning_tokens\":50,\"image_tokens\":0,\"audio_tokens\":0}}}",
     "toolActions": [
       {
-        "type": "cut",
-        "start": 180,
-        "end": 600,
+        "type": "keep",
+        "start": 0,
+        "end": 60,
         "clip": null,
-        "reason": "Remove segment from 3min to 10min"
+        "reason": "keep first minute"
       }
     ],
     "parsed": {
-      "assistant_message": "Cutting 180.00s – 600.00s.",
+      "assistant_message": "Keeping 0.00s – 60.00s.",
       "status": "ok",
       "follow_up": null,
       "actions": [
         {
-          "type": "cut",
-          "start": 180,
-          "end": 600,
+          "type": "keep",
+          "start": 0,
+          "end": 60,
           "clip": null,
-          "reason": "Remove segment from 3min to 10min"
+          "reason": "keep first minute"
         }
       ]
     }

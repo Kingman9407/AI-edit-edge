@@ -50,7 +50,7 @@ export const PLAN_CONFIGS: Record<PlanId, PlanConfig> = {
     id: "plus",
     label: "Plus",
     exportLimit: 10,
-    maxTrimFraction: 0.5,
+    maxTrimFraction: 1,
     nextPlanLabel: "Pro",
     chat: {
       includeAudio: true,
