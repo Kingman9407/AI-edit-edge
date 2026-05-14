@@ -9,7 +9,7 @@ type TranscribeResult = {
   category: "speech" | "music" | "sfx";
 };
 
-export const runtime = "nodejs";
+export const runtime = "edge";
 
 const NON_SPEECH_TOKENS = new Set([
   "ta",

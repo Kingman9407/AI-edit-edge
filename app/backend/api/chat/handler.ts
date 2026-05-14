@@ -496,18 +496,20 @@ export async function POST(req: Request) {
     },
   };
 
-  try {
-    const { mkdir, writeFile } = await import("fs/promises");
-    const { join } = await import("path");
-    const dir = join(process.cwd(), ".ai");
-    await mkdir(dir, { recursive: true });
-    await writeFile(
-      join(dir, "last-response.json"),
-      JSON.stringify(record, null, 2),
-      "utf8"
-    );
-  } catch {
-    // ignore write errors in serverless environments
+  if (process.env.NODE_ENV === "development") {
+    try {
+      const { mkdir, writeFile } = await import("fs/promises");
+      const { join } = await import("path");
+      const dir = join(process.cwd(), ".ai");
+      await mkdir(dir, { recursive: true });
+      await writeFile(
+        join(dir, "last-response.json"),
+        JSON.stringify(record, null, 2),
+        "utf8"
+      );
+    } catch {
+      // ignore write errors
+    }
   }
 
   return Response.json(
