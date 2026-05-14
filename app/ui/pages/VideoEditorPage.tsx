@@ -1115,8 +1115,8 @@ export default function VideoEditor() {
                 isPlaying={isPlaying}
                 duration={duration}
                 currentTime={currentTime}
-                activeDuration={timelineDuration}
-                activeCurrentTime={timelineCurrentTime}
+                timelineDuration={timelineDuration}
+                timelineCurrentTime={timelineCurrentTime}
                 volume={volume}
                 isMuted={isMuted}
                 onTogglePlay={togglePlay}
@@ -1208,6 +1208,7 @@ export default function VideoEditor() {
                   currentTime,
                   trimStart,
                   trimEnd,
+                  isEditorMode: true,
                 }}
                 captureFrame={captureFrame}
                 audioSegments={activeAudioSegments}
