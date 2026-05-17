@@ -226,10 +226,18 @@ async function runExportPipeline(
 
     console.log(`[Worker Video] Segment: ${seg.start.toFixed(3)}s – ${seg.end.toFixed(3)}s`);
 
-    // Seek to the nearest key frame at or before seg.start
-    const keyPacket = await videoPacketSink.getKeyPacket(seg.start);
+    // Seek to the nearest key frame at or before seg.start.
+    // getKeyPacket(t) returns null when t is BEFORE the first packet in the track
+    // (common when seg.start = 0 and the container has a tiny timestamp offset).
+    // In that case, fall back to getFirstKeyPacket() which always returns the
+    // very first key frame regardless of timestamp.
+    let keyPacket = await videoPacketSink.getKeyPacket(seg.start);
     if (!keyPacket) {
-      console.warn(`[Worker Video] No key packet found for segment ${seg.start}-${seg.end}, skipping`);
+      console.log(`[Worker Video] getKeyPacket(${seg.start}) returned null, trying getFirstKeyPacket()`);
+      keyPacket = await videoPacketSink.getFirstKeyPacket();
+    }
+    if (!keyPacket) {
+      console.warn(`[Worker Video] No key packet found at all for segment ${seg.start}-${seg.end}, skipping`);
       timeOffset += segDuration;
       continue;
     }
@@ -292,7 +300,10 @@ async function runExportPipeline(
       let isFirstAudioPacket = true;
 
       for (const seg of segments) {
-        const firstPacket = await audioPacketSink.getKeyPacket(seg.start);
+        let firstPacket = await audioPacketSink.getKeyPacket(seg.start);
+        if (!firstPacket) {
+          firstPacket = await audioPacketSink.getFirstKeyPacket();
+        }
         if (!firstPacket) {
           console.log(`[Worker Audio] No audio packets found for segment ${seg.start}-${seg.end}`);
           continue;
