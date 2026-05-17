@@ -7,12 +7,16 @@
  *
  * Architecture:
  *  - Demux source with Mediabunny Input + EncodedPacketSink
- *  - Decode via VideoDecoder, render to OffscreenCanvas, encode via CanvasSource
+ *  - Video passthrough: EncodedVideoPacketSource (no decode/re-encode, works on ALL browsers/mobile)
+ *    - Timestamps are remapped per-segment via packet.clone({ timestamp })
  *  - Audio passthrough: EncodedAudioPacketSource (no decode, fastest)
  *  - Audio mixing: pre-decoded PCM from main thread → AudioSampleSource
  *  - Mux with Mediabunny Output → Mp4OutputFormat → BufferTarget
- *  - Hardware fallback: getFirstEncodableVideoCodec(['hevc','vp9','avc'])
- *  - Memory: frame.close() immediately after use; backpressure via decoder/encoder queue monitoring
+ *  - Memory: frame.close() immediately after use; backpressure via encoder queue monitoring
+ *
+ * NOTE: We deliberately avoid VideoDecoder/VideoEncoder/OffscreenCanvas because they are
+ * unreliable inside Web Workers on mobile browsers (especially Safari/iOS), causing
+ * the video track to be silently omitted from the output file.
  */
 
 import {
@@ -22,13 +26,12 @@ import {
   BufferTarget,
   BlobSource,
   EncodedPacketSink,
+  EncodedVideoPacketSource,
   EncodedAudioPacketSource,
   AudioSample,
   AudioSampleSink,
   AudioSampleSource,
-  CanvasSource,
   MP4,
-  getFirstEncodableVideoCodec,
 } from "mediabunny";
 import type { VideoCodec, AudioCodec, InputAudioTrack } from "mediabunny";
 
@@ -65,26 +68,24 @@ export type AudioOverlayPCM = {
 
 export type ExportWorkerMessage =
   | {
-      type: "start";
-      file: File;
-      segments: { start: number; end: number }[];
-      quality: QualityOption;
-      label: string;
-      /** Ranges inside kept segments whose audio should be silenced */
-      mutedSegments?: MutedSegment[];
-      /** Pre-decoded overlay audio PCM data */
-      audioOverlaysPCM?: AudioOverlayPCM[];
-      /** Pre-decoded native audio PCM (from the source video file) */
-      nativeAudioPCM?: DecodedPCM | null;
-    }
+    type: "start";
+    file: File;
+    segments: { start: number; end: number }[];
+    quality: QualityOption;
+    label: string;
+    /** Ranges inside kept segments whose audio should be silenced */
+    mutedSegments?: MutedSegment[];
+    /** Pre-decoded overlay audio PCM data */
+    audioOverlaysPCM?: AudioOverlayPCM[];
+    /** Pre-decoded native audio PCM (from the source video file) */
+    nativeAudioPCM?: DecodedPCM | null;
+  }
   | { type: "abort" };
 
 export type ExportWorkerResponse =
   | { type: "progress"; percent: number; message: string; label: string }
   | { type: "done"; blob: Blob; name: string; label: string }
   | { type: "error"; error: string; label: string };
-
-const MAX_DECODE_QUEUE = 30;
 
 self.onmessage = async (event: MessageEvent<ExportWorkerMessage>) => {
   if (event.data.type !== "start") return;
@@ -129,33 +130,6 @@ self.onmessage = async (event: MessageEvent<ExportWorkerMessage>) => {
   }
 };
 
-async function negotiateVideoCodec(
-  outW: number,
-  outH: number,
-  bitrate: number
-): Promise<VideoCodec> {
-  const preferenceOrder: VideoCodec[] = ["avc", "hevc", "vp9"];
-  const codec = await getFirstEncodableVideoCodec(preferenceOrder, {
-    width: outW,
-    height: outH,
-    bitrate,
-  });
-
-  if (codec) {
-    return codec;
-  }
-
-  const swCodec = await getFirstEncodableVideoCodec(["avc"]);
-
-  if (swCodec) {
-    return swCodec;
-  }
-
-  throw new Error(
-    "No supported VideoEncoder configuration found. Your browser may not support WebCodecs video encoding."
-  );
-}
-
 async function runExportPipeline(
   file: File,
   segments: { start: number; end: number }[],
@@ -175,24 +149,15 @@ async function runExportPipeline(
   const videoTrack = await input.getPrimaryVideoTrack();
   if (!videoTrack) throw new Error("No video track found in the input file.");
 
-  const decoderConfig = await videoTrack.getDecoderConfig();
-  if (!decoderConfig) {
+  const videoDecoderConfig = await videoTrack.getDecoderConfig();
+  if (!videoDecoderConfig) {
     throw new Error("Cannot determine decoder configuration for video track.");
   }
 
-  let outW = videoTrack.codedWidth;
-  let outH = videoTrack.codedHeight;
-  if (quality.maxHeight && outH > quality.maxHeight) {
-    const scale = quality.maxHeight / outH;
-    outW = Math.round(outW * scale);
-    outH = quality.maxHeight;
-  }
-  outW = outW % 2 === 0 ? outW : outW + 1;
-  outH = outH % 2 === 0 ? outH : outH + 1;
-
-  onProgress(5, "Negotiating best video codec…");
-
-  const videoCodec = await negotiateVideoCodec(outW, outH, quality.bitrate);
+  // Determine the source video codec for passthrough
+  const sourceVideoCodec = videoTrack.codec as VideoCodec;
+  console.log("[Worker Video] Source video codec:", sourceVideoCodec);
+  console.log("[Worker Video] Using PASSTHROUGH mode (no decode/encode, mobile-safe)");
 
   const target = new BufferTarget();
   const output = new Output({
@@ -200,24 +165,16 @@ async function runExportPipeline(
     target,
   });
 
-  const canvas = new OffscreenCanvas(outW, outH);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Failed to get 2D context from OffscreenCanvas.");
-
-  const videoSource = new CanvasSource(canvas, {
-    codec: videoCodec,
-    bitrate: quality.bitrate,
-    keyFrameInterval: 2,
-    hardwareAcceleration: "prefer-hardware",
-  });
+  // ── Video: Passthrough via EncodedVideoPacketSource ──
+  // This avoids VideoDecoder/VideoEncoder/OffscreenCanvas which are broken in
+  // Web Workers on mobile browsers (Safari/iOS, some Android Chrome versions).
+  const videoPacketSource = new EncodedVideoPacketSource(sourceVideoCodec);
 
   const audioTrack = await input.getPrimaryAudioTrack();
   const hasNativeAudio = audioTrack !== null;
   const hasMuting = mutedSegments.length > 0;
   const hasOverlays = audioOverlaysPCM.length > 0;
-  // We need audio if there's a native track OR if overlays need to be mixed in
   const needsAudio = hasNativeAudio || hasOverlays;
-  // We can use fast passthrough (copy encoded packets) when there's no muting and no overlays
   const canPassthrough = hasNativeAudio && !hasMuting && !hasOverlays;
 
   console.log("[Worker Audio] audioTrack:", audioTrack ? "found" : "null");
@@ -230,13 +187,13 @@ async function runExportPipeline(
   let decodedAudioSource: AudioSampleSource | null = null;
 
   if (needsAudio && canPassthrough && audioTrack) {
-    const decoderConfig = await audioTrack.getDecoderConfig();
-    const rawCodec = decoderConfig?.codec?.split(".")[0] ?? "aac";
+    const audioDec = await audioTrack.getDecoderConfig();
+    const rawCodec = audioDec?.codec?.split(".")[0] ?? "aac";
     const codecMap: Record<string, string> = { mp4a: "aac", mp3: "mp3", opus: "opus", vorbis: "vorbis", flac: "flac", ac3: "ac3", "ec-3": "eac3" };
     const audioCodec = (codecMap[rawCodec] ?? rawCodec) as AudioCodec;
-    console.log(`[Worker Audio] Raw codec: "${decoderConfig?.codec}", mapped to: "${audioCodec}"`);
+    console.log(`[Worker Audio] Raw codec: "${audioDec?.codec}", mapped to: "${audioCodec}"`);
     encodedAudioSource = new EncodedAudioPacketSource(audioCodec);
-    output.addVideoTrack(videoSource);
+    output.addVideoTrack(videoPacketSource);
     output.addAudioTrack(encodedAudioSource);
     console.log("[Worker Audio] Using PASSTHROUGH mode with codec:", audioCodec);
   } else if (needsAudio) {
@@ -244,128 +201,97 @@ async function runExportPipeline(
       codec: "aac",
       bitrate: 128_000,
     });
-    output.addVideoTrack(videoSource);
+    output.addVideoTrack(videoPacketSource);
     output.addAudioTrack(decodedAudioSource);
     console.log("[Worker Audio] Using DECODE mode (muting/overlays present)");
   } else {
-    output.addVideoTrack(videoSource);
+    output.addVideoTrack(videoPacketSource);
     console.log("[Worker Audio] No audio processing needed");
   }
 
   await output.start();
 
-  onProgress(10, "Starting video pipeline…");
+  onProgress(10, "Starting video passthrough…");
 
+  // ─── Video pass (packet passthrough with timestamp remapping) ───
   const totalDuration = segments.reduce((s, seg) => s + seg.end - seg.start, 0);
-  let handledSec = 0;
-  let framesEncoded = 0;
+  let timeOffset = 0; // running export timestamp (seconds)
+  let packetsEncoded = 0;
+  let isFirstVideoPacket = true;
 
-  const decodedFrames: VideoFrame[] = [];
-  let decoderError: Error | null = null;
-
-  const videoDecoder = new VideoDecoder({
-    output: (frame) => decodedFrames.push(frame),
-    error: (e) => {
-      decoderError = e instanceof Error ? e : new Error(String(e));
-    },
-  });
-
-  videoDecoder.configure({
-    ...decoderConfig,
-    hardwareAcceleration: "prefer-hardware",
-  });
-
-  const packetSink = new EncodedPacketSink(videoTrack);
+  const videoPacketSink = new EncodedPacketSink(videoTrack);
 
   for (const seg of segments) {
-    if (decoderError) throw decoderError;
+    const segDuration = seg.end - seg.start;
 
-    const segStartSec = seg.start;
-    const segEndSec = seg.end;
+    console.log(`[Worker Video] Segment: ${seg.start.toFixed(3)}s – ${seg.end.toFixed(3)}s`);
 
-    const keyPacket = await packetSink.getKeyPacket(segStartSec);
+    // Seek to the nearest key frame at or before seg.start
+    const keyPacket = await videoPacketSink.getKeyPacket(seg.start);
     if (!keyPacket) {
+      console.warn(`[Worker Video] No key packet found for segment ${seg.start}-${seg.end}, skipping`);
+      timeOffset += segDuration;
       continue;
     }
 
-    for await (const packet of packetSink.packets(keyPacket)) {
-      if (decoderError) throw decoderError;
+    for await (const packet of videoPacketSink.packets(keyPacket)) {
+      // Stop when we've passed the segment end
+      if (packet.timestamp > seg.end) break;
 
-      if (packet.timestamp > segEndSec) break;
+      // Skip pre-roll packets (before the actual segment start)
+      // These are needed by the decoder for context but shouldn't be output
+      if (packet.timestamp + packet.duration <= seg.start) continue;
 
-      videoDecoder.decode(packet.toEncodedVideoChunk());
+      // Remap timestamp: shift so this segment starts at timeOffset
+      const remappedTs = packet.timestamp - seg.start + timeOffset;
 
-      while (videoDecoder.decodeQueueSize > MAX_DECODE_QUEUE) {
-        await new Promise<void>((r) => setTimeout(r, 5));
+      // Clone the packet with the new timestamp (keeps all data/type/duration intact)
+      const remappedPacket = packet.clone({ timestamp: remappedTs });
+
+      if (isFirstVideoPacket) {
+        // Pass decoder config metadata on the first packet so the muxer knows the codec
+        const meta: EncodedVideoChunkMetadata = {
+          decoderConfig: videoDecoderConfig ? {
+            codec: videoDecoderConfig.codec,
+            codedWidth: videoDecoderConfig.codedWidth,
+            codedHeight: videoDecoderConfig.codedHeight,
+            description: videoDecoderConfig.description,
+            colorSpace: videoDecoderConfig.colorSpace,
+          } : undefined,
+        };
+        await videoPacketSource.add(remappedPacket, meta);
+        isFirstVideoPacket = false;
+      } else {
+        await videoPacketSource.add(remappedPacket);
       }
 
-      while (decodedFrames.length > 0) {
-        const frame = decodedFrames.shift()!;
-        const frameTsSec = frame.timestamp / 1_000_000;
+      packetsEncoded++;
 
-        if (frameTsSec >= segStartSec && frameTsSec <= segEndSec) {
-          ctx.clearRect(0, 0, outW, outH);
-          ctx.drawImage(frame, 0, 0, outW, outH);
-
-          const relSec = Math.max(0, frameTsSec - segStartSec);
-          const outTsSec = handledSec + relSec;
-          const durSec = frame.duration ? frame.duration / 1_000_000 : undefined;
-
-          await videoSource.add(outTsSec, durSec);
-          framesEncoded++;
-        }
-
-        frame.close();
-      }
-
-      if (packet.timestamp > segStartSec) {
-        const withinSeg = Math.min(
-          (packet.timestamp - segStartSec) / (segEndSec - segStartSec),
-          1
-        );
-        const overallPct =
-          (handledSec + withinSeg * (segEndSec - segStartSec)) / totalDuration;
-        onProgress(
-          Math.round(10 + overallPct * 70),
-          `Encoding… ${framesEncoded} frames`
-        );
+      // Report progress based on position within segment
+      if (packet.timestamp >= seg.start) {
+        const withinSeg = Math.min((packet.timestamp - seg.start) / segDuration, 1);
+        const overallPct = (timeOffset + withinSeg * segDuration) / totalDuration;
+        onProgress(Math.round(10 + overallPct * 70), `Copying video… ${packetsEncoded} packets`);
       }
     }
 
-    await videoDecoder.flush();
-    while (decodedFrames.length > 0) {
-      const frame = decodedFrames.shift()!;
-      const frameTsSec = frame.timestamp / 1_000_000;
-      if (frameTsSec >= segStartSec && frameTsSec <= segEndSec) {
-        ctx.clearRect(0, 0, outW, outH);
-        ctx.drawImage(frame, 0, 0, outW, outH);
-        const relSec = Math.max(0, frameTsSec - segStartSec);
-        const outTsSec = handledSec + relSec;
-        const durSec = frame.duration ? frame.duration / 1_000_000 : undefined;
-        await videoSource.add(outTsSec, durSec);
-        framesEncoded++;
-      }
-      frame.close();
-    }
-
-    handledSec += segEndSec - segStartSec;
+    timeOffset += segDuration;
+    console.log(`[Worker Video] Segment done. Total packets so far: ${packetsEncoded}`);
   }
 
-  videoDecoder.close();
-  videoSource.close();
+  console.log(`[Worker Video] PASSTHROUGH done. ${packetsEncoded} video packets copied.`);
+  videoPacketSource.close();
 
   // ─── Audio pass ───
   if (encodedAudioSource && audioTrack) {
-    // PASSTHROUGH: copy encoded audio packets directly (no decode/re-encode)
     onProgress(82, "Copying audio…");
     console.log("[Worker Audio] Starting PASSTHROUGH audio copy...");
     try {
       const audioPacketSink = new EncodedPacketSink(audioTrack);
       let packetCount = 0;
-      let isFirstPacket = true;
+      let isFirstAudioPacket = true;
 
       for (const seg of segments) {
-        // Get the first key packet at or before segment start
         const firstPacket = await audioPacketSink.getKeyPacket(seg.start);
         if (!firstPacket) {
           console.log(`[Worker Audio] No audio packets found for segment ${seg.start}-${seg.end}`);
@@ -376,8 +302,7 @@ async function runExportPipeline(
           if (packet.timestamp > seg.end) break;
           if (packet.timestamp + packet.duration < seg.start) continue;
 
-          // For the first packet, pass metadata so the muxer knows the codec config
-          if (isFirstPacket) {
+          if (isFirstAudioPacket) {
             const config = await audioTrack.getDecoderConfig();
             const meta: EncodedAudioChunkMetadata = {
               decoderConfig: config ? {
@@ -388,7 +313,7 @@ async function runExportPipeline(
               } : undefined,
             };
             await encodedAudioSource.add(packet, meta);
-            isFirstPacket = false;
+            isFirstAudioPacket = false;
           } else {
             await encodedAudioSource.add(packet);
           }
@@ -402,7 +327,6 @@ async function runExportPipeline(
     }
     encodedAudioSource.close();
   } else if (decodedAudioSource) {
-    // DECODE MODE: mix pre-decoded PCM from main thread
     onProgress(82, "Processing audio…");
     console.log("[Worker Audio] Starting PCM mixing mode...");
     try {
@@ -580,7 +504,7 @@ async function processAudioPCM(
 
   const SAMPLE_RATE = nativePCM?.sampleRate ?? 44100;
   const NUM_CHANNELS = 2;
-  const CHUNK_SECONDS = 2; // Process in 2-second chunks
+  const CHUNK_SECONDS = 2;
   let totalBuffersAdded = 0;
   let currentExportTime = 0;
 
@@ -595,13 +519,12 @@ async function processAudioPCM(
 
       const chunkSamples = Math.max(1, Math.round(chunkDur * SAMPLE_RATE));
 
-      // Build channel data for this chunk
       const channels: Float32Array[] = [];
       for (let ch = 0; ch < NUM_CHANNELS; ch++) {
         channels.push(new Float32Array(chunkSamples));
       }
 
-      // 1) Copy native audio into the chunk
+      // 1) Copy native audio
       if (nativePCM) {
         const srcStart = Math.floor(t * SAMPLE_RATE);
         const srcNumCh = Math.min(nativePCM.numberOfChannels, NUM_CHANNELS);
@@ -653,7 +576,7 @@ async function processAudioPCM(
         }
       }
 
-      // 4) Feed the mixed PCM to Mediabunny as planar f32 AudioSample data
+      // 4) Feed mixed PCM to Mediabunny
       const planarData = new Float32Array(NUM_CHANNELS * chunkSamples);
       for (let ch = 0; ch < NUM_CHANNELS; ch++) {
         planarData.set(channels[ch], ch * chunkSamples);
@@ -685,4 +608,4 @@ async function processAudioPCM(
 }
 
 
-export {};
+export { };
