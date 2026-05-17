@@ -29,7 +29,7 @@ export default function TimelineControls({
   return (
     <div className="w-full space-y-4 py-2">
       <div className="relative group">
-        <div 
+        <div
           ref={progressRef}
           onClick={onProgressClick}
           className="relative h-1 w-full cursor-pointer rounded-full bg-emerald-500/20 ring-1 ring-white/5 transition-all hover:h-2"
@@ -47,13 +47,13 @@ export default function TimelineControls({
           ))}
 
           {/* Progress playhead highlight */}
-          <div 
+          <div
             className="absolute left-0 top-0 h-full w-px bg-white shadow-[0_0_10px_white] z-10"
             style={{ left: `${physicalPercent}%` }}
           />
         </div>
       </div>
-      
+
       <div className="flex items-center justify-between">
         <div className="flex gap-6">
           <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest flex items-center gap-1.5">
@@ -66,25 +66,27 @@ export default function TimelineControls({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${!isSkippingEdits ? "text-red-400" : "text-zinc-600"}`}>
-            Full Video
-          </span>
+        <div className="flex items-center rounded-full bg-zinc-900 ring-1 ring-white/5 p-0.5">
           <button
-            onClick={toggleIsSkippingEdits}
-            className={`relative h-6 w-11 rounded-full transition-colors duration-300 ${
-              isSkippingEdits ? "bg-emerald-500/20 ring-1 ring-emerald-500/50" : "bg-red-500/20 ring-1 ring-red-500/50"
+            onClick={() => isSkippingEdits && toggleIsSkippingEdits()}
+            className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full transition-all duration-300 ${
+              !isSkippingEdits 
+                ? "bg-red-500/20 text-red-400 shadow-sm ring-1 ring-red-500/50" 
+                : "text-zinc-500 hover:text-zinc-400"
             }`}
           >
-            <div
-              className={`absolute top-1 h-4 w-4 rounded-full transition-all duration-300 ease-spring ${
-                isSkippingEdits ? "left-6 bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]" : "left-1 bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]"
-              }`}
-            />
+            All
           </button>
-          <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${isSkippingEdits ? "text-emerald-400" : "text-zinc-600"}`}>
-            Active Only
-          </span>
+          <button
+            onClick={() => !isSkippingEdits && toggleIsSkippingEdits()}
+            className={`px-3 py-1 text-[10px] font-bold uppercase tracking-widest rounded-full transition-all duration-300 ${
+              isSkippingEdits 
+                ? "bg-emerald-500/20 text-emerald-400 shadow-sm ring-1 ring-emerald-500/50" 
+                : "text-zinc-500 hover:text-zinc-400"
+            }`}
+          >
+            Active
+          </button>
         </div>
       </div>
     </div>

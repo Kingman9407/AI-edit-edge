@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Send, Bot, User, ChevronDown } from "lucide-react";
+import { Send, Bot, User, ChevronDown, MoreHorizontal } from "lucide-react";
 import { formatTime } from "@/app/backend/functions/formatTime";
 import { normalizeSegments, type Segment } from "@/app/backend/functions/segments";
 import { PLAN_CONFIGS, PlanId, PLAN_ORDER } from "@/app/backend/functions/plans";
@@ -231,7 +231,7 @@ export default function Chat({
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [memory, setMemory] = useState<ChatMemory | null>(null);
-  const [isHeaderExpanded, setIsHeaderExpanded] = useState(false);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!allowSuggestions) {
@@ -1427,141 +1427,7 @@ export default function Chat({
 
   return (
     <div className="flex h-full min-h-[520px] max-h-[82vh] flex-col overflow-hidden rounded-3xl border border-zinc-800/70 bg-gradient-to-b from-zinc-900/90 via-zinc-950/95 to-zinc-950/98 backdrop-blur-2xl shadow-2xl shadow-black/40">
-      {/* Header */}
-      <div className="border-b border-zinc-800/60 bg-gradient-to-r from-zinc-950/80 via-zinc-900/50 to-zinc-950/80 px-6 py-4">
-        <div className="flex flex-col w-full">
-          {/* Top Row: Toggle and Chat Actions */}
-          <div className="flex items-center justify-between w-full">
-            <button
-              onClick={() => setIsHeaderExpanded(!isHeaderExpanded)}
-              className="flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900/40 px-3 py-1.5 text-[10px] uppercase tracking-wider text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all"
-            >
-              <span>{isHeaderExpanded ? "Hide Details" : "Tokens & Plans"}</span>
-              <div className={`transform transition-transform duration-300 ${isHeaderExpanded ? "rotate-180" : "rotate-0"}`}>
-                <ChevronDown size={12} />
-              </div>
-            </button>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsHistoryOpen((prev) => !prev)}
-                className="inline-flex items-center gap-2 rounded-full border border-zinc-700/60 bg-zinc-800/40 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-all hover:border-blue-500/60 hover:bg-blue-500/10 hover:text-white"
-              >
-                <span className="flex flex-col gap-[3px]">
-                  <span className="h-[2px] w-3.5 rounded-full bg-current"></span>
-                  <span className="h-[2px] w-3.5 rounded-full bg-current"></span>
-                  <span className="h-[2px] w-3.5 rounded-full bg-current"></span>
-                </span>
-                History
-              </button>
-              <button
-                type="button"
-                onClick={handleNewChat}
-                className="rounded-full border border-zinc-700/60 bg-zinc-800/40 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-all hover:border-emerald-400/60 hover:bg-emerald-500/10 hover:text-white"
-              >
-                + New Chat
-              </button>
-            </div>
-          </div>
-
-          {/* Collapsible Area: Token Usage and Plans */}
-          <div className={`w-full overflow-hidden transition-all duration-300 ease-in-out flex flex-wrap items-center justify-between gap-4 ${isHeaderExpanded ? "max-h-40 opacity-100 mt-4" : "max-h-0 opacity-0 mt-0"}`}>
-            {tokenUsage ? (
-              <div className="flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-wider">
-                <div className="flex items-center gap-1.5 rounded-full border border-zinc-800/50 bg-zinc-900/40 px-2 py-1 shadow-sm">
-                  <span className="text-zinc-500 font-medium">Total</span>
-                  <span className="font-mono font-bold text-blue-400">{tokenUsage.total.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
-                  <span className="text-zinc-500">Chat</span>
-                  <span className="font-mono text-zinc-300">{tokenUsage.chat.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
-                  <span className="text-zinc-500">Audio</span>
-                  <span className="font-mono text-zinc-300">{tokenUsage.audio.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
-                  <span className="text-zinc-500">Vision</span>
-                  <span className="font-mono text-zinc-300">{tokenUsage.vision.toLocaleString()}</span>
-                </div>
-              </div>
-            ) : <div />}
-
-            {onPlanSelect ? (
-              <div className="flex items-center rounded-full border border-zinc-800 bg-zinc-900/70 p-1 shadow-inner">
-                {PLAN_ORDER.map((planOption) => {
-                  const isActive = planOption === planId;
-                  return (
-                    <button
-                      key={planOption}
-                      type="button"
-                      onClick={() => onPlanSelect(planOption)}
-                      className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-wide transition ${
-                        isActive
-                          ? "bg-blue-600 text-white shadow"
-                          : "text-zinc-400 hover:text-white"
-                      }`}
-                    >
-                      {PLAN_CONFIGS[planOption].label}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      {memorySummary ? (
-        <div className="border-b border-zinc-800/50 bg-zinc-950/50 px-6 py-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-              Memory
-            </div>
-          </div>
-          <div className="mt-1 text-xs text-zinc-400">{memorySummary}</div>
-        </div>
-      ) : null}
-
-      {isHistoryOpen ? (
-        <div className="border-b border-zinc-800/50 bg-zinc-950/50 px-4 py-4">
-          <div className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
-            Chat History
-          </div>
-          <div className="mt-3 max-h-44 space-y-2 overflow-y-auto text-xs text-zinc-300">
-            {sessions.length ? (
-              sessions.map((session) => {
-                const isActive = session.id === currentSessionId;
-                const updated = new Date(session.updatedAt).toLocaleString();
-                return (
-                  <button
-                    key={session.id}
-                    type="button"
-                    onClick={() => handleSelectSession(session.id)}
-                    className={`flex w-full flex-col rounded-xl border px-3 py-2 text-left transition-all ${
-                      isActive
-                        ? "border-blue-500/60 bg-blue-500/10 text-zinc-100 shadow-sm shadow-blue-500/10"
-                        : "border-zinc-800/60 bg-zinc-950/60 hover:border-blue-500/40 hover:bg-zinc-900/60"
-                    }`}
-                  >
-                    <span className="text-sm font-semibold text-zinc-200">
-                      {session.title}
-                    </span>
-                    <span className="text-[11px] text-zinc-500">
-                      {updated}
-                    </span>
-                  </button>
-                );
-              })
-            ) : (
-              <div className="rounded-xl border border-dashed border-zinc-700/50 bg-zinc-950/60 p-4 text-center text-xs text-zinc-500">
-                No chat history yet.
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
 
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto px-5 py-6 space-y-5 overscroll-y-contain scroll-smooth bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.08),transparent_45%)]">
@@ -1678,23 +1544,141 @@ export default function Chat({
       ) : null}
 
       {/* Input Area */}
-      <div className="border-t border-zinc-800/50 bg-gradient-to-r from-zinc-950/90 via-zinc-900/50 to-zinc-950/90 p-4">
-        <form onSubmit={handleSend} className="relative flex items-center">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask me to trim, cut, or analyze your video..."
-            className="w-full rounded-full border border-zinc-700/60 bg-zinc-900/80 py-3 pl-5 pr-14 text-sm text-zinc-100 placeholder:text-zinc-500 shadow-inner shadow-black/20 focus:border-blue-500/80 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-          />
+      <div className="border-t border-zinc-800/50 bg-gradient-to-r from-zinc-950/90 via-zinc-900/50 to-zinc-950/90 p-4 relative">
+        {isMenuOpen && (
+          <div className="absolute bottom-[calc(100%+8px)] left-4 w-[calc(100%-32px)] max-h-[50vh] overflow-y-auto rounded-3xl border border-zinc-700/60 bg-zinc-900/95 p-5 shadow-2xl z-50 backdrop-blur-xl flex flex-col gap-6 custom-scrollbar">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">Menu</span>
+              <button
+                type="button"
+                onClick={handleNewChat}
+                className="rounded-full border border-zinc-700/60 bg-zinc-800/40 px-3 py-1 text-[10px] font-medium text-zinc-300 transition-all hover:border-emerald-400/60 hover:bg-emerald-500/10 hover:text-white flex items-center gap-1"
+              >
+                + New Chat
+              </button>
+            </div>
+
+            {/* Tokens & Plans */}
+            {tokenUsage ? (
+              <div className="space-y-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Usage</div>
+                <div className="flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-wider">
+                  <div className="flex items-center gap-1.5 rounded-full border border-zinc-800/50 bg-zinc-900/40 px-2 py-1 shadow-sm">
+                    <span className="text-zinc-500 font-medium">Total</span>
+                    <span className="font-mono font-bold text-blue-400">{tokenUsage.total.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
+                    <span className="text-zinc-500">Chat</span>
+                    <span className="font-mono text-zinc-300">{tokenUsage.chat.toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
+                    <span className="text-zinc-500">Audio</span>
+                    <span className="font-mono text-zinc-300">{tokenUsage.audio.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {onPlanSelect ? (
+              <div className="space-y-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Plans</div>
+                <div className="flex flex-wrap gap-2">
+                  {PLAN_ORDER.map((planOption) => {
+                    const isActive = planOption === planId;
+                    return (
+                      <button
+                        key={planOption}
+                        type="button"
+                        onClick={() => onPlanSelect(planOption)}
+                        className={`rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition border ${
+                          isActive
+                            ? "bg-blue-600/20 text-blue-400 border-blue-500/50"
+                            : "bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:text-white hover:bg-zinc-800"
+                        }`}
+                      >
+                        {PLAN_CONFIGS[planOption].label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Memory */}
+            {memorySummary ? (
+              <div className="space-y-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Memory</div>
+                <div className="text-xs text-zinc-400 leading-relaxed bg-zinc-950/50 p-3 rounded-xl border border-zinc-800/50">{memorySummary}</div>
+              </div>
+            ) : null}
+
+            {/* History */}
+            <div className="space-y-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">History</div>
+              <div className="space-y-2">
+                {sessions.length ? (
+                  sessions.map((session) => {
+                    const isActive = session.id === currentSessionId;
+                    const updated = new Date(session.updatedAt).toLocaleString();
+                    return (
+                      <button
+                        key={session.id}
+                        type="button"
+                        onClick={() => { handleSelectSession(session.id); setIsMenuOpen(false); }}
+                        className={`flex w-full flex-col rounded-xl border px-3 py-2 text-left transition-all ${
+                          isActive
+                            ? "border-blue-500/60 bg-blue-500/10 text-zinc-100 shadow-sm shadow-blue-500/10"
+                            : "border-zinc-800/60 bg-zinc-950/60 hover:border-blue-500/40 hover:bg-zinc-900/60"
+                        }`}
+                      >
+                        <span className="text-sm font-semibold text-zinc-200">
+                          {session.title}
+                        </span>
+                        <span className="text-[11px] text-zinc-500">
+                          {updated}
+                        </span>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div className="rounded-xl border border-dashed border-zinc-700/50 bg-zinc-950/60 p-4 text-center text-xs text-zinc-500">
+                    No chat history yet.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2">
           <button
-            type="submit"
-            disabled={!input.trim()}
-            className="absolute right-2 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/20 transition-all hover:from-blue-400 hover:to-blue-500 hover:shadow-blue-500/30 disabled:opacity-40 disabled:shadow-none disabled:hover:from-blue-500 disabled:hover:to-blue-600"
+            type="button"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all ${
+              isMenuOpen 
+                ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" 
+                : "bg-zinc-800/50 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200"
+            }`}
           >
-            <Send size={15} />
+            <MoreHorizontal size={18} />
           </button>
-        </form>
+          <form onSubmit={handleSend} className="relative flex-1 flex items-center">
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Ask me to trim, cut, or analyze your video..."
+              className="w-full rounded-full border border-zinc-700/60 bg-zinc-900/80 py-3 pl-5 pr-14 text-sm text-zinc-100 placeholder:text-zinc-500 shadow-inner shadow-black/20 focus:border-blue-500/80 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+            />
+            <button
+              type="submit"
+              disabled={!input.trim()}
+              className="absolute right-2 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/20 transition-all hover:from-blue-400 hover:to-blue-500 hover:shadow-blue-500/30 disabled:opacity-40 disabled:shadow-none disabled:hover:from-blue-500 disabled:hover:to-blue-600"
+            >
+              <Send size={15} />
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );

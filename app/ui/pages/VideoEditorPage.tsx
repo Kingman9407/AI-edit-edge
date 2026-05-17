@@ -1077,7 +1077,7 @@ export default function VideoEditor() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-2 pt-12 pb-48">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 p-5 md:p-2 md:pt-10 pb-48">
       <div className="mx-auto max-w-[1400px]">
         {/* Layout Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -1211,48 +1211,48 @@ export default function VideoEditor() {
         <div className="border-t border-zinc-700/60 bg-zinc-950/90 backdrop-blur-xl shadow-2xl shadow-black/50">
           <div className="mx-auto max-w-[1400px] px-2 py-3">
             <EditList
-            edits={edits}
-            activeTimeline={keptSegments}
-            videoSrc={videoSrc}
-            planId={planId}
-            onSelect={(time) => seekToTime(time, true)}
-            onUndoLast={handleUndoLastChange}
-            onRemove={removeEdit}
-            onClear={handleClearAllChanges}
-            mutedSegments={muteEdits}
-            audioOverlays={audioOverlays.map((o) => ({
-              id: o.id,
-              label: o.label,
-              videoStart: o.videoStart,
-              videoEnd: o.videoEnd,
-              volume: o.volume,
-            }))}
-            onRemoveMute={removeMuteEdit}
-            onRemoveAudioOverlay={removeAudioOverlay}
-            onUpdateAudioOverlayVolume={(id, volume) =>
-              updateAudioOverlay(id, { volume })
-            }
-            exportNode={
-              <ExportPanel
-                videoFile={videoFile}
-                keptSegments={keptSegments}
-                removedSegments={removedSegments}
-                mutedSegments={muteEdits.map((e) => ({ start: e.start, end: e.end }))}
-                audioOverlays={audioOverlays.map((o) => ({
-                  file: o.file,
-                  videoStart: o.videoStart,
-                  videoEnd: o.videoEnd,
-                  volume: o.volume,
-                }))}
-                planId={planId}
-                exportCount={exportCount}
-                onExportSuccess={handleExportSuccess}
-                registerExporter={handleRegisterExporter}
-              />
-            }
-          />
+              edits={edits}
+              activeTimeline={keptSegments}
+              videoSrc={videoSrc}
+              planId={planId}
+              onSelect={(time) => seekToTime(time, true)}
+              onUndoLast={handleUndoLastChange}
+              onRemove={removeEdit}
+              onClear={handleClearAllChanges}
+              mutedSegments={muteEdits}
+              audioOverlays={audioOverlays.map((o) => ({
+                id: o.id,
+                label: o.label,
+                videoStart: o.videoStart,
+                videoEnd: o.videoEnd,
+                volume: o.volume,
+              }))}
+              onRemoveMute={removeMuteEdit}
+              onRemoveAudioOverlay={removeAudioOverlay}
+              onUpdateAudioOverlayVolume={(id, volume) =>
+                updateAudioOverlay(id, { volume })
+              }
+              exportNode={
+                <ExportPanel
+                  videoFile={videoFile}
+                  keptSegments={keptSegments}
+                  removedSegments={removedSegments}
+                  mutedSegments={muteEdits.map((e) => ({ start: e.start, end: e.end }))}
+                  audioOverlays={audioOverlays.map((o) => ({
+                    file: o.file,
+                    videoStart: o.videoStart,
+                    videoEnd: o.videoEnd,
+                    volume: o.volume,
+                  }))}
+                  planId={planId}
+                  exportCount={exportCount}
+                  onExportSuccess={handleExportSuccess}
+                  registerExporter={handleRegisterExporter}
+                />
+              }
+            />
+          </div>
         </div>
-      </div>
       </div>
 
       <MediaLibraryDrawer
