@@ -66,6 +66,11 @@ export type AudioOverlayPCM = {
   volume: number;
 };
 
+export type MergeClip = {
+  file: File;
+  segments: { start: number; end: number }[];
+};
+
 export type ExportWorkerMessage =
   | {
     type: "start";
@@ -80,6 +85,14 @@ export type ExportWorkerMessage =
     /** Pre-decoded native audio PCM (from the source video file) */
     nativeAudioPCM?: DecodedPCM | null;
   }
+  | {
+    type: "merge";
+    /** Multiple clips to merge into a single output, in order */
+    clips: MergeClip[];
+    quality: QualityOption;
+    label: string;
+    outputName: string;
+  }
   | { type: "abort" };
 
 export type ExportWorkerResponse =
@@ -88,6 +101,36 @@ export type ExportWorkerResponse =
   | { type: "error"; error: string; label: string };
 
 self.onmessage = async (event: MessageEvent<ExportWorkerMessage>) => {
+  if (event.data.type === "merge") {
+    const { clips, quality, label, outputName } = event.data;
+
+    const progress = (percent: number, message: string) => {
+      self.postMessage({
+        type: "progress",
+        percent,
+        message,
+        label,
+      } satisfies ExportWorkerResponse);
+    };
+
+    try {
+      const blob = await runMergeExportPipeline(clips, quality, progress);
+      self.postMessage({
+        type: "done",
+        blob,
+        name: outputName,
+        label,
+      } satisfies ExportWorkerResponse);
+    } catch (err) {
+      self.postMessage({
+        type: "error",
+        error: err instanceof Error ? err.message : String(err),
+        label,
+      } satisfies ExportWorkerResponse);
+    }
+    return;
+  }
+
   if (event.data.type !== "start") return;
 
   const {
@@ -616,6 +659,194 @@ async function processAudioPCM(
   }
 
   console.log(`[Worker Audio PCM] DONE. Buffers: ${totalBuffersAdded}, duration: ${currentExportTime.toFixed(2)}s`);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Multi-clip merge pipeline
+// Concatenates N video files (each with their own kept segments) into one MP4.
+// Codec is read from the first clip and reused — this works when all clips share
+// the same codec (typical for MP4/H.264). Audio is passthrough only (no mixing).
+// ─────────────────────────────────────────────────────────────────────────────
+async function runMergeExportPipeline(
+  clips: MergeClip[],
+  quality: QualityOption,
+  onProgress: (pct: number, msg: string) => void,
+): Promise<Blob> {
+  if (!clips.length) throw new Error("No clips provided for merge.");
+
+  onProgress(2, "Analysing clips…");
+
+  // ── Probe first clip to get codec info ──
+  const probeInput = new Input({ source: new BlobSource(clips[0].file), formats: [MP4] });
+  const probeVideo = await probeInput.getPrimaryVideoTrack();
+  if (!probeVideo) throw new Error("First clip has no video track.");
+  const videoDecoderConfig = await probeVideo.getDecoderConfig();
+  if (!videoDecoderConfig) throw new Error("Cannot determine video codec from first clip.");
+  const sourceVideoCodec = probeVideo.codec as VideoCodec;
+
+  const probeAudio = await probeInput.getPrimaryAudioTrack();
+  let mergeAudioCodec: AudioCodec | null = null;
+  if (probeAudio) {
+    const audioDec = await probeAudio.getDecoderConfig();
+    const rawCodec = audioDec?.codec?.split(".")[0] ?? "aac";
+    const codecMap: Record<string, string> = {
+      mp4a: "aac", mp3: "mp3", opus: "opus", vorbis: "vorbis",
+      flac: "flac", ac3: "ac3", "ec-3": "eac3",
+    };
+    mergeAudioCodec = (codecMap[rawCodec] ?? rawCodec) as AudioCodec;
+  }
+  probeInput[Symbol.dispose]();
+
+  console.log("[Merge] Video codec:", sourceVideoCodec, "Audio codec:", mergeAudioCodec);
+
+  // ── Setup muxer output ──
+  const target = new BufferTarget();
+  const output = new Output({ format: new Mp4OutputFormat(), target });
+  const videoPacketSource = new EncodedVideoPacketSource(sourceVideoCodec);
+  let encodedAudioSource: EncodedAudioPacketSource | null = null;
+
+  if (mergeAudioCodec) {
+    encodedAudioSource = new EncodedAudioPacketSource(mergeAudioCodec);
+    output.addVideoTrack(videoPacketSource);
+    output.addAudioTrack(encodedAudioSource);
+  } else {
+    output.addVideoTrack(videoPacketSource);
+  }
+
+  await output.start();
+
+  let globalTimeOffset = 0;  // running output timestamp (seconds)
+  let isFirstVideoPacket = true;
+  let isFirstAudioPacket = true;
+
+  const totalClips = clips.length;
+
+  for (let clipIdx = 0; clipIdx < totalClips; clipIdx++) {
+    const clip = clips[clipIdx];
+    const clipLabel = `clip ${clipIdx + 1}/${totalClips}`;
+    const clipTotalDuration = clip.segments.reduce((s, seg) => s + seg.end - seg.start, 0);
+
+    onProgress(
+      10 + Math.round((clipIdx / totalClips) * 80),
+      `Merging ${clipLabel}…`,
+    );
+
+    console.log(`[Merge] ${clipLabel}: ${clip.file.name}, ${clip.segments.length} segment(s)`);
+
+    const input = new Input({ source: new BlobSource(clip.file), formats: [MP4] });
+    const videoTrack = await input.getPrimaryVideoTrack();
+
+    if (!videoTrack) {
+      console.warn(`[Merge] ${clipLabel} has no video track — skipping.`);
+      input[Symbol.dispose]();
+      continue;
+    }
+
+    const audioTrack = encodedAudioSource ? await input.getPrimaryAudioTrack() : null;
+
+    // ── Video passthrough for this clip ──
+    const videoPacketSink = new EncodedPacketSink(videoTrack);
+    let clipVideoTimeOffset = globalTimeOffset;
+
+    for (const seg of clip.segments) {
+      const segDuration = seg.end - seg.start;
+      console.log(`[Merge Video] ${clipLabel} seg ${seg.start.toFixed(3)}–${seg.end.toFixed(3)}`);
+
+      let keyPacket = await videoPacketSink.getKeyPacket(seg.start);
+      if (!keyPacket) keyPacket = await videoPacketSink.getFirstKeyPacket();
+      if (!keyPacket) {
+        console.warn(`[Merge Video] No key packet for seg ${seg.start}–${seg.end}, skipping.`);
+        clipVideoTimeOffset += segDuration;
+        continue;
+      }
+
+      for await (const packet of videoPacketSink.packets(keyPacket)) {
+        if (packet.timestamp > seg.end) break;
+        if (packet.timestamp + packet.duration <= seg.start) continue;
+
+        const remappedTs = packet.timestamp - seg.start + clipVideoTimeOffset;
+        const remappedPacket = packet.clone({ timestamp: remappedTs });
+
+        if (isFirstVideoPacket) {
+          const meta: EncodedVideoChunkMetadata = {
+            decoderConfig: videoDecoderConfig ? {
+              codec: videoDecoderConfig.codec,
+              codedWidth: videoDecoderConfig.codedWidth,
+              codedHeight: videoDecoderConfig.codedHeight,
+              description: videoDecoderConfig.description,
+              colorSpace: videoDecoderConfig.colorSpace,
+            } : undefined,
+          };
+          await videoPacketSource.add(remappedPacket, meta);
+          isFirstVideoPacket = false;
+        } else {
+          await videoPacketSource.add(remappedPacket);
+        }
+      }
+
+      clipVideoTimeOffset += segDuration;
+    }
+
+    // ── Audio passthrough for this clip (same segment windows) ──
+    if (encodedAudioSource && audioTrack) {
+      const audioPacketSink = new EncodedPacketSink(audioTrack);
+      let clipAudioTimeOffset = globalTimeOffset;
+
+      for (const seg of clip.segments) {
+        const segDuration = seg.end - seg.start;
+
+        let firstPkt = await audioPacketSink.getKeyPacket(seg.start);
+        if (!firstPkt) firstPkt = await audioPacketSink.getFirstKeyPacket();
+        if (!firstPkt) { clipAudioTimeOffset += segDuration; continue; }
+
+        for await (const packet of audioPacketSink.packets(firstPkt)) {
+          if (packet.timestamp > seg.end) break;
+          if (packet.timestamp + packet.duration < seg.start) continue;
+
+          const remappedTs = packet.timestamp - seg.start + clipAudioTimeOffset;
+          const remappedPacket = packet.clone({ timestamp: remappedTs });
+
+          if (isFirstAudioPacket) {
+            const config = await audioTrack.getDecoderConfig();
+            const meta: EncodedAudioChunkMetadata = {
+              decoderConfig: config ? {
+                codec: config.codec,
+                sampleRate: config.sampleRate,
+                numberOfChannels: config.numberOfChannels,
+                description: config.description,
+              } : undefined,
+            };
+            await encodedAudioSource.add(remappedPacket, meta);
+            isFirstAudioPacket = false;
+          } else {
+            await encodedAudioSource.add(remappedPacket);
+          }
+        }
+
+        clipAudioTimeOffset += segDuration;
+      }
+    }
+
+    globalTimeOffset += clipTotalDuration;
+    input[Symbol.dispose]();
+
+    onProgress(
+      10 + Math.round(((clipIdx + 1) / totalClips) * 80),
+      `Done with ${clipLabel}`,
+    );
+  }
+
+  videoPacketSource.close();
+  if (encodedAudioSource) encodedAudioSource.close();
+
+  onProgress(95, "Finalizing merged MP4…");
+  await output.finalize();
+
+  const buffer = target.buffer;
+  if (!buffer) throw new Error("Muxer produced no output buffer.");
+
+  console.log(`[Merge] Done. Total duration: ${globalTimeOffset.toFixed(2)}s across ${totalClips} clip(s).`);
+  return new Blob([buffer], { type: "video/mp4" });
 }
 
 

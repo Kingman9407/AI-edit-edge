@@ -105,6 +105,7 @@ export default function VideoEditor() {
     vision: 0,
   });
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [mergeActive, setMergeActive] = useState(false);
 
   const addTokenUsage = useCallback((source: TokenSource, usage?: TokenUsage | null) => {
     if (!usage) return;
@@ -981,6 +982,52 @@ export default function VideoEditor() {
   const keptSegments = buildKeptSegments(activeDuration, normalizedEdits);
   const removedSegments = normalizedEdits;
 
+  // Build mergeModeClips: each loaded video with its kept segments for merge export
+  const mergeModeClips = multiFiles.length >= 2
+    ? multiFiles.map((file) => {
+      const key = getFileKey(file);
+      const snapshot = clipSnapshots[key];
+      const clipDuration = snapshot?.duration ?? 0;
+      if (!clipDuration) {
+        // Duration not yet known: let the worker read the whole file
+        return { file, segments: [{ start: 0, end: 1e9 }] as { start: number; end: number }[] };
+      }
+      const clipEdits = normalizeSegments(
+        (snapshot?.edits ?? []).map((e) => ({ start: e.start, end: e.end })),
+        clipDuration
+      );
+      const clipKept = buildKeptSegments(clipDuration, clipEdits);
+      return { file, segments: clipKept.length ? clipKept : [{ start: 0, end: clipDuration }] };
+    })
+    : undefined;
+
+  // Full-detail {name, originalDuration, keptSegments, removedSegments} list for merge timeline bar
+  const mergeTimelineClips = mergeActive && mergeModeClips
+    ? mergeModeClips.map((clip) => {
+      const key = getFileKey(clip.file);
+      const snapshot = clipSnapshots[key];
+      const clipDuration = snapshot?.duration ?? 0;
+      // keptSegments relative to the clip's own timeline
+      const keptSegs = clip.segments[0]?.end === 1e9
+        ? [{ start: 0, end: clipDuration }]
+        : clip.segments;
+      // removedSegments = gaps between kept segments
+      const removed: { start: number; end: number }[] = [];
+      let cursor = 0;
+      for (const seg of keptSegs) {
+        if (seg.start > cursor) removed.push({ start: cursor, end: seg.start });
+        cursor = seg.end;
+      }
+      if (cursor < clipDuration) removed.push({ start: cursor, end: clipDuration });
+      return {
+        name: clip.file.name,
+        originalDuration: clipDuration,
+        keptSegments: keptSegs,
+        removedSegments: removed,
+      };
+    })
+    : undefined;
+
   if (!videoSrc) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-zinc-950 p-4">
@@ -1116,6 +1163,8 @@ export default function VideoEditor() {
                 isSkippingEdits={isSkippingEdits}
                 toggleIsSkippingEdits={toggleIsSkippingEdits}
                 onProgressClick={handleProgressClick}
+                mergeActive={mergeActive}
+                mergeClips={mergeTimelineClips}
               />
             </div>
           </div>
@@ -1148,6 +1197,13 @@ export default function VideoEditor() {
                 }
                 multiClipFiles={multiClipFiles}
                 multiClipSnapshots={multiClipSnapshots}
+                allLoadedFiles={multiFiles.map((file) => ({
+                  id: getFileKey(file),
+                  name: file.name,
+                  type: file.type,
+                  sizeBytes: file.size,
+                }))}
+                allClipSnapshots={Object.values(clipSnapshots)}
                 audioFiles={audioFiles}
                 onAddOverlay={addAudioOverlay}
                 tokenUsage={tokenUsage}
@@ -1185,6 +1241,7 @@ export default function VideoEditor() {
                 onAddMute={addMuteEdit}
                 onPlanSelect={setPlanId}
                 activeTimeline={keptSegments}
+                onActivateMerge={() => setMergeActive(true)}
               />
             </div>
           </div>
@@ -1248,6 +1305,8 @@ export default function VideoEditor() {
                   exportCount={exportCount}
                   onExportSuccess={handleExportSuccess}
                   registerExporter={handleRegisterExporter}
+                  mergeModeClips={mergeModeClips}
+                  mergeActive={mergeActive}
                 />
               }
             />

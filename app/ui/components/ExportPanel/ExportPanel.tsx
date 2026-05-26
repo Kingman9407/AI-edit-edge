@@ -24,6 +24,10 @@ interface ExportPanelProps {
   registerExporter?: (
     exporter: () => Promise<{ success: boolean; error?: string }>
   ) => void;
+  /** When provided (>=2 clips), enables merge export */
+  mergeModeClips?: MergeClip[];
+  /** When true, Export Timeline runs the merge export instead of single-clip export */
+  mergeActive?: boolean;
 }
 
 type ExportMode = "sequential" | "ai";
@@ -39,6 +43,7 @@ import {
   MutedSegment,
   DecodedPCM,
   AudioOverlayPCM,
+  MergeClip,
 } from "./export.worker";
 
 
@@ -175,6 +180,8 @@ export default function ExportPanel({
   exportCount,
   onExportSuccess,
   registerExporter,
+  mergeModeClips,
+  mergeActive = false,
 }: ExportPanelProps) {
   const planConfig = PLAN_CONFIGS[planId];
   const videoFileRef = useRef<File | null>(videoFile);
@@ -182,6 +189,7 @@ export default function ExportPanel({
   const removedSegmentsRef = useRef<Segment[]>(removedSegments);
   const mutedSegmentsRef = useRef<MutedSegment[]>(mutedSegments);
   const audioOverlaysRef = useRef<AudioOverlayInput[]>(audioOverlays);
+  const mergeModeClipsRef = useRef<MergeClip[] | undefined>(mergeModeClips);
   const planIdRef = useRef<PlanId>(planId);
   const exportLimitRef = useRef(planConfig.exportLimit);
   const exportCountRef = useRef(exportCount);
@@ -189,14 +197,21 @@ export default function ExportPanel({
   const isExportingRef = useRef(false);
   const progressRef = useRef<(pct: number, msg: string) => void>(() => {});
   const [isExporting, setIsExporting] = useState(false);
+  const [isMerging, setIsMerging] = useState(false);
+  const isMergingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  const [mergeError, setMergeError] = useState<string | null>(null);
   const [trimmedUrl, setTrimmedUrl] = useState<string | null>(null);
   const [progressMsg, setProgressMsg] = useState("");
   const [progressPct, setProgressPct] = useState(0);
+  const [mergeProgressMsg, setMergeProgressMsg] = useState("");
+  const [mergeProgressPct, setMergeProgressPct] = useState(0);
   const [exportSource, setExportSource] = useState<"kept">("kept");
   const exportSourceRef = useRef<"kept">("kept");
   const [selectedQuality, setSelectedQuality] = useState<QualityOption["id"]>("standard");
   const workerRef = useRef<Worker | null>(null);
+  const mergeWorkerRef = useRef<Worker | null>(null);
+
 
   const remainingExports = Math.max(
     0,
@@ -247,6 +262,9 @@ export default function ExportPanel({
     audioOverlaysRef.current = audioOverlays;
   }, [audioOverlays]);
 
+  React.useEffect(() => {
+    mergeModeClipsRef.current = mergeModeClips;
+  }, [mergeModeClips]);
 
   React.useEffect(() => {
     exportSourceRef.current = exportSource;
@@ -384,6 +402,78 @@ export default function ExportPanel({
     }
   }, [selectedQuality]);
 
+  const exportMerged = React.useCallback(async () => {
+    const clips = mergeModeClipsRef.current;
+    if (!clips || clips.length < 2) {
+      return { success: false, error: "Need at least 2 clips to merge." };
+    }
+    if (isMergingRef.current) {
+      return { success: false, error: "Merge already running." };
+    }
+    isMergingRef.current = true;
+    setIsMerging(true);
+    setMergeError(null);
+    setMergeProgressPct(0);
+    setMergeProgressMsg("");
+
+    try {
+      const qualityPreset = QUALITY_PRESETS.find(q => q.id === selectedQuality) || QUALITY_PRESETS[1];
+      const firstName = clips[0].file.name.replace(/\.[^.]+$/, "");
+      const outputName = `${firstName}_merged.mp4`;
+
+      const worker = new Worker(new URL("./export.worker.ts", import.meta.url));
+      mergeWorkerRef.current = worker;
+
+      return new Promise<{ success: boolean; error?: string }>((resolve) => {
+        worker.onmessage = (event: MessageEvent<ExportWorkerResponse>) => {
+          const msg = event.data;
+          if (msg.type === "progress") {
+            setMergeProgressPct(msg.percent);
+            setMergeProgressMsg(msg.message);
+          } else if (msg.type === "done") {
+            const url = URL.createObjectURL(msg.blob);
+            triggerDownload(url, msg.name);
+            URL.revokeObjectURL(url);
+            setMergeProgressPct(100);
+            setMergeProgressMsg("Merged!");
+            isMergingRef.current = false;
+            setIsMerging(false);
+            worker.terminate();
+            resolve({ success: true });
+          } else if (msg.type === "error") {
+            setMergeError(msg.error);
+            isMergingRef.current = false;
+            setIsMerging(false);
+            worker.terminate();
+            resolve({ success: false, error: msg.error });
+          }
+        };
+        worker.onerror = (e) => {
+          const errMsg = "Merge worker error: " + e.message;
+          setMergeError(errMsg);
+          isMergingRef.current = false;
+          setIsMerging(false);
+          worker.terminate();
+          resolve({ success: false, error: errMsg });
+        };
+
+        worker.postMessage({
+          type: "merge",
+          clips,
+          quality: qualityPreset,
+          label: "merge",
+          outputName,
+        } satisfies ExportWorkerMessage);
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Merge failed";
+      setMergeError(msg);
+      isMergingRef.current = false;
+      setIsMerging(false);
+      return { success: false, error: msg };
+    }
+  }, [selectedQuality]);
+
   const handleExportClick = React.useCallback(() => {
     setExportSource("kept");
     exportSourceRef.current = "kept";
@@ -402,30 +492,46 @@ export default function ExportPanel({
       if (workerRef.current) {
         workerRef.current.terminate();
       }
+      if (mergeWorkerRef.current) {
+        mergeWorkerRef.current.terminate();
+      }
       if (trimmedUrl) {
         URL.revokeObjectURL(trimmedUrl);
       }
     };
   }, [trimmedUrl]);
 
+  const canMerge = (mergeModeClips?.length ?? 0) >= 2 && !isMerging && !isExporting;
+
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 flex-wrap">
+      {/* Export / Merge button — switches mode based on mergeActive */}
       {isExporting ? (
         <span className="text-xs font-semibold text-blue-400">
           Exporting {Math.round(progressPct)}%...
         </span>
+      ) : isMerging ? (
+        <span className="text-xs font-semibold text-purple-400 flex items-center gap-1">
+          <span className="animate-pulse">⚡</span>
+          Merging {Math.round(mergeProgressPct)}%{mergeProgressMsg ? `… ${mergeProgressMsg}` : ""}
+        </span>
       ) : (
         <button
           type="button"
-          onClick={handleExportClick}
-          disabled={!canExport || isExporting}
-          className="rounded-full bg-blue-600/80 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={mergeActive ? () => void exportMerged() : handleExportClick}
+          disabled={mergeActive ? !canMerge : (!canExport || isExporting || isMerging)}
+          className={`rounded-full px-3 py-1.5 text-xs font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-50 ${
+            mergeActive
+              ? "bg-purple-600/80 hover:bg-purple-500"
+              : "bg-blue-600/80 hover:bg-blue-500"
+          }`}
         >
-          Export Timeline
+          {mergeActive ? "Export Merged" : "Export Timeline"}
         </button>
       )}
-      
+
       {error && <span className="text-[10px] text-red-400 truncate max-w-[150px]" title={error}>{error}</span>}
+      {mergeError && <span className="text-[10px] text-red-400 truncate max-w-[150px]" title={mergeError}>{mergeError}</span>}
       {limitReached && <span className="text-[10px] text-amber-400">Limit reached</span>}
     </div>
   );

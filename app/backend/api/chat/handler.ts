@@ -402,7 +402,8 @@ export async function POST(req: Request) {
         "Use cut_segment for explicit trim/cut/remove/delete requests and for confirmed suggestions.",
         "Use keep_segment for keep-only requests that preserve one exact range.",
         "Use remove_silence for requests about silence, pauses, dead air, or low-signal cleanup.",
-        "Use export_video when the user asks to export, render, merge, or combine.",
+        "Use export_video when the user asks to export, render, or combine the current single video.",
+        "Use merge_videos when the user asks to merge, join, combine, or concatenate multiple video files together. After calling merge_videos, tell the user to click the '⚡ Merge' button in the Clip Stack bar to start the export.",
         "Use mute_segment when the user wants to silence, mute, or remove the audio from a specific time range — this KEEPS the video but mutes its audio.",
         "Use add_audio_overlay when the user wants to add background music, overlay audio, mix in a sound file, or play an uploaded audio file over the video. Only use this if audio files are listed in the context.",
         "NEVER use cut_segment when the user wants to add audio or overlay music — that removes video, not adds audio.",
@@ -417,6 +418,7 @@ export async function POST(req: Request) {
         "Prioritize making future edits (like removing silence or cutting segments) within these active regions.",
         "If the user asks to remove something, compute the range relative to the original video timeline, but ensure it overlaps with the Active Timeline.",
         "If the user is happy with the current edit, suggest 'export_video' to finalize.",
+        "If 'Multi-clip summaries' are present in the context, it means the user has loaded multiple video files. Use merge_videos when they ask to merge, join, or combine them.",
         "The user is non-technical, so avoid jargon and keep the response short.",
       ].join(" "),
     },
@@ -463,7 +465,9 @@ export async function POST(req: Request) {
                   ? `Muting ${formatSeconds(a.start ?? 0)} – ${formatSeconds(a.end ?? 0)}.`
                   : a.type === "add_audio_overlay"
                     ? `Adding audio overlay (file #${(a.audioFileIndex ?? 0) + 1}) from ${formatSeconds(a.start ?? 0)} – ${formatSeconds(a.end ?? 0)}.`
-                    : `Cutting ${formatSeconds(a.start ?? 0)} – ${formatSeconds(a.end ?? 0)}.`
+                    : a.type === "merge_videos"
+                      ? "Your clips are ready to merge. Click the ⚡ Merge button in the Clip Stack bar to export."
+                      : `Cutting ${formatSeconds(a.start ?? 0)} – ${formatSeconds(a.end ?? 0)}.`
         )
         .join(" ")
       : "Done.");

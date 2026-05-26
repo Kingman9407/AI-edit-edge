@@ -108,6 +108,10 @@ interface ChatProps {
   multiClipFiles?: MultiClipFile[];
   multiClipSnapshots?: ClipSnapshot[];
   activeClipIndex?: number;
+  /** All loaded video files regardless of plan — used to detect merge eligibility */
+  allLoadedFiles?: MultiClipFile[];
+  /** All clip snapshots regardless of plan — used for duration info in merge context */
+  allClipSnapshots?: ClipSnapshot[];
   onQueueClipTrim?: (
     clipIndex: number,
     start: number,
@@ -148,6 +152,8 @@ interface ChatProps {
     audio: number;
     vision: number;
   };
+  /** Called when the AI requests a merge — activates merge mode in the parent */
+  onActivateMerge?: () => void;
 }
 
 const createMessageId = () => {
@@ -200,6 +206,9 @@ export default function Chat({
   onPlanSelect,
   tokenUsage,
   activeTimeline = [],
+  onActivateMerge,
+  allLoadedFiles = [],
+  allClipSnapshots = [],
 }: ChatProps) {
   const planConfig = PLAN_CONFIGS[planId];
   const defaultMessages = useMemo<Message[]>(
@@ -807,6 +816,15 @@ export default function Chat({
         void handleExportRequest();
         return;
       }
+
+      if (actionType === "merge_videos") {
+        onActivateMerge?.();
+        pushSystemMessage(
+          "✅ Merge queued! The timeline now shows all clips. Click **Export Timeline** below to download the merged video."
+        );
+        applied += 1;
+        return;
+      }
     });
     if (limitHit) {
       pushSystemMessage(buildTrimLimitMessage());
@@ -1145,7 +1163,9 @@ export default function Chat({
         multiClips:
           multiClipMode === "all" && multiClipSummaries.length
             ? multiClipSummaries
-            : undefined,
+            : loadedClipsList.length
+              ? loadedClipsList
+              : undefined,
         suggestions: suggestions.length
           ? suggestions.map((suggestion) => ({
               start: suggestion.start,
@@ -1350,6 +1370,29 @@ export default function Chat({
     clipCount: edits.length,
     lastTrim: lastEdit ? { start: lastEdit.start, end: lastEdit.end } : undefined,
   });
+
+  // Always build a lightweight clip list when 2+ files are loaded so the AI
+  // can detect all clips regardless of multiClipMode or plan tier.
+  // Uses allLoadedFiles (all videos, not gated by plan) for merge detection.
+  const loadedClipsList = useMemo(() => {
+    const files = allLoadedFiles.length >= 2 ? allLoadedFiles : multiClipFiles.length >= 2 ? multiClipFiles : [];
+    if (!files.length) return [];
+    // Prefer allClipSnapshots (plan-unrestricted) then fall back to multiClipSnapshots
+    const allSnaps = allClipSnapshots.length ? allClipSnapshots : multiClipSnapshots;
+    const snapshotMap = new Map(
+      allSnaps.map((snapshot) => [snapshot.id, snapshot])
+    );
+    return files.map((file, index) => {
+      const snapshot = snapshotMap.get(file.id);
+      const duration = snapshot?.duration ? ` (${formatTime(snapshot.duration)})` : "";
+      return {
+        label: `Clip ${index + 1}: ${file.name}${duration}`,
+        summary: snapshot?.duration
+          ? `Duration: ${formatTime(snapshot.duration)}`
+          : "Loaded, analyzing…",
+      };
+    });
+  }, [allLoadedFiles, allClipSnapshots, multiClipFiles, multiClipSnapshots]);
 
   const multiClipSummaries = useMemo(() => {
     if (multiClipMode !== "all" || !multiClipFiles.length) return [];
