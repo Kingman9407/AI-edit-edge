@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Send, Bot, User, ChevronDown, MoreHorizontal } from "lucide-react";
+import { Send, Bot, User, ChevronDown, MoreHorizontal, Cloud, Cpu } from "lucide-react";
+import { useEdgeLLM } from "@/app/ui/hooks/useEdgeLLM";
+import { runEdgeChat } from "@/app/ui/components/Chat/EdgeChatRunner";
 import { formatTime } from "@/app/backend/functions/formatTime";
 import { normalizeSegments, type Segment } from "@/app/backend/functions/segments";
 import { PLAN_CONFIGS, PlanId, PLAN_ORDER } from "@/app/backend/functions/plans";
@@ -241,6 +243,9 @@ export default function Chat({
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [memory, setMemory] = useState<ChatMemory | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [inferenceMode, setInferenceMode] = useState<"cloud" | "edge">("cloud");
+  const [showEdgeConfirm, setShowEdgeConfirm] = useState(false);
+  const edgeLLM = useEdgeLLM();
 
   useEffect(() => {
     if (!allowSuggestions) {
@@ -1213,53 +1218,72 @@ export default function Chat({
           : undefined,
       };
 
-      let res: Response | null = null;
-      let data: any = null;
-      let raw = "";
-      const maxParseRetries = 5;
+      let data: { assistantMessage?: string; parsed?: { assistant_message?: string; status?: string; follow_up?: string; actions?: ModelAction[] }; usage?: unknown } | null = null;
 
-      for (let attempt = 1; attempt <= maxParseRetries; attempt += 1) {
-        console.log("AI Request:", {
-          url: "/api/chat",
-          attempt,
-          payload: requestBody
-        });
-
-        res = await fetch("/api/chat", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
+      if (inferenceMode === "edge") {
+        // ─── Edge (local) path ─────────────────────────────────────────────────
+        if (edgeLLM.status !== "ready") {
+          throw new Error("Edge model is not loaded yet. Click the ⚡ Edge button first.");
+        }
+        pushStatus("Running on your device (edge inference)...");
+        const edgeRes = await runEdgeChat(
+          {
+            message: currentInput,
+            history: historyForModel as { role: "user" | "assistant"; content: string }[],
+            videoContext: videoContext
+              ? {
+                  name: videoContext.name,
+                  duration: videoContext.duration,
+                  width: videoContext.width,
+                  height: videoContext.height,
+                  currentTime: videoContext.currentTime,
+                }
+              : null,
           },
-          body: JSON.stringify(requestBody),
-        });
+          edgeLLM
+        );
+        data = edgeRes;
+      } else {
+        // ─── Cloud path (original) ─────────────────────────────────────────────
+        let res: Response | null = null;
+        let raw = "";
+        const maxParseRetries = 5;
 
-        raw = await res.text();
-        console.log("AI Raw Response:", raw);
-        try {
-          data = raw ? JSON.parse(raw) : null;
-        } catch {
-          data = null;
+        for (let attempt = 1; attempt <= maxParseRetries; attempt += 1) {
+          console.log("AI Request:", { url: "/api/chat", attempt, payload: requestBody });
+
+          res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody),
+          });
+
+          raw = await res.text();
+          console.log("AI Raw Response:", raw);
+          try {
+            data = raw ? JSON.parse(raw) : null;
+          } catch {
+            data = null;
+          }
+
+          if (!res.ok) {
+            const errorMessage =
+              (data as { error?: { message?: string } } | null)?.error?.message ||
+              raw?.slice(0, 200) ||
+              `Request failed (${res.status})`;
+            throw new Error(errorMessage);
+          }
+
+          if (data) break;
+
+          if (attempt < maxParseRetries) {
+            pushStatus(`AI response was invalid JSON. Retrying (${attempt + 1}/${maxParseRetries})...`);
+          }
         }
 
-        if (!res.ok) {
-          const errorMessage =
-            data?.error?.message ||
-            raw?.slice(0, 200) ||
-            `Request failed (${res.status})`;
-          throw new Error(errorMessage);
+        if (!data || !res) {
+          throw new Error("AI response was not valid JSON. Please try again.");
         }
-
-        if (data) break;
-
-        if (attempt < maxParseRetries) {
-          pushStatus(
-            `AI response was invalid JSON. Retrying (${attempt + 1}/${maxParseRetries})...`
-          );
-        }
-      }
-
-      if (!data || !res) {
-        throw new Error("AI response was not valid JSON. Please try again.");
       }
 
       if (data?.usage) {
@@ -1467,6 +1491,24 @@ export default function Chat({
   useEffect(() => {
     scrollToBottom();
   }, [messages, status, scrollToBottom]);
+
+  const handleEdgeToggle = () => {
+    if (inferenceMode === "cloud") {
+      if (edgeLLM.status === "idle" || edgeLLM.status === "error") {
+        setShowEdgeConfirm(true);
+      } else {
+        setInferenceMode("edge");
+      }
+    } else {
+      setInferenceMode("cloud");
+    }
+  };
+
+  const handleEdgeConfirm = () => {
+    setShowEdgeConfirm(false);
+    setInferenceMode("edge");
+    void edgeLLM.loadModel();
+  };
 
   return (
     <div className="flex h-full min-h-[520px] max-h-[82vh] flex-col overflow-hidden rounded-3xl border border-zinc-800/70 bg-gradient-to-b from-zinc-900/90 via-zinc-950/95 to-zinc-950/98 backdrop-blur-2xl shadow-2xl shadow-black/40">
@@ -1693,6 +1735,74 @@ export default function Chat({
           </div>
         )}
 
+        {/* Edge confirm overlay */}
+        {showEdgeConfirm && (
+          <div className="absolute bottom-[calc(100%+8px)] left-4 right-4 z-50 rounded-2xl border border-amber-500/30 bg-zinc-900/98 p-4 shadow-2xl backdrop-blur-xl">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-400">
+                <Cpu size={16} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-zinc-100">Run on your device?</p>
+                <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
+                  This will download the fine-tuned SmolLM2 model (~158 MB) from GitHub and cache it in your browser. Runs fully offline after the first load.
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    id="edge-confirm-btn"
+                    onClick={handleEdgeConfirm}
+                    className="rounded-full bg-amber-500/20 px-4 py-1.5 text-xs font-semibold text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors"
+                  >
+                    Download &amp; Use Edge
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowEdgeConfirm(false)}
+                    className="rounded-full bg-zinc-800/80 px-4 py-1.5 text-xs font-semibold text-zinc-400 border border-zinc-700/50 hover:text-zinc-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edge loading / progress bar */}
+        {inferenceMode === "edge" && (edgeLLM.status === "downloading" || edgeLLM.status === "loading") && (
+          <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-[11px] font-semibold text-amber-300">
+                {edgeLLM.status === "downloading" ? "Downloading model..." : "Loading model into memory..."}
+              </span>
+              <span className="text-[11px] font-mono text-amber-400">
+                {edgeLLM.status === "downloading" ? `${Math.round(edgeLLM.progress * 100)}%` : ""}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-300"
+                style={{ width: `${Math.round(edgeLLM.progress * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Edge error */}
+        {inferenceMode === "edge" && edgeLLM.status === "error" && (
+          <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 flex items-center gap-2">
+            <span className="text-[11px] text-red-400 flex-1">{edgeLLM.error ?? "Edge model failed to load."}</span>
+            <button
+              type="button"
+              onClick={() => { edgeLLM.reset(); setInferenceMode("cloud"); }}
+              className="text-[10px] text-red-300 underline hover:no-underline"
+            >
+              Use Cloud
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -1705,17 +1815,47 @@ export default function Chat({
           >
             <MoreHorizontal size={18} />
           </button>
+
+          {/* Cloud / Edge toggle */}
+          <button
+            type="button"
+            id="inference-mode-toggle"
+            onClick={handleEdgeToggle}
+            title={inferenceMode === "cloud" ? "Switch to Edge (local device)" : "Switch to Cloud (OpenRouter)"}
+            className={`flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all ${
+              inferenceMode === "edge"
+                ? edgeLLM.status === "ready"
+                  ? "border-amber-500/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
+                  : "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                : "border-zinc-700/50 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+            }`}
+          >
+            {inferenceMode === "edge" ? (
+              <><Cpu size={13} /><span>Edge</span></>
+            ) : (
+              <><Cloud size={13} /><span>Cloud</span></>
+            )}
+          </button>
+
           <form onSubmit={handleSend} className="relative flex-1 flex items-center">
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask me to trim, cut, or analyze your video..."
+              placeholder={
+                inferenceMode === "edge"
+                  ? edgeLLM.status === "ready"
+                    ? "Ask me (running on-device)..."
+                    : edgeLLM.status === "downloading" || edgeLLM.status === "loading"
+                      ? "Loading edge model..."
+                      : "Ask me to trim, cut, or analyze your video..."
+                  : "Ask me to trim, cut, or analyze your video..."
+              }
               className="w-full rounded-full border border-zinc-700/60 bg-zinc-900/80 py-3 pl-5 pr-14 text-sm text-zinc-100 placeholder:text-zinc-500 shadow-inner shadow-black/20 focus:border-blue-500/80 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
             />
             <button
               type="submit"
-              disabled={!input.trim()}
+              disabled={!input.trim() || (inferenceMode === "edge" && edgeLLM.status !== "ready")}
               className="absolute right-2 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/20 transition-all hover:from-blue-400 hover:to-blue-500 hover:shadow-blue-500/30 disabled:opacity-40 disabled:shadow-none disabled:hover:from-blue-500 disabled:hover:to-blue-600"
             >
               <Send size={15} />
