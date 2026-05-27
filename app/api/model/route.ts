@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+
   const token = process.env.BLOB_READ_WRITE_TOKEN || "vercel_blob_rw_4dlZfN9MYOUoEHwI_Fvwip7ZakOE2milIVW6SDnFwM6XGtg";
 
   const modelUrl = "https://4dlzfn9myouoehwi.private.blob.vercel-storage.com/models/model.onnx";
