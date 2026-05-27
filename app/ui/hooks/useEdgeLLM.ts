@@ -184,12 +184,12 @@ export function useEdgeLLM(): EdgeLLMState {
 
     // Tokenise the prompt
     const encoded = await tokenizer(prompt, {
-      return_tensor: "np",
+      return_tensor: false,
       add_special_tokens: true,
     });
 
-    // Build initial input_ids as BigInt64Array (ONNX expects int64)
-    let inputIds = Array.from(encoded.input_ids.data as BigInt64Array);
+    // Build initial input_ids (Transformers.js default returns arrays when return_tensor is false)
+    let inputIds = Array.from(encoded.input_ids as number[]).map(Number);
 
     const generatedTokenIds: bigint[] = [];
     let pastKeyValues: Record<string, import("onnxruntime-web").Tensor> = {};
@@ -207,10 +207,10 @@ export function useEdgeLLM(): EdgeLLMState {
       const attentionMask = firstStep
         ? new ort.Tensor(
             "int64",
-            new BigInt64Array(inputIds.map(() => 1n)),
+            new BigInt64Array(inputIds.map(() => BigInt(1))),
             [1, inputIds.length]
           )
-        : new ort.Tensor("int64", new BigInt64Array([1n]), [1, 1]);
+        : new ort.Tensor("int64", new BigInt64Array([BigInt(1)]), [1, 1]);
 
       const feeds: Record<string, import("onnxruntime-web").Tensor> = {
         input_ids: inputTensor,
@@ -265,7 +265,7 @@ export function useEdgeLLM(): EdgeLLMState {
 
     // Decode generated tokens
     const decoded = await tokenizer.decode(
-      new Int32Array(generatedTokenIds.map(Number)),
+      generatedTokenIds.map(Number),
       { skip_special_tokens: true }
     );
 
