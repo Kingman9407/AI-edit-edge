@@ -71,6 +71,12 @@ export async function GET() {
           console.error(`[API Model] Google Drive final download error: ${response.status} ${response.statusText}`);
           return new NextResponse(`Failed to download model after bypass: ${response.status} ${response.statusText}`, { status: response.status });
         }
+
+        const finalContentType = response.headers.get("content-type") || "";
+        if (finalContentType.includes("text/html")) {
+          console.error("[API Model] Google Drive final response is still HTML (possibly access denied or quota exceeded).");
+          return new NextResponse("Google Drive final download response was HTML, indicating download failed (possibly access denied, quota exceeded, or recaptcha required).", { status: 500 });
+        }
       } else {
         console.warn("[API Model] Google Drive returned HTML warning page but confirmation token could not be parsed.");
         return new NextResponse("Google Drive virus warning page received but bypass token not found in page.", { status: 500 });
