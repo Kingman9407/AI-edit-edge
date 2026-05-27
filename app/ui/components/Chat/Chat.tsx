@@ -1298,7 +1298,6 @@ export default function Chat({
         (responseStatus === "needs_info"
           ? data?.parsed?.follow_up || data?.parsed?.assistant_message
           : data?.parsed?.assistant_message || data?.parsed?.follow_up) ||
-        data?.choices?.[0]?.message?.content ||
         "No response from AI";
 
       const parsedActions = data?.parsed?.actions;
