@@ -184,7 +184,7 @@ export function useEdgeLLM(): EdgeLLMState {
 
     // Tokenise the prompt
     const encoded = await tokenizer(prompt, {
-      return_tensors: "np",
+      return_tensor: "np",
       add_special_tokens: true,
     });
 
