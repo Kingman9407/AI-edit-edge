@@ -4,8 +4,8 @@ import { useCallback, useRef, useState } from "react";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MODEL_URL =
-  "https://huggingface.co/Kingman9407/hornet/resolve/main/model.onnx";
+const MODEL_URL = "/api/model";
+
 
 const TOKENIZER_MODEL_ID = "HuggingFaceTB/SmolLM2-135M-Instruct";
 

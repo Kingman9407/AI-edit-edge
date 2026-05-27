@@ -56,6 +56,9 @@ trainer/*_temp_raw/
 trainer/*_optimized/
 trainer/*_quantized/
 
-# Keep only the final high-performance ONNX model
+# Keep only the final high-performance ONNX model metadata (not the large binary model.onnx)
 !trainer/fine_tuned_smollm_onnx/
 !trainer/fine_tuned_smollm_onnx/**
+*.onnx
+/public/models/
+
