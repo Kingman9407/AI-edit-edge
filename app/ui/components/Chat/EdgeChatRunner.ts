@@ -81,7 +81,7 @@ export async function runEdgeChat(
   const raw = await edgeLLM.generate(prompt);
 
   // Strip any trailing im_end tokens that slipped through
-  const clean = raw.replace(/<\|im_end\|>.*$/s, "").trim();
+  const clean = raw.replace(/<\|im_end\|>[\s\S]*$/, "").trim();
   const assistantMessage = clean || "I'm ready to help with your video editing!";
 
   return {
