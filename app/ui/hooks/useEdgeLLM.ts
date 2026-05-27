@@ -106,7 +106,12 @@ export function useEdgeLLM(): EdgeLLMState {
           throw new Error(`Failed to fetch model: ${response.status} ${response.statusText}`);
         }
 
-        const contentLength = Number(response.headers.get("content-length") ?? 0);
+        // Next.js proxy strips Content-Length on chunked transfers,
+        // so we always fall back to the known exact model file size.
+        const KNOWN_MODEL_BYTES = 166009881;
+        const headerLen = Number(response.headers.get("content-length") ?? 0);
+        const contentLength = headerLen > 0 ? headerLen : KNOWN_MODEL_BYTES;
+
         const reader = response.body!.getReader();
         const chunks: Uint8Array[] = [];
         let received = 0;
@@ -116,9 +121,8 @@ export function useEdgeLLM(): EdgeLLMState {
           if (done) break;
           chunks.push(value);
           received += value.length;
-          if (contentLength > 0) {
-            setProgress(received / contentLength);
-          }
+          // Clamp to [0, 1] in case bytes exceed expected size
+          setProgress(Math.min(received / contentLength, 0.99));
         }
 
         // Combine chunks into single ArrayBuffer
@@ -212,11 +216,25 @@ export function useEdgeLLM(): EdgeLLMState {
           )
         : new ort.Tensor("int64", new BigInt64Array([BigInt(1)]), [1, 1]);
 
+      const positionIds = firstStep
+        ? new ort.Tensor(
+            "int64",
+            new BigInt64Array(Array.from({ length: inputIds.length }, (_, i) => BigInt(i))),
+            [1, inputIds.length]
+          )
+        : new ort.Tensor(
+            "int64",
+            new BigInt64Array([BigInt(inputIds.length - 1)]),
+            [1, 1]
+          );
+
       const feeds: Record<string, import("onnxruntime-web").Tensor> = {
         input_ids: inputTensor,
         attention_mask: attentionMask,
+        position_ids: positionIds,
         ...pastKeyValues,
       };
+
 
       // For models exported WITHOUT past_key_values on first step,
       // we skip pkv on step 0
