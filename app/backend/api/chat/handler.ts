@@ -480,42 +480,6 @@ export async function POST(req: Request) {
     actions: toolResult.actions,
   };
 
-  // Persist last response for debugging
-  const record = {
-    savedAt: new Date().toISOString(),
-    request: {
-      message,
-      video,
-      audio,
-      visual,
-      clips,
-      history,
-      multiClips,
-      suggestions,
-    },
-    response: {
-      raw: toolResult.rawContent,
-      toolActions: toolResult.actions,
-      parsed,
-    },
-  };
-
-  if (process.env.NODE_ENV === "development") {
-    try {
-      const { mkdir, writeFile } = await import("fs/promises");
-      const { join } = await import("path");
-      const dir = join(process.cwd(), ".ai");
-      await mkdir(dir, { recursive: true });
-      await writeFile(
-        join(dir, "last-response.json"),
-        JSON.stringify(record, null, 2),
-        "utf8"
-      );
-    } catch {
-      // ignore write errors
-    }
-  }
-
   return Response.json(
     {
       assistantMessage,

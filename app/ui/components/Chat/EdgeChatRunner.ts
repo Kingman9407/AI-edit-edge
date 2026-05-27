@@ -1,10 +1,5 @@
-/**
- * EdgeChatRunner
- *
- * Wraps the edge LLM generate() function to produce responses in the same
- * shape as the cloud /api/chat handler, so Chat.tsx can call either
- * path interchangeably.
- */
+import type { ModelAction } from "@/app/backend/api/chat/types";
+
 
 import type { EdgeLLMState } from "@/app/ui/hooks/useEdgeLLM";
 
@@ -25,7 +20,7 @@ export interface EdgeChatResponse {
   parsed: {
     assistant_message: string;
     status: "ok" | "error";
-    actions: unknown[];
+    actions: ModelAction[];
   };
   usage: null;
 }
