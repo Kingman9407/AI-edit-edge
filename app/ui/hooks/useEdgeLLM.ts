@@ -5,7 +5,7 @@ import { useCallback, useRef, useState } from "react";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MODEL_URL =
-  "https://media.githubusercontent.com/media/Kingman9407/AI-edit-openrouter/main/trainer/fine_tuned_smollm_onnx/model.onnx";
+  "https://github.com/Kingman9407/AI-edit-openrouter/raw/main/trainer/fine_tuned_smollm_onnx/model.onnx";
 
 const TOKENIZER_MODEL_ID = "HuggingFaceTB/SmolLM2-135M-Instruct";
 
