@@ -216,12 +216,26 @@ export function useEdgeLLM(): EdgeLLMState {
         throw ortImportErr;
       }
 
-      // Use WASM backend (safe, cross-browser). Multi-threaded if COOP/COEP set.
-      ort.env.wasm.proxy = false;
-      ort.env.wasm.numThreads = Math.min(
-        4,
-        typeof navigator !== "undefined" ? navigator.hardwareConcurrency ?? 2 : 2
-      );
+      // Detect mobile / low-memory devices
+      const isMobile = typeof navigator !== "undefined" &&
+        /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const hardwareConcurrency = typeof navigator !== "undefined"
+        ? navigator.hardwareConcurrency ?? 1
+        : 1;
+
+      // Force single thread on mobile to avoid SharedArrayBuffer / Atomics issues
+      const numThreads = isMobile ? 1 : Math.min(4, hardwareConcurrency);
+
+      console.log("[HuggingFace] ONNX session config:", {
+        isMobile,
+        hardwareConcurrency,
+        numThreads,
+        modelBufferBytes: modelBuffer.byteLength,
+      });
+
+      ort.env.wasm.proxy = false;        // proxy mode can fail on mobile
+      ort.env.wasm.numThreads = numThreads;
+      ort.env.wasm.simd = true;          // SIMD is widely supported; speeds up inference
 
       let session: import("onnxruntime-web").InferenceSession;
       try {
@@ -230,12 +244,28 @@ export function useEdgeLLM(): EdgeLLMState {
           graphOptimizationLevel: "all",
         });
       } catch (ortSessionErr) {
+        // On failure, retry with the most conservative settings (1 thread, no SIMD)
         console.error(
-          "[HuggingFace] ❌ Failed to create ONNX InferenceSession from model buffer.",
+          "[HuggingFace] ❌ ONNX InferenceSession creation failed. Retrying with single thread / no SIMD...",
           "Model buffer size (bytes):", modelBuffer.byteLength,
           "Error:", ortSessionErr
         );
-        throw ortSessionErr;
+        try {
+          ort.env.wasm.numThreads = 1;
+          ort.env.wasm.simd = false;
+          session = await ort.InferenceSession.create(modelBuffer, {
+            executionProviders: ["wasm"],
+            graphOptimizationLevel: "basic",
+          });
+          console.log("[HuggingFace] ✅ ONNX session created with fallback settings (1 thread, no SIMD).");
+        } catch (fallbackErr) {
+          console.error(
+            "[HuggingFace] ❌ ONNX session creation failed even with fallback settings.",
+            "This device may not support WASM or have enough memory.",
+            "Error:", fallbackErr
+          );
+          throw fallbackErr;
+        }
       }
 
       sessionRef.current = session;
