@@ -7,14 +7,23 @@ const nextConfig: NextConfig = {
   cacheMaxMemorySize: 52428800,
   // Automatically dispose page builds in development to free RAM
   onDemandEntries: {
-    maxInactiveAge: 15 * 1000, // 15 seconds
-    pagesBufferLength: 2,      // Keep only 2 pages in memory
+    maxInactiveAge: 10 * 1000, // 10 seconds
+    pagesBufferLength: 1,      // Keep only 1 page in memory at a time
   },
+  // These packages are large WASM/AI libs — tell the server NOT to bundle them.
+  // They are "use client" only, so the server has no reason to process them.
+  serverExternalPackages: [
+    "onnxruntime-web",
+    "@huggingface/transformers",
+    "@ffmpeg/ffmpeg",
+    "@ffmpeg/util",
+    "mediabunny",
+  ],
   turbopack: {
     root: __dirname,
   },
   experimental: {
-    // Webpack memory footprint reduction
+    // Webpack memory footprint reduction (applies when turbopack is not used)
     webpackMemoryOptimizations: true,
     // Disable preloading of all entrypoints on start to keep initial footprint minimal
     preloadEntriesOnStart: false,
