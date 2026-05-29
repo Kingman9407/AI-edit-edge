@@ -249,7 +249,7 @@ export default function Chat({
 
   useEffect(() => {
     if (!allowSuggestions) {
-      setSuggestions([]);
+      setTimeout(() => setSuggestions([]), 0);
     }
   }, [allowSuggestions]);
 
@@ -277,7 +277,7 @@ export default function Chat({
 
   useEffect(() => {
     if (!memoryKey) {
-      setMemory(null);
+      setTimeout(() => setMemory(null), 0);
       return;
     }
     if (typeof window === "undefined") return;
@@ -285,13 +285,13 @@ export default function Chat({
     if (stored) {
       try {
         const parsed = JSON.parse(stored) as ChatMemory;
-        setMemory(parsed);
+        setTimeout(() => setMemory(parsed), 0);
         return;
       } catch {
-        setMemory(null);
+        setTimeout(() => setMemory(null), 0);
       }
     } else {
-      setMemory(null);
+      setTimeout(() => setMemory(null), 0);
     }
   }, [memoryKey]);
 
@@ -306,9 +306,11 @@ export default function Chat({
 
   useEffect(() => {
     if (!memoryKey) {
-      setMessages(defaultMessages);
-      setSessions([]);
-      setCurrentSessionId(null);
+      setTimeout(() => {
+        setMessages(defaultMessages);
+        setSessions([]);
+        setCurrentSessionId(null);
+      }, 0);
       hasLoadedRef.current = true;
       return;
     }
@@ -366,19 +368,24 @@ export default function Chat({
         ? storedCurrent
         : nextSessions[0].id;
     const activeSession = nextSessions.find((session) => session.id === activeId);
-    if (activeSession) {
-      setMessages(activeSession.messages);
-    } else {
-      setMessages(defaultMessages);
-    }
-    setSessions(nextSessions);
-    setCurrentSessionId(activeId);
+    
+    setTimeout(() => {
+      if (activeSession) {
+        setMessages(activeSession.messages);
+      } else {
+        setMessages(defaultMessages);
+      }
+      setSessions(nextSessions);
+      setCurrentSessionId(activeId);
+    }, 0);
     hasLoadedRef.current = true;
   }, [memoryKey]);
 
   // Refs to track latest messages and last-saved signature without reactive deps.
   const messagesRef = useRef(messages);
-  messagesRef.current = messages;
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
   const lastSavedMsgSigRef = useRef<string>("");
   const lastMsgCountRef = useRef(0);
 
@@ -436,7 +443,7 @@ export default function Chat({
   useEffect(() => {
     if (status !== null) return;
     if (!statusLog.length) return;
-    setStatusLog([]);
+    setTimeout(() => setStatusLog([]), 0);
   }, [status, statusLog.length]);
 
   const handleNewChat = () => {
@@ -471,12 +478,12 @@ export default function Chat({
     return `${text.slice(0, maxLength - 3).trim()}...`;
   };
 
-  const updateMemory = (patch: Partial<ChatMemory>) => {
+  const updateMemory = useCallback((patch: Partial<ChatMemory>) => {
     setMemory((prev) => ({
       ...(prev ?? {}),
       ...patch,
     }));
-  };
+  }, []);
 
   const buildMemorySummary = (current: ChatMemory | null) => {
     if (!current) return "";
@@ -837,7 +844,7 @@ export default function Chat({
     return applied;
   };
 
-  const handleExportRequest = async () => {
+  const handleExportRequest = useCallback(async () => {
     if (!onRequestExport) {
       pushSystemMessage(
         "Export isn't ready yet. Please use the Export panel button once to load it."
@@ -860,7 +867,7 @@ export default function Chat({
       );
     }
     setStatus(null);
-  };
+  }, [onRequestExport, edits.length, updateMemory]);
 
   const buildAudioSummaryFor = (
     segments: AudioSegment[],

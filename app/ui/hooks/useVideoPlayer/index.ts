@@ -110,24 +110,26 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
   useEffect(() => {
     if (videoFile) {
       const src = URL.createObjectURL(videoFile);
-      setVideoSrc(src);
-      setIsPlaying(false);
-      setCurrentTime(0);
-      setTrimStart(0);
-      setTrimEnd(100);
-      setVideoWidth(0);
-      setVideoHeight(0);
-      setAudioSegments([]);
-      setAudioStatus("idle");
-      setAudioError(null);
-      setAudioProgress(0);
-      setVideoInsights([]);
-      setVideoInsightStatus("idle");
-      setVideoInsightError(null);
-      setSceneChanges([]);
-      setSceneStatus("idle");
-      setSceneError(null);
-      setEdits([]);
+      setTimeout(() => {
+        setVideoSrc(src);
+        setIsPlaying(false);
+        setCurrentTime(0);
+        setTrimStart(0);
+        setTrimEnd(100);
+        setVideoWidth(0);
+        setVideoHeight(0);
+        setAudioSegments([]);
+        setAudioStatus("idle");
+        setAudioError(null);
+        setAudioProgress(0);
+        setVideoInsights([]);
+        setVideoInsightStatus("idle");
+        setVideoInsightError(null);
+        setSceneChanges([]);
+        setSceneStatus("idle");
+        setSceneError(null);
+        setEdits([]);
+      }, 0);
       return () => {
         URL.revokeObjectURL(src);
       };
@@ -136,10 +138,12 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
 
   useEffect(() => {
     if (!videoFile || !enableAudioAnalysis) {
-      setAudioSegments([]);
-      setAudioStatus("idle");
-      setAudioError(null);
-      setAudioProgress(0);
+      setTimeout(() => {
+        setAudioSegments([]);
+        setAudioStatus("idle");
+        setAudioError(null);
+        setAudioProgress(0);
+      }, 0);
       return;
     }
     let cancelled = false;
@@ -297,12 +301,14 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
 
   useEffect(() => {
     if (!videoFile || !videoSrc || !enableVisualAnalysis) {
-      setVideoInsights([]);
-      setVideoInsightStatus("idle");
-      setVideoInsightError(null);
-      setSceneChanges([]);
-      setSceneStatus("idle");
-      setSceneError(null);
+      setTimeout(() => {
+        setVideoInsights([]);
+        setVideoInsightStatus("idle");
+        setVideoInsightError(null);
+        setSceneChanges([]);
+        setSceneStatus("idle");
+        setSceneError(null);
+      }, 0);
       return;
     }
     let cancelled = false;

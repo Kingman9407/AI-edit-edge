@@ -29,7 +29,7 @@ export default function SegmentedPreview({
       videoRef.current.pause();
       return;
     }
-    setSegmentIndex(0);
+    setTimeout(() => setSegmentIndex(0), 0);
     videoRef.current.currentTime = segments[0].start;
   }, [segments]);
 

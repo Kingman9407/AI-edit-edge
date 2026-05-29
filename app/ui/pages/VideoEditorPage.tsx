@@ -363,7 +363,7 @@ export default function VideoEditor() {
 
   useEffect(() => {
     if (editMode !== "multi" || planId !== "pro") {
-      setMultiAiScope("active");
+      setTimeout(() => setMultiAiScope("active"), 0);
     }
   }, [editMode, planId]);
 
@@ -377,7 +377,7 @@ export default function VideoEditor() {
     }
     const safeIndex = Math.min(activeIndex, multiFiles.length - 1);
     if (safeIndex !== activeIndex) {
-      setActiveIndex(safeIndex);
+      setTimeout(() => setActiveIndex(safeIndex), 0);
       return;
     }
     const nextFile = multiFiles[safeIndex];
@@ -614,21 +614,23 @@ export default function VideoEditor() {
   useEffect(() => {
     if (editMode !== "multi") return;
     const allowed = new Set(multiFiles.map((file) => getFileKey(file)));
-    setClipSnapshots((prev) => {
-      let changed = false;
-      const next: typeof prev = {};
-      Object.entries(prev).forEach(([key, value]) => {
-        if (allowed.has(key)) {
-          next[key] = value;
-        } else {
-          changed = true;
+    setTimeout(() => {
+      setClipSnapshots((prev) => {
+        let changed = false;
+        const next: typeof prev = {};
+        Object.entries(prev).forEach(([key, value]) => {
+          if (allowed.has(key)) {
+            next[key] = value;
+          } else {
+            changed = true;
+          }
+        });
+        if (!changed && Object.keys(prev).length === Object.keys(next).length) {
+          return prev;
         }
+        return next;
       });
-      if (!changed && Object.keys(prev).length === Object.keys(next).length) {
-        return prev;
-      }
-      return next;
-    });
+    }, 0);
   }, [editMode, multiFiles, getFileKey]);
 
   const startClipAnalysis = useCallback(
