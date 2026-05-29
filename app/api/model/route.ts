@@ -11,8 +11,17 @@ export async function GET() {
     const fetchHeaders = new Headers();
     const hfToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
 
+    // Diagnostic logs to help see what Next.js is receiving
+    console.log("[HuggingFace Diagnostic]", {
+      has_HF_TOKEN: !!process.env.HF_TOKEN,
+      has_HUGGINGFACE_TOKEN: !!process.env.HUGGINGFACE_TOKEN,
+      token_length: hfToken ? hfToken.length : 0,
+      token_preview: hfToken ? `${hfToken.substring(0, 6)}...` : "none",
+      env_keys_present: Object.keys(process.env).filter(k => k.includes("HF") || k.includes("TOKEN") || k.includes("MODEL") || k.includes("KEY"))
+    });
+
     if (hfToken) {
-      fetchHeaders.set("Authorization", `Bearer ${hfToken}`);
+      fetchHeaders.set("Authorization", `Bearer ${hfToken.trim()}`);
       console.log("[HuggingFace] Auth token found and attached to request.");
     } else {
       console.error(
