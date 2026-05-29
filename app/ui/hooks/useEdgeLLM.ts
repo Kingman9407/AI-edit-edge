@@ -574,6 +574,22 @@ export function useEdgeLLM(): EdgeLLMState {
         ...pastKeyValues,
       };
 
+      // For models exported by Optimum/Transformers.js, the KV cache inputs 
+      // are required even on the very first step (with sequence length 0).
+      if (firstStep) {
+        // SmolLM2-135M geometry:
+        // num_key_value_heads = 3
+        // head_dim = 64
+        const emptyKvShape = [1, 3, 0, 64]; 
+        const emptyBuffer = new Float32Array(0);
+
+        for (const inputName of session.inputNames) {
+          if (inputName.startsWith("past_key_values.") && !feeds[inputName]) {
+            feeds[inputName] = new ort.Tensor("float32", emptyBuffer, emptyKvShape);
+          }
+        }
+      }
+
       const t_step = performance.now();
       let results: Awaited<ReturnType<typeof session.run>>;
       try {
