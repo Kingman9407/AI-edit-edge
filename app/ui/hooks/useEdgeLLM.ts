@@ -155,16 +155,32 @@ async function getCachedModel(): Promise<ArrayBuffer | null> {
 }
 
 async function cacheModel(buffer: ArrayBuffer): Promise<void> {
+  // Safari / iOS Chrome often crash or hang indefinitely when trying to write
+  // >100MB blobs to IndexedDB in a single transaction.
+  const isMobile = typeof navigator !== "undefined" && /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (isMobile && buffer.byteLength > 100 * 1024 * 1024) {
+    console.warn(`[EdgeLLM] Skipping IndexedDB cache on mobile for large model (${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB).`);
+    return;
+  }
+
   try {
     const db = await openDb();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(IDB_STORE, "readwrite");
-      const req = tx.objectStore(IDB_STORE).put(buffer, IDB_KEY);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
-  } catch {
-    // ignore cache write errors
+    await Promise.race([
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, "readwrite");
+        const req = tx.objectStore(IDB_STORE).put(buffer, IDB_KEY);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error || new Error("IDB put failed"));
+        tx.onabort = () => reject(new Error("IDB transaction aborted"));
+        tx.onerror = () => reject(tx.error || new Error("IDB transaction error"));
+      }),
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error("IndexedDB write timeout (15s)")), 15000)
+      )
+    ]);
+  } catch (err) {
+    console.error(`[EdgeLLM] ⚠️ Failed to cache model in IndexedDB:`, err);
+    // We don't throw here. We just continue using the buffer in memory.
   }
 }
 
