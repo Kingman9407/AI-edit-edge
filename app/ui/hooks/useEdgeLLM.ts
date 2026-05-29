@@ -101,9 +101,59 @@ export function useEdgeLLM(): EdgeLLMState {
       let modelBuffer = await getCachedModel();
 
       if (!modelBuffer) {
-        const response = await fetch(MODEL_URL);
+        console.log("[HuggingFace] No cached model found — fetching from proxy:", MODEL_URL);
+
+        let response: Response;
+        try {
+          response = await fetch(MODEL_URL);
+        } catch (networkErr) {
+          console.error(
+            "[HuggingFace] ❌ Network error fetching model via proxy.",
+            "URL:", MODEL_URL,
+            "Error:", networkErr
+          );
+          throw networkErr;
+        }
+
+        if (response.status === 401) {
+          console.error(
+            "[HuggingFace] ❌ 401 Unauthorized — HF_TOKEN is missing, invalid, or expired.",
+            "The server proxy returned a 401. Check HF_TOKEN in .env.local."
+          );
+          throw new Error("HuggingFace: Unauthorized (401) — check HF_TOKEN.");
+        }
+
+        if (response.status === 403) {
+          console.error(
+            "[HuggingFace] ❌ 403 Forbidden — token lacks access to the model repo.",
+            "Check that HF_TOKEN has 'read' scope for the repo."
+          );
+          throw new Error("HuggingFace: Forbidden (403) — token lacks repo access.");
+        }
+
+        if (response.status === 404) {
+          console.error(
+            "[HuggingFace] ❌ 404 Not Found — model file missing at the proxy URL.",
+            "URL:", MODEL_URL,
+            "Verify MODEL_URL in .env.local points to a valid HuggingFace file."
+          );
+          throw new Error("HuggingFace: Model file not found (404).");
+        }
+
         if (!response.ok) {
-          throw new Error(`Failed to fetch model: ${response.status} ${response.statusText}`);
+          console.error(
+            `[HuggingFace] ❌ Unexpected HTTP ${response.status} ${response.statusText} from model proxy.`,
+            "URL:", MODEL_URL
+          );
+          throw new Error(`HuggingFace proxy error: ${response.status} ${response.statusText}`);
+        }
+
+        if (!response.body) {
+          console.error(
+            "[HuggingFace] ❌ Model response body is null — cannot read stream.",
+            "Status:", response.status
+          );
+          throw new Error("HuggingFace: Response body is null.");
         }
 
         // Next.js proxy strips Content-Length on chunked transfers,
@@ -111,19 +161,31 @@ export function useEdgeLLM(): EdgeLLMState {
         const KNOWN_MODEL_BYTES = 166009881;
         const headerLen = Number(response.headers.get("content-length") ?? 0);
         const contentLength = headerLen > 0 ? headerLen : KNOWN_MODEL_BYTES;
+        console.log(`[HuggingFace] Downloading model — expected size: ${contentLength} bytes.`);
 
-        const reader = response.body!.getReader();
+        const reader = response.body.getReader();
         const chunks: Uint8Array[] = [];
         let received = 0;
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(value);
-          received += value.length;
-          // Clamp to [0, 1] in case bytes exceed expected size
-          setProgress(Math.min(received / contentLength, 0.99));
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            received += value.length;
+            // Clamp to [0, 1] in case bytes exceed expected size
+            setProgress(Math.min(received / contentLength, 0.99));
+          }
+        } catch (streamErr) {
+          console.error(
+            "[HuggingFace] ❌ Stream read error while downloading model.",
+            "Bytes received before failure:", received,
+            "Error:", streamErr
+          );
+          throw streamErr;
         }
+
+        console.log(`[HuggingFace] ✅ Model download complete — ${received} bytes received.`);
 
         // Combine chunks into single ArrayBuffer
         const total = chunks.reduce((sum, c) => sum + c.byteLength, 0);
@@ -136,13 +198,23 @@ export function useEdgeLLM(): EdgeLLMState {
         modelBuffer = merged.buffer;
         await cacheModel(modelBuffer);
       } else {
+        console.log("[HuggingFace] ✅ Model loaded from IndexedDB cache — skipping download.");
         setProgress(1);
       }
 
       // ── Step 2: Create ONNX Runtime session ─────────────────────────────────
       setStatus("loading");
 
-      const ort = await import("onnxruntime-web");
+      let ort: typeof import("onnxruntime-web");
+      try {
+        ort = await import("onnxruntime-web");
+      } catch (ortImportErr) {
+        console.error(
+          "[HuggingFace] ❌ Failed to import onnxruntime-web.",
+          "Error:", ortImportErr
+        );
+        throw ortImportErr;
+      }
 
       // Use WASM backend (safe, cross-browser). Multi-threaded if COOP/COEP set.
       ort.env.wasm.proxy = false;
@@ -151,24 +223,60 @@ export function useEdgeLLM(): EdgeLLMState {
         typeof navigator !== "undefined" ? navigator.hardwareConcurrency ?? 2 : 2
       );
 
-      const session = await ort.InferenceSession.create(modelBuffer, {
-        executionProviders: ["wasm"],
-        graphOptimizationLevel: "all",
-      });
+      let session: import("onnxruntime-web").InferenceSession;
+      try {
+        session = await ort.InferenceSession.create(modelBuffer, {
+          executionProviders: ["wasm"],
+          graphOptimizationLevel: "all",
+        });
+      } catch (ortSessionErr) {
+        console.error(
+          "[HuggingFace] ❌ Failed to create ONNX InferenceSession from model buffer.",
+          "Model buffer size (bytes):", modelBuffer.byteLength,
+          "Error:", ortSessionErr
+        );
+        throw ortSessionErr;
+      }
 
       sessionRef.current = session;
+      console.log("[HuggingFace] ✅ ONNX InferenceSession created successfully.");
 
       // ── Step 3: Load tokenizer from HuggingFace CDN ──────────────────────────
-      const { AutoTokenizer } = await import("@huggingface/transformers");
-      const tokenizer = await AutoTokenizer.from_pretrained(TOKENIZER_MODEL_ID, {
-        progress_callback: undefined,
-      });
+      console.log(`[HuggingFace] Loading tokenizer: ${TOKENIZER_MODEL_ID}`);
+      let AutoTokenizer: typeof import("@huggingface/transformers").AutoTokenizer;
+      try {
+        ({ AutoTokenizer } = await import("@huggingface/transformers"));
+      } catch (transformersImportErr) {
+        console.error(
+          "[HuggingFace] ❌ Failed to import @huggingface/transformers.",
+          "Error:", transformersImportErr
+        );
+        throw transformersImportErr;
+      }
+
+      let tokenizer: import("@huggingface/transformers").PreTrainedTokenizer;
+      try {
+        tokenizer = await AutoTokenizer.from_pretrained(TOKENIZER_MODEL_ID, {
+          progress_callback: undefined,
+        });
+      } catch (tokenizerErr) {
+        console.error(
+          "[HuggingFace] ❌ Failed to load tokenizer from HuggingFace CDN.",
+          "Model ID:", TOKENIZER_MODEL_ID,
+          "This may be a network error, CORS issue, or the model ID is incorrect.",
+          "Error:", tokenizerErr
+        );
+        throw tokenizerErr;
+      }
+
       tokenizerRef.current = tokenizer;
+      console.log(`[HuggingFace] ✅ Tokenizer '${TOKENIZER_MODEL_ID}' loaded successfully.`);
 
       setStatus("ready");
       setProgress(1);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      console.error("[HuggingFace] ❌ loadModel() failed:", msg, err);
       setError(msg);
       setStatus("error");
     } finally {
