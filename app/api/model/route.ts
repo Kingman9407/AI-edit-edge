@@ -6,7 +6,15 @@ export async function GET() {
   const modelUrl = process.env.MODEL_URL || "https://huggingface.co/Kingman9407/hornet/resolve/main/model.onnx";
 
   try {
-    const response = await fetch(modelUrl);
+    const fetchHeaders = new Headers();
+    const hfToken = process.env.HF_TOKEN || process.env.HUGGINGFACE_TOKEN;
+    if (hfToken) {
+      fetchHeaders.set("Authorization", `Bearer ${hfToken}`);
+    }
+
+    const response = await fetch(modelUrl, {
+      headers: fetchHeaders,
+    });
 
     if (!response.ok) {
       console.error(`[API Model] Hugging Face fetch error: ${response.status} ${response.statusText}`);
