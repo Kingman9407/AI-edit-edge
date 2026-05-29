@@ -23,7 +23,22 @@ export async function GET() {
 
     let response: Response;
     try {
-      response = await fetch(modelUrl, { headers: fetchHeaders });
+      // Fetch with redirect: "manual" to prevent forwarding Authorization headers to CDNs (e.g. Cloudflare/AWS S3)
+      response = await fetch(modelUrl, { 
+        headers: fetchHeaders,
+        redirect: "manual" 
+      });
+
+      // Handle redirect manually without Authorization header
+      if (response.status === 301 || response.status === 302 || response.status === 307 || response.status === 308) {
+        const redirectUrl = response.headers.get("location");
+        if (redirectUrl) {
+          console.log(`[HuggingFace] 302 Redirect detected. Fetching CDN URL without Authorization header: ${redirectUrl.slice(0, 100)}...`);
+          response = await fetch(redirectUrl);
+        } else {
+          console.error("[HuggingFace] ❌ Redirect response status was 301/302 but Location header was missing.");
+        }
+      }
     } catch (networkError) {
       console.error(
         "[HuggingFace] ❌ Network error — could not reach HuggingFace Hub.",
