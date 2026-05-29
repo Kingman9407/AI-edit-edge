@@ -547,14 +547,14 @@ export function useEdgeLLM(): EdgeLLMState {
         [1, currentIds.length]
       );
 
-      const attentionMask = firstStep
-        ? new ort.Tensor(
-            "int64",
-            new BigInt64Array(inputIds.map(() => BigInt(1))),
-            [1, inputIds.length]
-          )
-        : new ort.Tensor("int64", new BigInt64Array([BigInt(1)]), [1, 1]);
+      // attention_mask must always cover the full sequence length (past + current)
+      const attentionMask = new ort.Tensor(
+        "int64",
+        new BigInt64Array(inputIds.length).fill(BigInt(1)),
+        [1, inputIds.length]
+      );
 
+      // position_ids is the full sequence on step 0, but just the current token's index on step > 0
       const positionIds = firstStep
         ? new ort.Tensor(
             "int64",
