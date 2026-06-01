@@ -1,6 +1,4 @@
 import type { ModelAction } from "@/app/backend/api/chat/types";
-
-
 import type { EdgeLLMState } from "@/app/ui/hooks/useEdgeLLM";
 
 export interface EdgeChatRequest {
@@ -34,23 +32,29 @@ function buildPrompt(req: EdgeChatRequest): string {
 
   lines.push("<|im_start|>system");
   lines.push(
-    "You are an AI video editing assistant. Help the user edit their video. Keep replies concise and friendly."
+    "You are Hornet, a natural language processing (NLP) assistant. " +
+    "You analyze the user's video editing requests and return a structured JSON object " +
+    "containing two fields: 'message' (a natural response) and 'operations' (a list of video edit actions " +
+    "like 'cut', 'mute', 'add_audio_overlay' with start and end timestamps in seconds). " +
+    "Output ONLY a raw JSON object. Do NOT use markdown formatting, backticks, or extra text outside the JSON."
   );
+  
   if (req.videoContext?.name) {
-    lines.push(`Video: ${req.videoContext.name}`);
+    lines.push(`\n[VIDEO METADATA]`);
+    lines.push(`Name: ${req.videoContext.name}`);
     if (req.videoContext.duration) {
       lines.push(`Duration: ${req.videoContext.duration.toFixed(1)}s`);
     }
     if (req.videoContext.width && req.videoContext.height) {
       lines.push(`Resolution: ${req.videoContext.width}x${req.videoContext.height}`);
     }
+    lines.push(`Playhead: ${req.videoContext.currentTime?.toFixed(1) || 0}s\n`);
   }
   lines.push("<|im_end|>");
 
   // Append history
   if (req.history?.length) {
     for (const turn of req.history.slice(-6)) {
-      // last 6 turns
       lines.push(`<|im_start|>${turn.role}`);
       lines.push(turn.content);
       lines.push("<|im_end|>");
@@ -61,7 +65,7 @@ function buildPrompt(req: EdgeChatRequest): string {
   lines.push("<|im_start|>user");
   lines.push(req.message);
   lines.push("<|im_end|>");
-  lines.push("<|im_start|>assistant");
+  lines.push("<|im_start|>assistant\n");
 
   return lines.join("\n");
 }
@@ -80,16 +84,41 @@ export async function runEdgeChat(
   const prompt = buildPrompt(req);
   const raw = await edgeLLM.generate(prompt);
 
-  // Strip any trailing im_end tokens that slipped through
-  const clean = raw.replace(/<\|im_end\|>[\s\S]*$/, "").trim();
-  const assistantMessage = clean || "I'm ready to help with your video editing!";
+  console.log("🤖 [Edge LLM] RAW Output:\n", raw);
+
+  let assistantMessage = "I'm ready to help with your video editing!";
+  let actions: ModelAction[] = [];
+
+  try {
+    // The WebWorker guarantees `raw` is just the JSON block
+    const parsedObj = JSON.parse(raw);
+    console.log("🤖 [Edge LLM] Parsed JSON:\n", parsedObj);
+    
+    if (parsedObj.message) {
+      assistantMessage = parsedObj.message;
+    }
+    
+    if (Array.isArray(parsedObj.operations)) {
+      actions = parsedObj.operations.map((op: any) => ({
+        type: op.operation,
+        start: Number(op.start),
+        end: Number(op.end),
+        reason: op.reason || "Edge LLM Edit"
+      }));
+    }
+  } catch (err) {
+    console.error("🤖 [Edge LLM] Failed to parse JSON:", raw);
+    assistantMessage = raw.replace(/<\|im_end\|>[\s\S]*$/, "").trim();
+  }
+
+  console.log("🤖 [Edge LLM] Final Actions sent to UI:\n", actions);
 
   return {
     assistantMessage,
     parsed: {
       assistant_message: assistantMessage,
       status: "ok",
-      actions: [], // Edge model doesn't emit structured tool calls
+      actions,
     },
     usage: null,
   };
