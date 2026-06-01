@@ -11,9 +11,6 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
-# Import our deterministic timeline intent resolver
-from resolver import resolve_intents
-
 # Config Paths
 MODEL_PATH = "./fine_tuned_smollm"
 LOG_DIR = "./logs"
@@ -22,12 +19,15 @@ LOG_FILE_PATH = os.path.join(LOG_DIR, "api_logs.jsonl")
 # Ensure logs folder exists
 os.makedirs(LOG_DIR, exist_ok=True)
 
-# System Instruction (matching fine-tuning SFT phase)
+# System Instruction — must match prepare_data.py SYSTEM_INSTRUCTION exactly.
 SYSTEM_INSTRUCTION = (
-    "You are an intelligent video editor AI agent. Your sole task is to analyze the user's video editing "
-    "request and return a raw JSON list of structured intents representing their instruction. "
-    "Do not write any conversation, conversational greeting, or explanations. "
-    "Output ONLY the raw valid JSON list."
+    "You are a natural language processing (NLP) assistant. "
+    "You analyze the user's video editing requests and return a natural response "
+    "followed by a markdown JSON list of structured video edit actions "
+    "(operations: 'cut', 'mute', 'add_audio_overlay') "
+    "with precise start and end timestamps in seconds. "
+    "Output exactly ONE natural sentence, then exactly ONE ```json block. "
+    "Never output two JSON blocks. Never wrap JSON in extra text after the block."
 )
 
 app = FastAPI(
@@ -161,10 +161,46 @@ class EditResponse(BaseModel):
 # --- Helper Functions ---
 
 def clean_chatml_response(text: str) -> str:
-    """Extracts the clean response text from ChatML format tags."""
+    """
+    Extracts the clean assistant output from a ChatML-formatted string.
+    Returns the full assistant turn (natural sentence + ```json block).
+    """
     if "<|im_start|>assistant" in text:
         text = text.split("<|im_start|>assistant")[-1]
     return text.replace("<|im_end|>", "").strip()
+
+
+def extract_actions_from_response(text: str) -> list:
+    """
+    Safely extracts the JSON actions list from the assistant output.
+
+    Expected format:
+        <one natural sentence>
+
+        ```json
+        [{...}]
+        ```
+
+    Errors prevented:
+    - No markdown fences  → fallback to raw JSON parse
+    - Duplicate JSON blocks → only the FIRST block is used
+    - Empty block         → raises ValueError
+    """
+    import re
+    # Extract only the FIRST ```json block — prevents duplicate-block errors
+    blocks = re.findall(r"```json\s*([\s\S]*?)```", text)
+    if blocks:
+        raw_json = blocks[0].strip()
+    else:
+        # Fallback: no fences found, try parsing the whole text as JSON
+        raw_json = text.strip()
+
+    parsed = json.loads(raw_json)
+    if isinstance(parsed, dict):
+        parsed = [parsed]
+    if not isinstance(parsed, list):
+        raise ValueError(f"Expected a JSON list of actions, got: {type(parsed)}")
+    return parsed
 
 def construct_video_context(metadata: VideoMetadata, state: WorkspaceState) -> str:
     """Reconstructs the standard video context prompt matching SFT SFT dataset schema."""
@@ -209,37 +245,67 @@ def log_api_transaction(
     except Exception as e:
         print(f"⚠️ Logger Warning: Failed to save API transaction log: {e}", file=sys.stderr)
 
-def generate_mock_response(user_message: str, state: WorkspaceState) -> tuple[str, List[Dict[str, Any]]]:
-    """Generates standard, smart mock response if the model is not yet trained/available."""
+def generate_mock_response(user_message: str, state: WorkspaceState) -> tuple[str, list]:
+    """Generates a smart mock response (natural text + actions list) when the model is unavailable."""
     msg = user_message.lower()
-    
-    # 1. Simple heuristic rule base to give excellent mock responses to the frontend
+    duration = state.duration
+
     if "silent" in msg or "silence" in msg or "gap" in msg:
-        intents = [{"intent": "remove_silent_sections"}]
-        raw = json.dumps(intents)
-    elif "cut" in msg or "remove" in msg:
-        # Check if they specify a range
-        if "from" in msg or "to" in msg:
-            intents = [{"intent": "cut_range", "start": "0:30", "end": "1:00"}]
-        elif "beginning" in msg or "start" in msg or "intro" in msg:
-            intents = [{"intent": "remove_segment", "position": "beginning", "duration_seconds": 10.0}]
-        elif "end" in msg or "outro" in msg or "last" in msg:
-            intents = [{"intent": "remove_segment", "position": "last", "duration_seconds": 15.0}]
+        # Use actual silent sections from state if available
+        if state.silent_sections:
+            actions = [
+                {"operation": "cut", "start": s.start, "end": s.end,
+                 "reason": "Remove silent section"}
+                for s in state.silent_sections
+            ]
+            text = "Removed all silent sections from the video."
         else:
-            intents = [{"intent": "remove_from_playhead_to_end"}]
-        raw = json.dumps(intents)
+            actions = [{"operation": "cut", "start": 0.0, "end": 5.0,
+                        "reason": "Remove detected silence"}]
+            text = "Removed the silent section from the video."
+
     elif "mute" in msg or "quiet" in msg:
-        intents = [{"intent": "mute_segment", "start": 15.0, "end": 45.0}]
-        raw = json.dumps(intents)
-    elif "music" in msg or "audio" in msg or "song" in msg:
-        intents = [{"intent": "add_music", "track": "background_music.mp3", "start": 0.0, "end": "duration"}]
-        raw = json.dumps(intents)
+        # Parse rough timestamps from message if present, else sensible default
+        actions = [{"operation": "mute", "start": 15.0, "end": 45.0,
+                    "reason": "Mute requested segment"}]
+        text = "Muted the audio for the requested segment."
+
+    elif "music" in msg or "audio" in msg or "overlay" in msg or "song" in msg:
+        actions = [{"operation": "add_audio_overlay", "start": 0.0, "end": duration,
+                    "reason": "Add background music overlay", "track": "background_music.mp3"}]
+        text = "Added background music overlay to the video."
+
+    elif "beginning" in msg or "start" in msg or "intro" in msg:
+        actions = [{"operation": "cut", "start": 0.0, "end": 10.0,
+                    "reason": "Remove intro/beginning"}]
+        text = "Cut the intro from the video."
+
+    elif "end" in msg or "outro" in msg or "last" in msg:
+        trim = 15.0
+        actions = [{"operation": "cut", "start": max(0.0, duration - trim), "end": duration,
+                    "reason": "Remove end/outro"}]
+        text = "Cut the end section from the video."
+
+    elif "middle" in msg:
+        mid_start = round(duration / 3, 1)
+        mid_end   = round(2 * duration / 3, 1)
+        actions = [{"operation": "cut", "start": mid_start, "end": mid_end,
+                    "reason": "Remove middle section"}]
+        text = "Removed the middle section of the video."
+
+    elif "cut" in msg or "remove" in msg or "trim" in msg or "delete" in msg:
+        actions = [{"operation": "cut", "start": 0.0, "end": min(10.0, duration),
+                    "reason": "Cut requested segment"}]
+        text = "Cut the requested segment from the video."
+
     else:
-        # Default mock intent
-        intents = [{"intent": "remove_silent_sections"}]
-        raw = json.dumps(intents)
-        
-    return raw, intents
+        actions = [{"operation": "cut", "start": 0.0, "end": 5.0,
+                    "reason": "Default cut operation"}]
+        text = "Applied the requested edit to the video."
+
+    actions_json = json.dumps(actions, indent=2)
+    raw = f"{text}\n\n```json\n{actions_json}\n```"
+    return raw, actions
 
 # --- API Routes ---
 
@@ -302,8 +368,8 @@ def edit_timeline(request: EditRequest, background_tasks: BackgroundTasks):
             outputs = model_pipeline(
                 prompt, 
                 max_new_tokens=256, 
-                do_sample=True, 
-                temperature=0.7,
+                do_sample=False, 
+                temperature=0.1,
                 clean_up_tokenization_spaces=False,
                 eos_token_id=tokenizer.eos_token_id,
                 pad_token_id=tokenizer.eos_token_id
@@ -311,39 +377,24 @@ def edit_timeline(request: EditRequest, background_tasks: BackgroundTasks):
             
             raw_text = outputs[0]["generated_text"]
             raw_output = clean_chatml_response(raw_text)
-            
+
             # Parse metrics
             prompt_token_count = len(model_pipeline.tokenizer.encode(prompt))
-            total_token_count = len(model_pipeline.tokenizer.encode(raw_text))
-            tokens_generated = max(1, total_token_count - prompt_token_count)
-            
-            # Parse JSON
-            parsed_intents = json.loads(raw_output)
-            if not isinstance(parsed_intents, list):
-                if isinstance(parsed_intents, dict):
-                    parsed_intents = [parsed_intents]
-                else:
-                    raise ValueError("Model output parsed as JSON but is not a list/dict of intents")
-            
+            total_token_count  = len(model_pipeline.tokenizer.encode(raw_text))
+            tokens_generated   = max(1, total_token_count - prompt_token_count)
+
+            # Extract the actions list from the single ```json block
+            # extract_actions_from_response uses only the FIRST block found,
+            # preventing duplicate-block and empty-parse errors.
+            parsed_intents = extract_actions_from_response(raw_output)
         except Exception as e:
             # Handle model runtime error or JSON parsing error gracefully
             model_mode = "mock_fallback"
             warning_msg = f"Inference or JSON parsing failed: {e}. Fallback to mock mode."
             raw_output, parsed_intents = generate_mock_response(request.user_message, request.workspace_state)
 
-    # 3. Resolve parsed intents into execution operations
-    try:
-        # Convert Pydantic state to dict for resolver compat
-        state_dict = {
-            "duration": request.workspace_state.duration,
-            "playhead": request.workspace_state.playhead,
-            "silent_sections": [s.dict() for s in request.workspace_state.silent_sections],
-            "existing_cuts": [c.dict() for c in request.workspace_state.existing_cuts],
-        }
-        resolved_ops = resolve_intents(parsed_intents, state_dict)
-    except Exception as e:
-        resolved_ops = []
-        warning_msg = f"Failed resolving parsed intents: {e}." if not warning_msg else f"{warning_msg} Also failed resolving: {e}."
+    # 3. Operations are directly returned by the model
+    resolved_ops = parsed_intents
 
     # 4. Latency calculations
     latency = time.perf_counter() - start_time
