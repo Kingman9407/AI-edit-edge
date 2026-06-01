@@ -62,12 +62,21 @@ def clean_chatml_response(text):
         return text.split("<|im_start|>assistant")[-1].replace("<|im_end|>", "").strip()
     return text.strip()
 
-# Video Editor System Instruction
+# Video Editor System Instruction (Base Model)
 system_instruction = (
     "You are an intelligent video editor AI agent. Your sole task is to analyze the user's video editing "
     "request and return a raw JSON list of structured intents representing their instruction. "
     "Do not write any conversation, conversational greeting, or explanations. "
     "Output ONLY the raw valid JSON list."
+)
+
+# Video Editor System Instruction (Fine-Tuned Hornet Model)
+system_instruction_ft = (
+    "You are Hornet, a natural language processing (NLP) assistant. "
+    "You analyze the user's video editing requests and return a structured JSON object "
+    "containing two fields: 'message' (a natural response) and 'operations' (a list of video edit actions "
+    "like 'cut', 'mute', 'add_audio_overlay' with start and end timestamps in seconds). "
+    "Output ONLY a raw JSON object. Do NOT use markdown formatting, backticks, or extra text outside the JSON."
 )
 
 # Simulated Video Workspace Context
@@ -99,12 +108,12 @@ def run_comparison(user_text):
     
     # Formulate prompt using SmolLM2 ChatML template with system instruction
     full_user_content = f"{mock_video_context}\n\n[USER MESSAGE]\n{user_text}"
-    messages = [
+    messages_base = [
         {"role": "system", "content": system_instruction},
         {"role": "user", "content": full_user_content}
     ]
     
-    prompt_base = pipe_base.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    prompt_base = pipe_base.tokenizer.apply_chat_template(messages_base, tokenize=False, add_generation_prompt=True)
     
     # 1. Query Untrained Base Model
     print("⏳ Querying Untrained Base Model...")
@@ -123,7 +132,11 @@ def run_comparison(user_text):
     ans_finetuned = None
     if pipe_finetuned:
         print("⏳ Querying Fine-Tuned Model...")
-        prompt_ft = pipe_finetuned.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        messages_ft = [
+            {"role": "system", "content": system_instruction_ft},
+            {"role": "user", "content": full_user_content}
+        ]
+        prompt_ft = pipe_finetuned.tokenizer.apply_chat_template(messages_ft, tokenize=False, add_generation_prompt=True)
         out_ft = pipe_finetuned(
             prompt_ft, 
             max_new_tokens=256, 
@@ -151,9 +164,15 @@ def run_comparison(user_text):
         print(f"RAW OUTPUT:\n{ans_finetuned}\n")
         try:
             parsed_ft = json.loads(ans_finetuned)
-            resolved_ft = resolve_intents(parsed_ft, mock_workspace_state)
-            print(f"✅ DETECTED INTENTS:\n{json.dumps(parsed_ft, indent=2)}")
-            print(f"🎬 RESOLVED OPERATIONS:\n{json.dumps(resolved_ft, indent=2)}")
+            if isinstance(parsed_ft, dict) and "operations" in parsed_ft:
+                # Direct operations returned by Hornet SFT
+                print(f"🗣️  AGENT MESSAGE: {parsed_ft.get('message', '')}")
+                print(f"✅ DETECTED OPERATIONS:\n{json.dumps(parsed_ft['operations'], indent=2)}")
+            else:
+                # Fallback to resolver if it returned standard intents format
+                resolved_ft = resolve_intents(parsed_ft, mock_workspace_state)
+                print(f"✅ DETECTED INTENTS:\n{json.dumps(parsed_ft, indent=2)}")
+                print(f"🎬 RESOLVED OPERATIONS:\n{json.dumps(resolved_ft, indent=2)}")
         except Exception as e:
             print(f"⚠️ Fine-tuned model output is not valid JSON intent: {e}")
     else:

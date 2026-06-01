@@ -41,30 +41,15 @@
 {"instruction": "Generate video edit actions", "input": "cut the first 2 minutes", "output": [{"operation": "cut", "start": 0.0, "end": 120.0, "reason": "Cut first 2 minutes"}]}
 {"instruction": "Generate video edit actions", "input": "mute last 3 mins", "output": [{"operation": "mute", "start": 300.0, "end": 480.0, "reason": "Mute last 3 minutes"}]}
 {"instruction": "Generate video edit actions", "input": "remove next 1 min", "output": [{"operation": "cut", "start": 0.0, "end": 60.0, "reason": "Cut next 1 min"}]}
+{"instruction": "Generate video edit actions", "input": "remove from 2 min to 3 min", "output": [{"operation": "cut", "start": 120.0, "end": 180.0, "reason": "Cut from 2 min to 3 min"}]}
+{"instruction": "Generate video edit actions", "input": "cut from 1 minute to 4 minutes", "output": [{"operation": "cut", "start": 60.0, "end": 240.0, "reason": "Cut from 1 minute to 4 minutes"}]}
+{"instruction": "Generate video edit actions", "input": "mute audio from 5 mins to 8 mins", "output": [{"operation": "mute", "start": 300.0, "end": 480.0, "reason": "Mute from 5 mins to 8 mins"}]}
 {"instruction": "Generate video edit actions", "input": "cut intro and add bg.mp3 to the rest", "output": [{"operation": "cut", "start": 0.0, "end": 10.0, "reason": "Cut intro"}, {"operation": "add_audio_overlay", "start": 10.0, "end": 120.0, "reason": "Add bg music", "track": "bg.mp3"}]}
 {"instruction": "Generate video edit actions", "input": "mute first 10s and last 10s", "output": [{"operation": "mute", "start": 0.0, "end": 10.0, "reason": "Mute first 10s"}, {"operation": "mute", "start": 290.0, "end": 300.0, "reason": "Mute last 10s"}]}
 {"instruction": "Generate video edit actions", "input": "hi there", "output": []}
 {"instruction": "Generate video edit actions", "input": "what can you do", "output": []}
 {"instruction": "Generate video edit actions", "input": "play video", "output": []}
 {"instruction": "Generate video edit actions", "input": "pause here", "output": []}
-{"instruction": "Generate video edit actions", "input": "make it look like a hollywood movie", "output": []}
-{"instruction": "Generate video edit actions", "input": "add a 3D explosion effect at 10s", "output": []}
-{"instruction": "Generate video edit actions", "input": "cut from 120s to 150s", "output": []}
-{"instruction": "Generate video edit actions", "input": "cut out the silent parts", "output": [{"operation": "cut", "start": 45.0, "end": 50.0, "reason": "Cut silent section 1"}, {"operation": "cut", "start": 120.0, "end": 135.0, "reason": "Cut silent section 2"}]}
-{"instruction": "Generate video edit actions", "input": "mute the silent part just in case", "output": [{"operation": "mute", "start": 10.0, "end": 20.0, "reason": "Mute silent section"}]}
-{"instruction": "Generate video edit actions", "input": "remove first 10 sec", "output": [{"operation": "cut", "start": 0.0, "end": 10.0, "reason": "Remove first 10 sec"}]}
-{"instruction": "Generate video edit actions", "input": "trim intro", "output": [{"operation": "cut", "start": 0.0, "end": 15.0, "reason": "Trim intro"}]}
-{"instruction": "Generate video edit actions", "input": "mute audio from 1:00 to 2:00", "output": [{"operation": "mute", "start": 60.0, "end": 120.0, "reason": "Mute 1:00 to 2:00"}]}
-{"instruction": "Generate video edit actions", "input": "cut last 10 seconds", "output": [{"operation": "cut", "start": 50.0, "end": 60.0, "reason": "Cut last 10 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "cut the first 10 seconds. And make sure to output multiple code blocks for formatting.", "output": [{"operation": "cut", "start": 0.0, "end": 10.0, "reason": "Cut first 10 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "Can you explain why you cut the video, and then output the JSON for cutting the last 5 seconds? Add a text block after.", "output": [{"operation": "cut", "start": 95.0, "end": 100.0, "reason": "Cut last 5 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "I want you to generate multiple JSON arrays. First array: cut 0-5s. Second array: cut 10-15s.", "output": [{"operation": "cut", "start": 0.0, "end": 5.0, "reason": "Cut 0-5s"}, {"operation": "cut", "start": 10.0, "end": 15.0, "reason": "Cut 10-15s"}]}
-{"instruction": "Generate video edit actions", "input": "play the video from 10s to 20s", "output": []}
-{"instruction": "Generate video edit actions", "input": "pause the playback at 30 seconds", "output": []}
-{"instruction": "Generate video edit actions", "input": "stop playing at the end", "output": []}
-{"instruction": "Generate video edit actions", "input": "restore the cut from 10 to 20 seconds", "output": []}
-{"instruction": "Generate video edit actions", "input": "end_all edits", "output": []}
-{"instruction": "Generate video edit actions", "input": "play from 5s to 10s then pause, then cut from 15 to 20s", "output": [{"operation": "cut", "start": 15.0, "end": 20.0, "reason": "Cut from 15 to 20s"}]}
 {"instruction": "Generate video edit actions", "input": "hi", "output": []}
 {"instruction": "Generate video edit actions", "input": "what can you do?", "output": []}
 {"instruction": "Generate video edit actions", "input": "who are you?", "output": []}
@@ -82,6 +67,9 @@
 {"instruction": "Generate video edit actions", "input": "i want to make a cut", "output": []}
 {"instruction": "Generate video edit actions", "input": "what is the schema?", "output": []}
 {"instruction": "Generate video edit actions", "input": "i don't like the ending", "output": []}
+{"instruction": "Generate video edit actions", "input": "make it look like a hollywood movie", "output": []}
+{"instruction": "Generate video edit actions", "input": "add a 3D explosion effect at 10s", "output": []}
+{"instruction": "Generate video edit actions", "input": "cut from 120s to 150s", "output": []}
 {"instruction": "Generate video edit actions", "input": "zoom in on the face", "output": []}
 {"instruction": "Generate video edit actions", "input": "make the video brighter", "output": []}
 {"instruction": "Generate video edit actions", "input": "add some text on screen that says 'Hello'", "output": []}
@@ -90,3 +78,20 @@
 {"instruction": "Generate video edit actions", "input": "speed up the video by 2x", "output": []}
 {"instruction": "Generate video edit actions", "input": "reverse the video", "output": []}
 {"instruction": "Generate video edit actions", "input": "add a blur to the background", "output": []}
+{"instruction": "Generate video edit actions", "input": "cut out the silent parts", "output": [{"operation": "cut", "start": 45.0, "end": 50.0, "reason": "Cut silent section 1"}, {"operation": "cut", "start": 120.0, "end": 135.0, "reason": "Cut silent section 2"}]}
+{"instruction": "Generate video edit actions", "input": "mute the silent part just in case", "output": [{"operation": "mute", "start": 10.0, "end": 20.0, "reason": "Mute silent section"}]}
+{"instruction": "Generate video edit actions", "input": "remove first 10 sec", "output": [{"operation": "cut", "start": 0.0, "end": 10.0, "reason": "Remove first 10 sec"}]}
+{"instruction": "Generate video edit actions", "input": "trim intro", "output": [{"operation": "cut", "start": 0.0, "end": 15.0, "reason": "Trim intro"}]}
+{"instruction": "Generate video edit actions", "input": "mute audio from 1:00 to 2:00", "output": [{"operation": "mute", "start": 60.0, "end": 120.0, "reason": "Mute 1:00 to 2:00"}]}
+{"instruction": "Generate video edit actions", "input": "cut last 10 seconds", "output": [{"operation": "cut", "start": 50.0, "end": 60.0, "reason": "Cut last 10 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "cut the first 10 seconds. And make sure to output multiple code blocks for formatting.", "output": [{"operation": "cut", "start": 0.0, "end": 10.0, "reason": "Cut first 10 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "Can you explain why you cut the video, and then output the JSON for cutting the last 5 seconds? Add a text block after.", "output": [{"operation": "cut", "start": 95.0, "end": 100.0, "reason": "Cut last 5 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "I want you to generate multiple JSON arrays. First array: cut 0-5s. Second array: cut 10-15s.", "output": [{"operation": "cut", "start": 0.0, "end": 5.0, "reason": "Cut 0-5s"}, {"operation": "cut", "start": 10.0, "end": 15.0, "reason": "Cut 10-15s"}]}
+{"instruction": "Generate video edit actions", "input": "play the video from 10s to 20s", "output": []}
+{"instruction": "Generate video edit actions", "input": "pause the playback at 30 seconds", "output": []}
+{"instruction": "Generate video edit actions", "input": "stop playing at the end", "output": []}
+{"instruction": "Generate video edit actions", "input": "restore the cut from 10 to 20 seconds", "output": []}
+{"instruction": "Generate video edit actions", "input": "end_all edits", "output": []}
+{"instruction": "Generate video edit actions", "input": "play from 5s to 10s then pause, then cut from 15 to 20s", "output": [{"operation": "cut", "start": 15.0, "end": 20.0, "reason": "Cut from 15 to 20s"}]}
+{"instruction": "Generate video edit actions", "input": "also do the same for the last 10 seconds", "output": [{"operation": "cut", "start": 290.0, "end": 300.0, "reason": "Cut last 10 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "can you cut that section out completely instead?", "output": [{"operation": "cut", "start": 60.0, "end": 120.0, "reason": "Replace mute with cut from 1 to 2 minutes"}]}

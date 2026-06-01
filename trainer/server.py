@@ -21,13 +21,11 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 # System Instruction — must match prepare_data.py SYSTEM_INSTRUCTION exactly.
 SYSTEM_INSTRUCTION = (
-    "You are a natural language processing (NLP) assistant. "
-    "You analyze the user's video editing requests and return a natural response "
-    "followed by a markdown JSON list of structured video edit actions "
-    "(operations: 'cut', 'mute', 'add_audio_overlay') "
-    "with precise start and end timestamps in seconds. "
-    "Output exactly ONE natural sentence, then exactly ONE ```json block. "
-    "Never output two JSON blocks. Never wrap JSON in extra text after the block."
+    "You are Hornet, a natural language processing (NLP) assistant. "
+    "You analyze the user's video editing requests and return a structured JSON object "
+    "containing two fields: 'message' (a natural response) and 'operations' (a list of video edit actions "
+    "like 'cut', 'mute', 'add_audio_overlay' with start and end timestamps in seconds). "
+    "Output ONLY a raw JSON object. Do NOT use markdown formatting, backticks, or extra text outside the JSON."
 )
 
 app = FastAPI(
@@ -175,16 +173,8 @@ def extract_actions_from_response(text: str) -> list:
     Safely extracts the JSON actions list from the assistant output.
 
     Expected format:
-        <one natural sentence>
-
-        ```json
-        [{...}]
-        ```
-
-    Errors prevented:
-    - No markdown fences  → fallback to raw JSON parse
-    - Duplicate JSON blocks → only the FIRST block is used
-    - Empty block         → raises ValueError
+        A raw JSON object containing "message" and "operations" keys (Hornet SFT schema).
+        Fallback to a markdown JSON list or single dictionary block.
     """
     import re
     # Extract only the FIRST ```json block — prevents duplicate-block errors
@@ -197,6 +187,8 @@ def extract_actions_from_response(text: str) -> list:
 
     parsed = json.loads(raw_json)
     if isinstance(parsed, dict):
+        if "operations" in parsed:
+            return parsed["operations"]
         parsed = [parsed]
     if not isinstance(parsed, list):
         raise ValueError(f"Expected a JSON list of actions, got: {type(parsed)}")

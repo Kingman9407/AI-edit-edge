@@ -25,7 +25,7 @@ from training_data import ALL_EXAMPLES as TRAINING_EXAMPLES
 # Formatting helpers
 # ---------------------------------------------------------------------------
 
-def format_chatml(user_content: str, response_text: str, actions: list) -> dict:
+def format_chatml(user_content: str, response_text: str, actions: list, history: list = None) -> dict:
     """
     Builds a ChatML training record for SmolLM2 SFT.
 
@@ -46,13 +46,14 @@ def format_chatml(user_content: str, response_text: str, actions: list) -> dict:
     
     assistant_output = json.dumps(combined_output, indent=2)
 
-    return {
-        "text": (
-            f"<|im_start|>system\n{SYSTEM_INSTRUCTION}<|im_end|>\n"
-            f"<|im_start|>user\n{user_content}<|im_end|>\n"
-            f"<|im_start|>assistant\n{assistant_output}<|endoftext|>"
-        )
-    }
+    text = f"<|im_start|>system\n{SYSTEM_INSTRUCTION}<|im_end|>\n"
+    if history:
+        for msg in history:
+            text += f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n"
+    text += f"<|im_start|>user\n{user_content}<|im_end|>\n"
+    text += f"<|im_start|>assistant\n{assistant_output}<|im_end|>"
+
+    return {"text": text}
 
 
 def format_clean_training(request: str, response_text: str, actions: list) -> dict:
@@ -76,6 +77,73 @@ def format_clean_training(request: str, response_text: str, actions: list) -> di
 # Main
 # ---------------------------------------------------------------------------
 
+import re
+
+def convert_to_compact_memory(user_content_str: str, recent_edits: list, last_action: str) -> str:
+    # 1. Parse Metadata
+    meta_match = re.search(r'\[VIDEO METADATA\]\n(.*?)(\n\n|$)', user_content_str, re.DOTALL)
+    metadata_lines = meta_match.group(1).split('\n') if meta_match else []
+    
+    new_meta = []
+    for line in metadata_lines:
+        if line.startswith("Type:"): continue
+        # optionally remove the "s" from Duration if needed, but keeping it is fine
+        new_meta.append(line)
+        
+    # 2. Parse Timeline
+    timeline_match = re.search(r'\[TIMELINE STATE\]\n(.*?)(\n\n|$)', user_content_str, re.DOTALL)
+    timeline_lines = timeline_match.group(1).split('\n') if timeline_match else []
+    
+    cuts = []
+    mutes = []
+    music = []
+    for line in timeline_lines:
+        if line.startswith("Existing Cuts:"):
+            cuts_json = line.replace("Existing Cuts:", "").strip()
+            if cuts_json:
+                try: cuts = json.loads(cuts_json)
+                except: pass
+        elif line.startswith("Silent Sections:"):
+            mutes_json = line.replace("Silent Sections:", "").strip()
+            if mutes_json:
+                try: mutes = json.loads(mutes_json)
+                except: pass
+        elif line.startswith("Background Music:"):
+            music_json = line.replace("Background Music:", "").strip()
+            if music_json:
+                try: music = json.loads(music_json)
+                except: pass
+
+    def format_list(items):
+        if not items: return "- None"
+        return "\n".join(f"- {i['start']} -> {i['end']}" for i in items)
+
+    timeline_str = (
+        "Cuts:\n" + format_list(cuts) + "\n\n"
+        "Muted Sections:\n" + format_list(mutes) + "\n\n"
+        "Subtitles:\n- None\n\n"
+        "Background Music:\n" + format_list(music)
+    )
+    
+    # 3. Format Recent Edits & Last Action
+    recent_str = "None"
+    if recent_edits:
+        recent_str = "\n".join(f"{idx+1}. {edit}" for idx, edit in enumerate(recent_edits))
+        
+    last_action_str = last_action if last_action else "None"
+    
+    # 4. Extract User Request
+    req_match = re.search(r'\[USER REQUEST\]\n(.*)$', user_content_str, re.DOTALL)
+    user_req = req_match.group(1).strip() if req_match else ""
+    
+    return (
+        f"[VIDEO METADATA]\n" + "\n".join(new_meta) + "\n\n"
+        f"[TIMELINE STATE]\n" + timeline_str + "\n\n"
+        f"[RECENT EDITS]\n{recent_str}\n\n"
+        f"[LAST ACTION]\n{last_action_str}\n\n"
+        f"[USER REQUEST]\n{user_req}"
+    )
+
 def main():
     print("=" * 70)
     print("     VIDEO EDITOR AI - TRAINING DATA PREPARATION")
@@ -85,15 +153,40 @@ def main():
     print(f"\n[1/2] Generating ChatML SFT dataset: '{data_filename}'...")
     with open(data_filename, "w", encoding="utf-8") as f:
         for ex in TRAINING_EXAMPLES:
-            user_content = (
+            raw_user_content = (
                 f"[VIDEO METADATA]\n{ex['metadata']}\n\n"
                 f"[TIMELINE STATE]\n{ex['timeline']}\n\n"
                 f"[USER REQUEST]\n{ex['request']}"
             )
+            
+            recent_edits = []
+            last_action = "None"
+            history = ex.get("history")
+            
+            # Deep copy history so we don't mutate the imported source module
+            import copy
+            if history:
+                history = copy.deepcopy(history)
+                for msg in history:
+                    if msg["role"] == "user":
+                        msg["content"] = convert_to_compact_memory(msg["content"], recent_edits, last_action)
+                        req_match = re.search(r'\[USER REQUEST\]\n(.*)$', msg["content"], re.DOTALL)
+                        if req_match:
+                            recent_edits.append(req_match.group(1).strip())
+                    elif msg["role"] == "assistant":
+                        try:
+                            parsed_ast = json.loads(msg["content"])
+                            last_action = parsed_ast.get("message", "None")
+                        except:
+                            last_action = "None"
+
+            compact_user_content = convert_to_compact_memory(raw_user_content, recent_edits, last_action)
+            
             record = format_chatml(
-                user_content=user_content,
+                user_content=compact_user_content,
                 response_text=ex["response"],
-                actions=ex["actions"]
+                actions=ex["actions"],
+                history=history
             )
             f.write(json.dumps(record, ensure_ascii=False) + "\n")
     print("✅ ChatML SFT dataset created!")

@@ -1,12 +1,47 @@
 """
-Category 13 — Natural Chat Handling
+Category 08 — Natural Chat & Conversation Handling
 
-Goal: Train the model to respond naturally to greetings and capability questions 
-      while still outputting a raw JSON object with an empty operations list.
-      The model should introduce itself as "Hornet".
+Goal: Train the model to handle ALL non-edit messages correctly.
+
+  Part A — Conversational Safety Net: casual/social messages (hi, play, pause)
+            must return empty operations WITHOUT hallucinating edits.
+  Part B — Hornet Personality: greetings, capability questions, and vague
+            requests get a natural, helpful reply — model always introduces
+            itself as "Hornet". Still outputs valid JSON with empty operations.
 """
 
 examples = [
+    # ── Part A: Conversational Safety Net (empty response, no ops) ─────────────
+    {
+        "metadata": "Name: video.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
+        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
+        "request":   "hi there",
+        "response":  "",
+        "actions": []
+    },
+    {
+        "metadata": "Name: video.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
+        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
+        "request":   "what can you do",
+        "response":  "",
+        "actions": []
+    },
+    {
+        "metadata": "Name: video.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
+        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
+        "request":   "play video",
+        "response":  "",
+        "actions": []
+    },
+    {
+        "metadata": "Name: video.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
+        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
+        "request":   "pause here",
+        "response":  "",
+        "actions": []
+    },
+
+    # ── Part B: Hornet Personality (natural reply, empty ops) ──────────────────
     {
         "metadata": "Name: demo.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
         "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
@@ -125,5 +160,5 @@ examples = [
         "request":   "i don't like the ending",
         "response":  "If you want to remove it, just tell me 'cut the ending' or specify the timestamps.",
         "actions": []
-    }
+    },
 ]

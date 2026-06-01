@@ -24,15 +24,16 @@ SYSTEM_INSTRUCTION = (
 # ==============================================================================
 
 def run_model(pipe, tokenizer, system_prompt: str, user_content: str,
-              max_new_tokens: int = 128) -> tuple[str, float, int]:
+              history: list = None, max_new_tokens: int = 128) -> tuple[str, float, int]:
     """
     Runs the model pipeline with the given system prompt and user content.
     Returns (generated_text, elapsed_seconds, new_token_count).
     """
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user",   "content": user_content},
-    ]
+    messages = [{"role": "system", "content": system_prompt}]
+    if history:
+        messages.extend(history)
+    messages.append({"role": "user", "content": user_content})
+
     prompt = pipe.tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
     )
@@ -44,7 +45,7 @@ def run_model(pipe, tokenizer, system_prompt: str, user_content: str,
         max_new_tokens=max_new_tokens,
         do_sample=False,
         temperature=0.1,
-        eos_token_id=[tokenizer.eos_token_id, 0],
+        eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.eos_token_id,
     )
     elapsed = time.perf_counter() - start
@@ -97,6 +98,35 @@ def parse_json_response(text: str) -> dict:
 # Video context generator
 # ==============================================================================
 
+def format_video_context(state: dict) -> str:
+    metadata = (
+        f"Name: {state.get('name')}\n"
+        f"Duration: {state.get('duration')}s\n"
+        f"Resolution: {state.get('resolution')}\n"
+        f"Playhead: {state.get('playhead')}s"
+    )
+
+    def format_list(items):
+        if not items: return "- None"
+        return "\n".join(f"- {i['start']} -> {i['end']}" for i in items)
+
+    timeline = (
+        "Cuts:\n" + format_list(state.get('existing_cuts', [])) + "\n\n"
+        "Muted Sections:\n" + format_list(state.get('silent_sections', [])) + "\n\n"
+        "Subtitles:\n- None\n\n"
+        "Background Music:\n" + format_list(state.get('bg_music', []))
+    )
+    
+    recent_edits = state.get('recent_edits', [])
+    recent_str = "None"
+    if recent_edits:
+        recent_str = "\n".join(f"{idx+1}. {edit}" for idx, edit in enumerate(recent_edits))
+        
+    last_action = state.get('last_action', "None")
+
+    return f"[VIDEO METADATA]\n{metadata}\n\n[TIMELINE STATE]\n{timeline}\n\n[RECENT EDITS]\n{recent_str}\n\n[LAST ACTION]\n{last_action}"
+
+
 def generate_random_8min_video():
     """Generates a random 8-minute video context and workspace state."""
     duration = 480.0
@@ -122,27 +152,19 @@ def generate_random_8min_video():
     bg_music = []
 
     workspace_state = {
+        "name": name,
+        "video_type": video_type,
+        "resolution": resolution,
         "duration": duration,
         "playhead": playhead,
         "silent_sections": silent_sections,
-        "existing_cuts": existing_cuts
+        "existing_cuts": existing_cuts,
+        "bg_music": bg_music,
+        "recent_edits": [],
+        "last_action": "None"
     }
 
-    metadata = (
-        f"Name: {name}\n"
-        f"Type: {video_type}\n"
-        f"Duration: {duration}s ({int(duration/60)} minutes)\n"
-        f"Resolution: {resolution}\n"
-        f"Playhead: {playhead}s"
-    )
-
-    timeline = (
-        f"Existing Cuts: {json.dumps(existing_cuts)}\n"
-        f"Silent Sections: {json.dumps(silent_sections)}\n"
-        f"Background Music: {json.dumps(bg_music)}"
-    )
-
-    video_context = f"[VIDEO METADATA]\n{metadata}\n\n[TIMELINE STATE]\n{timeline}"
+    video_context = format_video_context(workspace_state)
 
     return workspace_state, video_context
 
@@ -201,6 +223,8 @@ def main():
     print("   Type 'exit' or 'quit' to end the session.")
     print("=" * 70)
 
+    chat_history = []
+
     while True:
         try:
             print("\n🎬 CURRENT TIMELINE STATE:")
@@ -223,8 +247,12 @@ def main():
                 pipe, tokenizer,
                 system_prompt=SYSTEM_INSTRUCTION,
                 user_content=full_user_content,
+                history=chat_history,
                 max_new_tokens=256,
             )
+            
+            chat_history.append({"role": "user", "content": full_user_content})
+            chat_history.append({"role": "assistant", "content": raw_text.strip()})
 
             print("\n🤖 AGENT RAW OUTPUT:")
             print("-" * 50)
@@ -243,6 +271,27 @@ def main():
                 else:
                     print(f"\n✅ TIMELINE OPERATIONS ({len(parsed_intents)} op(s)):")
                     print(json.dumps(parsed_intents, indent=2))
+                    
+                    action_descs = []
+                    for op in parsed_intents:
+                        op_type = op.get("operation")
+                        start_time = op.get("start")
+                        end_time = op.get("end")
+                        if op_type == "cut":
+                            workspace_state["existing_cuts"].append({"start": start_time, "end": end_time})
+                            action_descs.append(f"Cut section from {start_time}s -> {end_time}s")
+                        elif op_type == "mute":
+                            workspace_state["silent_sections"].append({"start": start_time, "end": end_time})
+                            action_descs.append(f"Muted section from {start_time}s -> {end_time}s")
+                        elif op_type in ["add_audio_overlay", "add_music"]:
+                            workspace_state["bg_music"].append({"start": start_time, "end": end_time, "asset": op.get("asset", "unknown")})
+                            action_descs.append(f"Added audio overlay from {start_time}s -> {end_time}s")
+                    
+                    if action_descs:
+                        workspace_state["last_action"] = "; ".join(action_descs)
+                    workspace_state["recent_edits"].append(user_input)
+                    
+                    video_context = format_video_context(workspace_state)
             except Exception as e:
                 print(f"\n⚠️  Parse/resolve error: {e}")
 
