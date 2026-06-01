@@ -6,7 +6,7 @@ const IDB_STORE = "models";
 const IDB_KEY = "smollm2-135m-onnx";
 
 const MAX_NEW_TOKENS = 256;
-const EOS_TOKEN_ID = 0; // SmolLM2 uses token 0 as EOS
+const EOS_TOKEN_ID = 2; // SmolLM2 uses token 2 (<|im_end|>) as EOS for ChatML
 
 let session: import("onnxruntime-web").InferenceSession | null = null;
 let tokenizer: import("@huggingface/transformers").PreTrainedTokenizer | null = null;
