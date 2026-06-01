@@ -99,12 +99,43 @@ export async function runEdgeChat(
     }
     
     if (Array.isArray(parsedObj.operations)) {
-      actions = parsedObj.operations.map((op: any) => ({
-        type: op.operation,
-        start: Number(op.start),
-        end: Number(op.end),
-        reason: op.reason || "Edge LLM Edit"
-      }));
+      actions = parsedObj.operations.map((op: any) => {
+        let startVal = op.start !== undefined && op.start !== null ? Number(op.start) : null;
+        let endVal = op.end !== undefined && op.end !== null ? Number(op.end) : null;
+
+        // Fallback for 135M model dropping timestamps
+        if (startVal === null || endVal === null) {
+          const textToParse = (op.reason || req.message || "").toLowerCase();
+          const duration = req.videoContext?.duration || 60;
+          
+          let amount = 10; // default to 10s if no number is found
+          const match = textToParse.match(/(\d+(?:\.\d+)?)\s*(min|minute|sec|second)/);
+          if (match) {
+            const val = parseFloat(match[1]);
+            const unit = match[2];
+            amount = unit.startsWith('min') ? val * 60 : val;
+          }
+
+          if (textToParse.includes("first") || textToParse.includes("start") || textToParse.includes("beginning") || textToParse.includes("intro")) {
+            startVal = 0;
+            endVal = Math.min(amount, duration);
+          } else if (textToParse.includes("last") || textToParse.includes("end") || textToParse.includes("outro")) {
+            startVal = Math.max(0, duration - amount);
+            endVal = duration;
+          } else {
+            // Default arbitrary edit if we can't determine direction
+            startVal = 0;
+            endVal = Math.min(amount, duration);
+          }
+        }
+
+        return {
+          type: op.operation,
+          start: startVal,
+          end: endVal,
+          reason: op.reason || "Edge LLM Edit"
+        };
+      });
     }
   } catch (err) {
     console.error("🤖 [Edge LLM] Failed to parse JSON:", raw);
