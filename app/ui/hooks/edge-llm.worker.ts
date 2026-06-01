@@ -11,6 +11,42 @@ const EOS_TOKEN_ID = 2; // SmolLM2 uses token 2 (<|im_end|>) as EOS for ChatML
 let session: import("onnxruntime-web").InferenceSession | null = null;
 let tokenizer: import("@huggingface/transformers").PreTrainedTokenizer | null = null;
 
+// ─── JSON Parser ──────────────────────────────────────────────────────────────
+
+function parseJsonResponse(text: string): string {
+  const start = text.indexOf('{');
+  if (start === -1) return text;
+
+  let depth = 0;
+  let inString = false;
+  let escapeNext = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    if (ch === '\\' && inString) {
+      escapeNext = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) {
+        return text.substring(start, i + 1);
+      }
+    }
+  }
+  return text;
+}
+
 // ─── IndexedDB helpers ────────────────────────────────────────────────────────
 
 function openDb(): Promise<IDBDatabase> {
@@ -239,7 +275,8 @@ async function generate(prompt: string, reqId: number) {
   }
 
   const decoded = await tokenizer.decode(generatedTokenIds.map(Number), { skip_special_tokens: true });
-  self.postMessage({ type: "DONE", reqId, text: decoded.trim() });
+  const cleanedText = parseJsonResponse(decoded);
+  self.postMessage({ type: "DONE", reqId, text: cleanedText.trim() });
 }
 
 self.addEventListener("message", (e) => {
