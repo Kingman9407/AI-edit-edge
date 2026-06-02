@@ -34,8 +34,8 @@ def main():
         
     print(f"\n📥 Loading tokenizer strictly from local folder: {model_path} ...")
     tokenizer = AutoTokenizer.from_pretrained(model_path, local_files_only=True)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
+    # Use unk_token <|endoftext|> as pad token instead of eos_token to prevent masking out EOS loss
+    tokenizer.pad_token = "<|endoftext|>"
 
     print(f"📥 Loading model weights strictly from local folder: {model_path} ...")
     model = AutoModelForCausalLM.from_pretrained(
@@ -51,12 +51,47 @@ def main():
     dataset = load_dataset("json", data_files=dataset_file, split="train")
 
     def tokenize_function(examples):
-        return tokenizer(
+        result = tokenizer(
             examples["text"], 
             truncation=True, 
             max_length=512,
             padding=True
         )
+        
+        # Build labels
+        labels = []
+        assistant_start_tokens = tokenizer.encode("<|im_start|>assistant\n", add_special_tokens=False)
+        n_tokens = len(assistant_start_tokens)
+
+        for input_ids in result["input_ids"]:
+            label = [-100] * len(input_ids)
+            
+            # Find the start of the final assistant response
+            found_idx = -1
+            for i in range(len(input_ids) - n_tokens + 1):
+                if input_ids[i : i + n_tokens] == assistant_start_tokens:
+                    found_idx = i
+            
+            if found_idx != -1:
+                # Mask prompt tokens, keep assistant response tokens
+                start_label_idx = found_idx + n_tokens
+                for j in range(start_label_idx, len(input_ids)):
+                    if input_ids[j] == tokenizer.pad_token_id:
+                        label[j] = -100
+                    else:
+                        label[j] = input_ids[j]
+            else:
+                # Fallback to standard labels if tokenizer splits tags unexpectedly
+                for j in range(len(input_ids)):
+                    if input_ids[j] == tokenizer.pad_token_id:
+                        label[j] = -100
+                    else:
+                        label[j] = input_ids[j]
+                
+            labels.append(label)
+            
+        result["labels"] = labels
+        return result
 
     print("⚡ Tokenizing training examples...")
     tokenized_dataset = dataset.map(

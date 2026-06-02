@@ -41,10 +41,8 @@ def run_model(pipe, tokenizer, system_prompt: str, user_content: str,
     start = time.perf_counter()
     outputs = pipe(
         prompt,
-        max_length=None,
         max_new_tokens=max_new_tokens,
         do_sample=False,
-        temperature=0.1,
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.eos_token_id,
     )

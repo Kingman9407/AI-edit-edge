@@ -51,7 +51,7 @@ def format_chatml(user_content: str, response_text: str, actions: list, history:
         for msg in history:
             text += f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n"
     text += f"<|im_start|>user\n{user_content}<|im_end|>\n"
-    text += f"<|im_start|>assistant\n{assistant_output}<|im_end|>"
+    text += f"<|im_start|>assistant\n{assistant_output}<|im_end|>\n"
 
     return {"text": text}
 
