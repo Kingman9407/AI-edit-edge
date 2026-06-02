@@ -3,7 +3,7 @@ import sys
 import requests
 
 # Ensure the user has provided the token
-token = os.environ.get("BLOB_READ_WRITE_TOKEN") or "vercel_blob_rw_4dlZfN9MYOUoEHwI_Fvwip7ZakOE2milIVW6SDnFwM6XGtg"
+token = os.environ.get("BLOB_READ_WRITE_TOKEN")
 if not token:
     print("❌ Error: Missing BLOB_READ_WRITE_TOKEN environment variable.")
     print("Please set it in your terminal before running this script.")
