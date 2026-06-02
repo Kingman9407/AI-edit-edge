@@ -1,5 +1,5 @@
 const MODEL_URL = "https://huggingface.co/Kingman9407/hornet/resolve/main/model.onnx";
-const TOKENIZER_MODEL_ID = "Kingman9407/hornet";
+const TOKENIZER_MODEL_ID = "HuggingFaceTB/SmolLM2-135M-Instruct";
 
 const IDB_DB_NAME = "edge-llm-cache";
 const IDB_STORE = "models";
