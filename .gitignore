@@ -62,3 +62,8 @@ trainer/*_quantized/
 *.onnx
 /public/models/
 
+# Hugging Face & Vercel Blob test scripts
+test_hf.js
+test_fetch.js
+test_url.js
+
