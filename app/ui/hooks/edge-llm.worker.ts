@@ -1,4 +1,4 @@
-const MODEL_URL = "https://huggingface.co/Kingman9407/hornet/resolve/main/model.onnx";
+const MODEL_URL = "/api/model";
 const TOKENIZER_MODEL_ID = "Kingman9407/hornet";
 
 const IDB_DB_NAME = "edge-llm-cache";
@@ -178,6 +178,7 @@ async function loadModel() {
   ort.env.wasm.proxy = false; // We are already in a worker
   ort.env.wasm.numThreads = numThreads;
   ort.env.wasm.simd = simdOk;
+  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/";
 
   try {
     console.log("[EdgeLLM Worker] Creating ONNX session (attempt 1)");
