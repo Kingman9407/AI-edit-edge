@@ -1229,6 +1229,7 @@ export default function VideoEditor() {
                 sceneChanges={activeSceneChanges}
                 edits={edits}
                 mutedSegments={muteEdits}
+                audioOverlays={audioOverlays}
                 onTokenUsage={(usage) => addTokenUsage("chat", usage)}
                 onRequestExport={async () => {
                   if (!exporter) {

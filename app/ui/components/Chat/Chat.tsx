@@ -154,6 +154,7 @@ interface ChatProps {
     audio: number;
     vision: number;
   };
+  audioOverlays?: { videoStart: number; videoEnd: number; label?: string }[];
   /** Called when the AI requests a merge — activates merge mode in the parent */
   onActivateMerge?: () => void;
 }
@@ -200,6 +201,8 @@ export default function Chat({
   videoInsights = [],
   sceneChanges = [],
   edits = [],
+  mutedSegments = [],
+  audioOverlays = [],
   memoryKey,
   onRequestExport,
   onAddEdit,
@@ -1246,6 +1249,22 @@ export default function Chat({
                   currentTime: videoContext.currentTime,
                 }
               : null,
+            existingCuts: edits.map((e) => ({ start: e.start, end: e.end })),
+            mutedSegments: mutedSegments.map((e) => ({ start: e.start, end: e.end })),
+            audioOverlays: audioOverlays.map((o) => ({
+              start: o.videoStart,
+              end: o.videoEnd,
+              track: o.label,
+            })),
+            recentEdits: historyForModel
+              .filter((h) => h.role === "user")
+              .map((h) => h.content),
+            lastAction: (() => {
+              const lastAssistant = [...historyForModel]
+                .reverse()
+                .find((h) => h.role === "assistant");
+              return lastAssistant ? lastAssistant.content : "None";
+            })(),
           },
           edgeLLM
         );

@@ -1,5 +1,5 @@
 const MODEL_URL = "/api/model";
-const TOKENIZER_MODEL_ID = "HuggingFaceTB/SmolLM2-135M-Instruct";
+const TOKENIZER_MODEL_ID = "Kingman9407/hornet";
 
 const IDB_DB_NAME = "edge-llm-cache";
 const IDB_STORE = "models";
@@ -203,13 +203,26 @@ async function loadModel() {
   self.postMessage({ type: "STATUS", status: "ready", progress: 1 });
 }
 
-async function generate(prompt: string, reqId: number) {
+async function generate(prompt: string | any[], reqId: number) {
   if (!session || !tokenizer) {
     throw new Error("Model is not loaded yet.");
   }
 
   const ort = await import("onnxruntime-web");
-  const encoded = await tokenizer(prompt, { return_tensor: false, add_special_tokens: true });
+  let promptText = "";
+  if (Array.isArray(prompt)) {
+    // Manually build ChatML format — identical to Python's apply_chat_template.
+    // This avoids any JS/Python template differences and works regardless of
+    // which tokenizer repo is loaded.
+    for (const msg of prompt) {
+      promptText += `<|im_start|>${msg.role}\n${msg.content}<|im_end|>\n`;
+    }
+    promptText += "<|im_start|>assistant\n";
+  } else {
+    promptText = prompt;
+  }
+
+  const encoded = await tokenizer(promptText, { return_tensor: false, add_special_tokens: true });
   let inputIds = Array.from(encoded.input_ids as number[]).map(Number);
 
   const generatedTokenIds: bigint[] = [];
