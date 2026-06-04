@@ -219,6 +219,15 @@ def main():
     print("\n" + "=" * 70)
     print("💡 INSTRUCTIONS: Ask me to edit your video in plain English.")
     print("   Type 'exit' or 'quit' to end the session.")
+    print("\n   Here are 4 diverse test inputs you can copy-paste to verify capabilities:")
+    print("   1. Absolute Time Parsing (Testing MM:SS conversion)")
+    print("      Input: cut out the segment from 01:15 to 01:45 and mute the audio from 02:30 to 03:00")
+    print("   2. Context-Aware Resolution (Testing timeline dependency)")
+    print("      Input: cut out the silent parts of the video")
+    print("   3. Playhead-Relative Edits & Audio Overlay")
+    print("      Input: cut the next 20 seconds from the current playhead and add upbeat.mp3 as background music from 0.0 to 120.0 seconds")
+    print("   4. Natural Boundary Trimming")
+    print("      Input: trim off the first 10 seconds of the video and remove the ending")
     print("=" * 70)
 
     chat_history = []

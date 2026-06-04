@@ -74,9 +74,15 @@ function buildMessages(req: EdgeChatRequest): ChatMLMessage[] {
       "Output ONLY a raw JSON object. Do NOT use markdown formatting, backticks, or extra text outside the JSON."
   });
 
-  // 2. History turns
+  // 2. History turns (exclude the active user request if it is at the end of the history array)
   if (req.history?.length) {
-    for (const turn of req.history.slice(-6)) {
+    let historyTurns = req.history;
+    const lastTurn = historyTurns[historyTurns.length - 1];
+    if (lastTurn && lastTurn.role === "user" && lastTurn.content === req.message) {
+      historyTurns = historyTurns.slice(0, -1);
+    }
+
+    for (const turn of historyTurns.slice(-6)) {
       messages.push({
         role: turn.role,
         content: turn.role === "user" ? formatHistoryUserTurn(turn.content) : turn.content

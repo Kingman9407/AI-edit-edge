@@ -1236,10 +1236,15 @@ export default function Chat({
           throw new Error("Edge model is not loaded yet. Click the ⚡ Edge button first.");
         }
         pushStatus("Running on your device (edge inference)...");
+        const edgeHistoryForModel =
+          historyForModel.at(-1)?.role === "user" &&
+          historyForModel.at(-1)?.content === currentInput
+            ? historyForModel.slice(0, -1)
+            : historyForModel;
         const edgeRes = await runEdgeChat(
           {
             message: currentInput,
-            history: historyForModel as { role: "user" | "assistant"; content: string }[],
+            history: edgeHistoryForModel as { role: "user" | "assistant"; content: string }[],
             videoContext: videoContext
               ? {
                   name: videoContext.name,
@@ -1256,11 +1261,11 @@ export default function Chat({
               end: o.videoEnd,
               track: o.label,
             })),
-            recentEdits: historyForModel
+            recentEdits: edgeHistoryForModel
               .filter((h) => h.role === "user")
               .map((h) => h.content),
             lastAction: (() => {
-              const lastAssistant = [...historyForModel]
+              const lastAssistant = [...edgeHistoryForModel]
                 .reverse()
                 .find((h) => h.role === "assistant");
               return lastAssistant ? lastAssistant.content : "None";
@@ -1288,7 +1293,8 @@ export default function Chat({
           console.log("AI Raw Response:", raw);
           try {
             data = raw ? JSON.parse(raw) : null;
-          } catch {
+          } catch (err) {
+            console.error("❌ AI Response failed to parse as JSON. Raw response was:", raw, err);
             data = null;
           }
 

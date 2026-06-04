@@ -437,7 +437,16 @@ export async function POST(req: Request) {
     messages.push({ role: "user", content: message });
   }
 
+  // Log all messages sent to the AI model before the request
+  console.log("\n========== [Edge AI] Input Messages ==========");
+  messages.forEach((msg, i) => {
+    console.log(`\n[${i}] role: ${msg.role}`);
+    console.log(msg.content);
+  });
+  console.log("==============================================\n");
+
   // Call model with tools
+  const modelCallStart = Date.now();
   let toolResult: ToolCallResult;
   try {
     toolResult = await requestWithTools({ messages });
@@ -447,8 +456,22 @@ export async function POST(req: Request) {
     console.error("Chat API Request Error:", error);
     return Response.json({ error: { message: errMessage } }, { status: 500 });
   }
+  const modelCallMs = Date.now() - modelCallStart;
 
   addUsage(toolResult.usage);
+
+  // Log model performance stats
+  const completionTokens = toolResult.usage?.completion_tokens ?? 0;
+  const elapsedSec = modelCallMs / 1000;
+  const tokensPerSec = elapsedSec > 0 ? (completionTokens / elapsedSec).toFixed(2) : "n/a";
+  console.log("\n========== [Edge AI] Model Stats ============");
+  console.log(`Temperature      : 0.4`);
+  console.log(`Elapsed time     : ${elapsedSec.toFixed(2)}s`);
+  console.log(`Prompt tokens    : ${toolResult.usage?.prompt_tokens ?? "n/a"}`);
+  console.log(`Completion tokens: ${completionTokens}`);
+  console.log(`Total tokens     : ${toolResult.usage?.total_tokens ?? "n/a"}`);
+  console.log(`Tokens / second  : ${tokensPerSec}`);
+  console.log("==============================================\n");
 
   const assistantMessage =
     toolResult.assistantText ||

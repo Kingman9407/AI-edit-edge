@@ -198,73 +198,119 @@ def convert_and_quantize(model_path, final_output_dir):
     except Exception as e:
         print(f"⚠️  Warning during workspace cleanup: {e}")
 
+def convert_fp32(model_path, final_output_dir):
+    """
+    Exports a pure float32 ONNX model — NO quantization.
+    Larger file but identical precision to the original PyTorch model.
+    """
+    from optimum.exporters.onnx import main_export
+
+    abs_model_path     = os.path.abspath(model_path)
+    abs_final_output_dir = os.path.abspath(final_output_dir)
+
+    print(f"{Colors.HEADER}============================================================{Colors.END}")
+    print(f"🚀 {Colors.BOLD}STARTING FLOAT32 ONNX EXPORT{Colors.END}")
+    print(f"   Source Model Path : {Colors.GREEN}{abs_model_path}{Colors.END}")
+    print(f"   Output Folder     : {Colors.GREEN}{abs_final_output_dir}{Colors.END}")
+    print(f"{Colors.HEADER}============================================================{Colors.END}\n")
+
+    if os.path.exists(abs_final_output_dir):
+        print(f"🧹 Clearing existing folder at {abs_final_output_dir}...")
+        shutil.rmtree(abs_final_output_dir)
+    os.makedirs(abs_final_output_dir, exist_ok=True)
+
+    print("⚡ [1/1] Exporting PyTorch weights to float32 ONNX (no quantization)...")
+    try:
+        main_export(
+            model_name_or_path=abs_model_path,
+            output=abs_final_output_dir,
+            task="causal-lm-with-past",
+            no_post_process=False,
+        )
+        print(f"✅ Float32 ONNX exported successfully to {abs_final_output_dir}")
+    except Exception as e:
+        print(f"\n❌ {Colors.FAIL}Float32 export failed: {e}{Colors.END}")
+        shutil.rmtree(abs_final_output_dir)
+        sys.exit(1)
+
 def main():
-    parser = argparse.ArgumentParser(description="Convert local SmolLM2 weights to a single optimized INT8 ONNX directory.")
-    parser.add_argument("--model", type=str, default=None, help="Path to PyTorch model directory (default: auto-detect)")
-    parser.add_argument("--output", type=str, default=None, help="Output directory for final INT8 ONNX model")
+    parser = argparse.ArgumentParser(
+        description="Convert local SmolLM2 weights to ONNX (INT8 quantized or float32)."
+    )
+    parser.add_argument("--model",  type=str, default=None,
+                        help="Path to PyTorch model directory (default: auto-detect)")
+    parser.add_argument("--output", type=str, default=None,
+                        help="Base output directory name (suffixes _onnx / _onnx_fp32 added)")
+    parser.add_argument("--format", type=str, default=None,
+                        choices=["int8", "fp32", "both"],
+                        help="Export format: int8, fp32, or both (default: prompt user)")
     args = parser.parse_args()
-    
-    # 1. Enforce/Check Dependencies
+
+    # 1. Check dependencies
     check_dependencies()
-    
-    # 2. Auto-detect models if not provided
+
+    # 2. Auto-detect model
     model_path = args.model
     if not model_path:
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        
-        # Check potential candidate locations for fine-tuned and base models
         finetuned_candidates = [
             "./fine_tuned_smollm",
-            os.path.join(script_dir, "fine_tuned_smollm")
+            os.path.join(script_dir, "fine_tuned_smollm"),
         ]
         base_candidates = [
             "./SmolLM2-135M-Instruct",
-            os.path.join(script_dir, "SmolLM2-135M-Instruct")
+            os.path.join(script_dir, "SmolLM2-135M-Instruct"),
         ]
-        
-        # Resolve fine-tuned path
         for cand in finetuned_candidates:
             if os.path.exists(cand) and (
-                any(f.endswith(".safetensors") for f in os.listdir(cand)) or 
+                any(f.endswith(".safetensors") for f in os.listdir(cand)) or
                 any(f.endswith(".bin") for f in os.listdir(cand))
             ):
                 model_path = os.path.abspath(cand)
                 print(f"✨ {Colors.GREEN}Detected Fine-Tuned Model at {model_path}!{Colors.END}")
                 break
-                
-        # Fallback to base model path if fine-tuned is not found
         if not model_path:
             for cand in base_candidates:
                 if os.path.exists(cand) and os.path.isdir(cand):
                     model_path = os.path.abspath(cand)
-                    print(f"💡 {Colors.BLUE}Detected Base Model at {model_path} (Fine-tuned model weights not found).{Colors.END}")
+                    print(f"💡 {Colors.BLUE}Detected Base Model at {model_path}.{Colors.END}")
                     break
-                    
         if not model_path:
-            print(f"❌ {Colors.FAIL}Error: No local model weights found!{Colors.END}")
-            print(f"Please run model downloader or training script first to populate weights:")
-            print("  - To download base model:  python3 trainer/download_model.py")
-            print("  - To train model:          python3 trainer/train.py")
+            print(f"❌ {Colors.FAIL}No local model weights found!{Colors.END}")
+            print("Run download_model.py or train.py first.")
             sys.exit(1)
-            
-    # Determine final output path (exactly one output folder)
-    output_dir = args.output
-    if not output_dir:
-        output_dir = model_path.rstrip("/") + "_onnx"
-        
-    # 3. Perform conversion and quantization in one clean pipeline
-    convert_and_quantize(model_path, output_dir)
-    
-    print("\n" + "=" * 60)
-    print(f"🎉 {Colors.BOLD}{Colors.GREEN}CONVERSION PIPELINE COMPLETED!{Colors.END}")
-    print(f"Your final highly optimized INT8 Turbo ONNX model is stored in:")
-    print(f"   👉 {Colors.BOLD}{os.path.abspath(output_dir)}{Colors.END}")
-    print("\nTo load and run your optimized model in Python:")
-    print(f"   from optimum.onnxruntime import ORTModelForCausalLM")
-    print(f"   from transformers import AutoTokenizer")
-    print(f"   model = ORTModelForCausalLM.from_pretrained('{output_dir}', provider='CPUExecutionProvider')")
-    print(f"   tokenizer = AutoTokenizer.from_pretrained('{output_dir}')")
-    print("=" * 60)
+
+    # 3. Ask which format if not provided via CLI
+    fmt = args.format
+    if not fmt:
+        print("\n" + "=" * 60)
+        print("  Select ONNX export format:")
+        print("  [1]  INT8 quantized  — smaller (~137 MB), used by web worker")
+        print("  [2]  Float32         — larger  (~500 MB), full precision")
+        print("  [3]  Both            — exports INT8 and float32 side-by-side")
+        print("=" * 60)
+        choice = input("Choice (1/2/3): ").strip()
+        fmt = {"1": "int8", "2": "fp32", "3": "both"}.get(choice, "int8")
+        print(f"Selected: {fmt.upper()}\n")
+
+    # Determine output paths
+    base_out = args.output or (model_path.rstrip("/") + "_onnx")
+    fp32_out = base_out + "_fp32"
+
+    # 4. Run selected export(s)
+    if fmt in ("int8", "both"):
+        convert_and_quantize(model_path, base_out)
+        print("\n" + "=" * 60)
+        print(f"🎉 {Colors.BOLD}{Colors.GREEN}INT8 ONNX → {os.path.abspath(base_out)}{Colors.END}")
+        print("=" * 60)
+
+    if fmt in ("fp32", "both"):
+        convert_fp32(model_path, fp32_out)
+        print("\n" + "=" * 60)
+        print(f"🎉 {Colors.BOLD}{Colors.GREEN}FP32 ONNX → {os.path.abspath(fp32_out)}{Colors.END}")
+        print("=" * 60)
+
 
 if __name__ == "__main__":
     main()
+

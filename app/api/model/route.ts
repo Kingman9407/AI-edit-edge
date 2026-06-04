@@ -120,12 +120,12 @@ export async function GET() {
       headers.set("Content-Length", contentLen);
       console.log(`[HuggingFace] Streaming model — Content-Length: ${contentLen} bytes.`);
     } else {
-      // Fallback content length for the ONNX model
-      headers.set("Content-Length", "166009881");
-      console.log("[HuggingFace] Content-Length header missing from HuggingFace response — using fallback (166009881 bytes).");
+      // Fallback content length for the fine-tuned ONNX model (approx 137MB)
+      headers.set("Content-Length", "137452646");
+      console.log("[HuggingFace] Content-Length header missing from HuggingFace response — using fallback (137452646 bytes).");
     }
 
-    headers.set("Cache-Control", "public, max-age=31536000, immutable");
+    headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
     console.log("[HuggingFace] ✅ Model stream started successfully.");
 
     return new NextResponse(response.body, {
