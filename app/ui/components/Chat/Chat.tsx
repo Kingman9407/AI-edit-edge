@@ -246,7 +246,7 @@ export default function Chat({
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [memory, setMemory] = useState<ChatMemory | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [inferenceMode, setInferenceMode] = useState<"cloud" | "edge">("cloud");
+  const [inferenceMode, setInferenceMode] = useState<"cloud" | "edge-int8" | "edge-fp16" | "edge-fp32">("cloud");
   const [showEdgeConfirm, setShowEdgeConfirm] = useState(false);
   const edgeLLM = useEdgeLLM();
 
@@ -1230,7 +1230,7 @@ export default function Chat({
 
       let data: { assistantMessage?: string; parsed?: { assistant_message?: string; status?: string; follow_up?: string; actions?: ModelAction[] }; usage?: unknown } | null = null;
 
-      if (inferenceMode === "edge") {
+      if (inferenceMode.startsWith("edge")) {
         // ─── Edge (local) path ─────────────────────────────────────────────────
         if (edgeLLM.status !== "ready") {
           throw new Error("Edge model is not loaded yet. Click the ⚡ Edge button first.");
@@ -1528,17 +1528,17 @@ export default function Chat({
       if (edgeLLM.status === "idle" || edgeLLM.status === "error") {
         setShowEdgeConfirm(true);
       } else {
-        setInferenceMode("edge");
+        setInferenceMode("edge-int8");
       }
     } else {
       setInferenceMode("cloud");
     }
   };
 
-  const handleEdgeConfirm = () => {
+  const handleEdgeConfirm = (format: "int8" | "fp16" | "fp32") => {
+    setInferenceMode(`edge-${format}`);
     setShowEdgeConfirm(false);
-    setInferenceMode("edge");
-    void edgeLLM.loadModel();
+    edgeLLM.loadModel(format);
   };
 
   return (
@@ -1775,22 +1775,35 @@ export default function Chat({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-zinc-100">Run on your device?</p>
-                <p className="mt-1 text-xs text-zinc-400 leading-relaxed">
-                  This will download the fine-tuned SmolLM2 model (~158 MB) from GitHub and cache it in your browser. Runs fully offline after the first load.
+                <p className="mt-1 text-xs text-zinc-400 leading-relaxed mb-3">
+                  Select a model variant to download and run offline in your browser.
                 </p>
-                <div className="mt-3 flex gap-2">
+                <div className="flex flex-col gap-2">
                   <button
                     type="button"
-                    id="edge-confirm-btn"
-                    onClick={handleEdgeConfirm}
-                    className="rounded-full bg-amber-500/20 px-4 py-1.5 text-xs font-semibold text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors"
+                    onClick={() => handleEdgeConfirm("int8")}
+                    className="rounded-full bg-amber-500/20 px-4 py-2 text-xs font-semibold text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors text-left flex justify-between"
                   >
-                    Download &amp; Use Edge
+                    <span>Edge INT8 (~137 MB)</span><span className="opacity-70 font-normal">Smallest</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleEdgeConfirm("fp16")}
+                    className="rounded-full bg-amber-500/20 px-4 py-2 text-xs font-semibold text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors text-left flex justify-between"
+                  >
+                    <span>Edge FP16 (~270 MB)</span><span className="opacity-70 font-normal">Medium</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleEdgeConfirm("fp32")}
+                    className="rounded-full bg-amber-500/20 px-4 py-2 text-xs font-semibold text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors text-left flex justify-between"
+                  >
+                    <span>Edge FP32 (~500 MB)</span><span className="opacity-70 font-normal">Most Accurate</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowEdgeConfirm(false)}
-                    className="rounded-full bg-zinc-800/80 px-4 py-1.5 text-xs font-semibold text-zinc-400 border border-zinc-700/50 hover:text-zinc-200 transition-colors"
+                    className="rounded-full bg-zinc-800/80 px-4 py-2 mt-1 text-xs font-semibold text-zinc-400 border border-zinc-700/50 hover:text-zinc-200 transition-colors text-center"
                   >
                     Cancel
                   </button>
@@ -1801,7 +1814,7 @@ export default function Chat({
         )}
 
         {/* Edge loading / progress bar */}
-        {inferenceMode === "edge" && (edgeLLM.status === "downloading" || edgeLLM.status === "loading") && (
+        {inferenceMode.startsWith("edge") && (edgeLLM.status === "downloading" || edgeLLM.status === "loading") && (
           <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] font-semibold text-amber-300">
@@ -1821,7 +1834,7 @@ export default function Chat({
         )}
 
         {/* Edge error */}
-        {inferenceMode === "edge" && edgeLLM.status === "error" && (
+        {inferenceMode.startsWith("edge") && edgeLLM.status === "error" && (
           <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 flex items-center gap-2">
             <span className="text-[11px] text-red-400 flex-1">{edgeLLM.error ?? "Edge model failed to load."}</span>
             <button
@@ -1854,14 +1867,14 @@ export default function Chat({
             onClick={handleEdgeToggle}
             title={inferenceMode === "cloud" ? "Switch to Edge (local device)" : "Switch to Cloud (OpenRouter)"}
             className={`flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all ${
-              inferenceMode === "edge"
+              inferenceMode.startsWith("edge")
                 ? edgeLLM.status === "ready"
                   ? "border-amber-500/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
                   : "border-amber-500/30 bg-amber-500/10 text-amber-400"
                 : "border-zinc-700/50 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
             }`}
           >
-            {inferenceMode === "edge" ? (
+            {inferenceMode.startsWith("edge") ? (
               <><Cpu size={13} /><span>Edge</span></>
             ) : (
               <><Cloud size={13} /><span>Cloud</span></>
@@ -1874,7 +1887,7 @@ export default function Chat({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={
-                inferenceMode === "edge"
+                inferenceMode.startsWith("edge")
                   ? edgeLLM.status === "ready"
                     ? "Ask me (running on-device)..."
                     : edgeLLM.status === "downloading" || edgeLLM.status === "loading"
@@ -1886,7 +1899,7 @@ export default function Chat({
             />
             <button
               type="submit"
-              disabled={!input.trim() || (inferenceMode === "edge" && edgeLLM.status !== "ready")}
+              disabled={!input.trim() || (inferenceMode.startsWith("edge") && edgeLLM.status !== "ready")}
               className="absolute right-2 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/20 transition-all hover:from-blue-400 hover:to-blue-500 hover:shadow-blue-500/30 disabled:opacity-40 disabled:shadow-none disabled:hover:from-blue-500 disabled:hover:to-blue-600"
             >
               <Send size={15} />

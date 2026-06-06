@@ -326,7 +326,7 @@ def edit_timeline(request: EditRequest, background_tasks: BackgroundTasks):
     
     # 1. Format the SFT prompt template matching training
     video_context = construct_video_context(request.video_metadata, request.workspace_state)
-    full_user_content = f"{video_context}\n\n[USER MESSAGE]\n{request.user_message}"
+    full_user_content = f"{video_context}\n\n[USER REQUEST]\n{request.user_message}"
     
     messages = [
         {"role": "system", "content": SYSTEM_INSTRUCTION},

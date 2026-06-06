@@ -138,19 +138,14 @@
       "special": true
     }
   },
-  "backend": "tokenizers",
+  "additional_special_tokens": [
+    "<|im_start|>",
+    "<|im_end|>"
+  ],
   "bos_token": "<|im_start|>",
   "clean_up_tokenization_spaces": false,
   "eos_token": "<|im_end|>",
-  "errors": "replace",
-  "extra_special_tokens": {
-    "im_end_token": "<|im_end|>",
-    "im_start_token": "<|im_start|>"
-  },
-  "im_end_token": "<|im_end|>",
-  "im_start_token": "<|im_start|>",
-  "is_local": true,
-  "local_files_only": true,
+  "extra_special_tokens": {},
   "model_max_length": 8192,
   "pad_token": "<|endoftext|>",
   "tokenizer_class": "GPT2Tokenizer",

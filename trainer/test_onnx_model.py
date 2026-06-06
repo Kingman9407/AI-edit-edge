@@ -3,9 +3,10 @@ test_onnx_model.py — Side-by-side model comparison runner.
 
 Modes (set via COMPARE_MODE env var or interactive prompt):
   pytorch_vs_int8  — PyTorch float32 vs ONNX INT8
+  pytorch_vs_fp16  — PyTorch float32 vs ONNX FP16
   pytorch_vs_fp32  — PyTorch float32 vs ONNX FP32
   int8_vs_fp32     — ONNX INT8 vs ONNX FP32
-  all_three        — PyTorch + ONNX INT8 + ONNX FP32
+  all_four         — PyTorch + ONNX INT8 + ONNX FP16 + ONNX FP32
 """
 
 import os
@@ -18,6 +19,7 @@ import numpy as np
 # Paths
 # ──────────────────────────────────────────────────────────────────────────────
 INT8_MODEL_PATH  = "./fine_tuned_smollm_onnx/model.onnx"
+FP16_MODEL_PATH  = "./fine_tuned_smollm_onnx_fp16/model.onnx"
 FP32_MODEL_PATH  = "./fine_tuned_smollm_onnx_fp32/model.onnx"
 TOKENIZER_PATH   = "./fine_tuned_smollm"
 PYTORCH_PATH     = "./fine_tuned_smollm"
@@ -231,13 +233,14 @@ def main():
         print("\n" + "=" * 60)
         print("  Select comparison mode:")
         print("  [A]  PyTorch (float32) vs ONNX INT8")
-        print("  [B]  PyTorch (float32) vs ONNX FP32")
-        print("  [C]  ONNX INT8 vs ONNX FP32")
-        print("  [D]  All three: PyTorch + INT8 + FP32")
+        print("  [B]  PyTorch (float32) vs ONNX FP16")
+        print("  [C]  PyTorch (float32) vs ONNX FP32")
+        print("  [D]  ONNX INT8 vs ONNX FP32")
+        print("  [E]  All variants: PyTorch + INT8 + FP16 + FP32")
         print("=" * 60)
         sel  = input("Choice: ").strip().upper()
-        mode = {"A": "pytorch_vs_int8", "B": "pytorch_vs_fp32",
-                "C": "int8_vs_fp32",    "D": "all_three"}.get(sel, "pytorch_vs_int8")
+        mode = {"A": "pytorch_vs_int8", "B": "pytorch_vs_fp16", "C": "pytorch_vs_fp32",
+                "D": "int8_vs_fp32",    "E": "all_four"}.get(sel, "pytorch_vs_int8")
 
     print(f"\n🔬 Comparison mode: {mode}\n")
 
@@ -246,9 +249,10 @@ def main():
 
     runners = []
 
-    need_pytorch = mode in ("pytorch_vs_int8", "pytorch_vs_fp32", "all_three")
-    need_int8    = mode in ("pytorch_vs_int8",  "int8_vs_fp32",   "all_three")
-    need_fp32    = mode in ("pytorch_vs_fp32",  "int8_vs_fp32",   "all_three")
+    need_pytorch = mode in ("pytorch_vs_int8", "pytorch_vs_fp16", "pytorch_vs_fp32", "all_four")
+    need_int8    = mode in ("pytorch_vs_int8",  "int8_vs_fp32",   "all_four")
+    need_fp16    = mode in ("pytorch_vs_fp16", "all_four")
+    need_fp32    = mode in ("pytorch_vs_fp32",  "int8_vs_fp32",   "all_four")
 
     if need_pytorch:
         pipe, ptok = load_pytorch()
@@ -260,6 +264,13 @@ def main():
         else:
             s8, eos8 = load_onnx(INT8_MODEL_PATH, tok)
             runners.append(("🔴 ONNX INT8   ", lambda p, _s=s8, _e=eos8: infer_onnx(_s, tok, _e, p)))
+
+    if need_fp16:
+        if not os.path.exists(FP16_MODEL_PATH):
+            print(f"❌ FP16 model not found: {FP16_MODEL_PATH}")
+        else:
+            s16, eos16 = load_onnx(FP16_MODEL_PATH, tok)
+            runners.append(("🟡 ONNX FP16   ", lambda p, _s=s16, _e=eos16: infer_onnx(_s, tok, _e, p)))
 
     if need_fp32:
         if not os.path.exists(FP32_MODEL_PATH):

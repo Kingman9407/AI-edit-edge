@@ -1,4 +1,8 @@
 {
+  "additional_special_tokens": [
+    "<|im_start|>",
+    "<|im_end|>"
+  ],
   "bos_token": {
     "content": "<|im_start|>",
     "lstrip": false,
@@ -13,8 +17,6 @@
     "rstrip": false,
     "single_word": false
   },
-  "im_end_token": "<|im_end|>",
-  "im_start_token": "<|im_start|>",
   "pad_token": {
     "content": "<|endoftext|>",
     "lstrip": false,

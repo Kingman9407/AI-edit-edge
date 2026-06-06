@@ -3,6 +3,11 @@
 {"instruction": "Generate video edit actions", "input": "add music.mp3 to entire video", "output": [{"operation": "add_audio_overlay", "start": 0.0, "end": 90.0, "reason": "Add background music to full video", "track": "music.mp3"}]}
 {"instruction": "Generate video edit actions", "input": "remove the last 10 seconds", "output": [{"operation": "cut", "start": 170.0, "end": 180.0, "reason": "Remove last 10 seconds"}]}
 {"instruction": "Generate video edit actions", "input": "mute from 60 to 90 seconds", "output": [{"operation": "mute", "start": 60.0, "end": 90.0, "reason": "Mute requested range"}]}
+{"instruction": "Generate video edit actions", "input": "mute the background noise between 30 and 45 seconds", "output": [{"operation": "mute", "start": 30.0, "end": 45.0, "reason": "Mute background noise"}]}
+{"instruction": "Generate video edit actions", "input": "add intro_music.mp3 over the first 10 seconds", "output": [{"operation": "add_audio_overlay", "start": 0.0, "end": 10.0, "reason": "Add intro music", "track": "intro_music.mp3"}]}
+{"instruction": "Generate video edit actions", "input": "cut out the section from 1:00 to 1:30", "output": [{"operation": "cut", "start": 60.0, "end": 90.0, "reason": "Remove 1:00 to 1:30 section"}]}
+{"instruction": "Generate video edit actions", "input": "mute the intro until 120 seconds", "output": [{"operation": "mute", "start": 0.0, "end": 120.0, "reason": "Mute intro"}]}
+{"instruction": "Generate video edit actions", "input": "add lofi_beats.mp3 to the entire clip", "output": [{"operation": "add_audio_overlay", "start": 0.0, "end": 240.0, "reason": "Add lofi beats to montage", "track": "lofi_beats.mp3"}]}
 {"instruction": "Generate video edit actions", "input": "remove the silent gap in the beginning of the video", "output": [{"operation": "cut", "start": 10.5, "end": 15.2, "reason": "Remove silent gap"}]}
 {"instruction": "Generate video edit actions", "input": "cut the quiet gap in the middle of the video", "output": [{"operation": "cut", "start": 150.0, "end": 165.5, "reason": "Remove quiet gap in middle"}]}
 {"instruction": "Generate video edit actions", "input": "trim off the first 5 seconds", "output": [{"operation": "cut", "start": 0.0, "end": 5.0, "reason": "Remove first 5 seconds"}]}
@@ -46,10 +51,6 @@
 {"instruction": "Generate video edit actions", "input": "mute audio from 5 mins to 8 mins", "output": [{"operation": "mute", "start": 300.0, "end": 480.0, "reason": "Mute from 5 mins to 8 mins"}]}
 {"instruction": "Generate video edit actions", "input": "cut intro and add bg.mp3 to the rest", "output": [{"operation": "cut", "start": 0.0, "end": 10.0, "reason": "Cut intro"}, {"operation": "add_audio_overlay", "start": 10.0, "end": 120.0, "reason": "Add bg music", "track": "bg.mp3"}]}
 {"instruction": "Generate video edit actions", "input": "mute first 10s and last 10s", "output": [{"operation": "mute", "start": 0.0, "end": 10.0, "reason": "Mute first 10s"}, {"operation": "mute", "start": 290.0, "end": 300.0, "reason": "Mute last 10s"}]}
-{"instruction": "Generate video edit actions", "input": "hi there", "output": []}
-{"instruction": "Generate video edit actions", "input": "what can you do", "output": []}
-{"instruction": "Generate video edit actions", "input": "play video", "output": []}
-{"instruction": "Generate video edit actions", "input": "pause here", "output": []}
 {"instruction": "Generate video edit actions", "input": "hi", "output": []}
 {"instruction": "Generate video edit actions", "input": "what can you do?", "output": []}
 {"instruction": "Generate video edit actions", "input": "who are you?", "output": []}

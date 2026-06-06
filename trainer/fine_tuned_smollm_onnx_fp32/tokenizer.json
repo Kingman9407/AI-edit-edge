@@ -159,37 +159,21 @@
   ],
   "normalizer": null,
   "pre_tokenizer": {
-    "type": "ByteLevel",
-    "add_prefix_space": false,
-    "trim_offsets": true,
-    "use_regex": true
-  },
-  "post_processor": {
-    "type": "TemplateProcessing",
-    "single": [
+    "type": "Sequence",
+    "pretokenizers": [
       {
-        "Sequence": {
-          "id": "A",
-          "type_id": 0
-        }
-      }
-    ],
-    "pair": [
-      {
-        "Sequence": {
-          "id": "A",
-          "type_id": 0
-        }
+        "type": "Digits",
+        "individual_digits": true
       },
       {
-        "Sequence": {
-          "id": "B",
-          "type_id": 1
-        }
+        "type": "ByteLevel",
+        "add_prefix_space": false,
+        "trim_offsets": true,
+        "use_regex": true
       }
-    ],
-    "special_tokens": {}
+    ]
   },
+  "post_processor": null,
   "decoder": {
     "type": "ByteLevel",
     "add_prefix_space": true,
@@ -200,8 +184,8 @@
     "type": "BPE",
     "dropout": null,
     "unk_token": null,
-    "continuing_subword_prefix": "",
-    "end_of_word_suffix": "",
+    "continuing_subword_prefix": null,
+    "end_of_word_suffix": null,
     "fuse_unk": false,
     "byte_fallback": false,
     "ignore_merges": false,

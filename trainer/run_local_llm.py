@@ -107,7 +107,7 @@ def run_comparison(user_text):
     print("=" * 70)
     
     # Formulate prompt using SmolLM2 ChatML template with system instruction
-    full_user_content = f"{mock_video_context}\n\n[USER MESSAGE]\n{user_text}"
+    full_user_content = f"{mock_video_context}\n\n[USER REQUEST]\n{user_text}"
     messages_base = [
         {"role": "system", "content": system_instruction},
         {"role": "user", "content": full_user_content}

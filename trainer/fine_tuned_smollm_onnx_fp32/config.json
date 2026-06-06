@@ -26,6 +26,12 @@
   "rope_scaling": null,
   "rope_theta": 100000,
   "tie_word_embeddings": true,
+  "transformers.js_config": {
+    "kv_cache_dtype": {
+      "fp16": "float16",
+      "q4f16": "float16"
+    }
+  },
   "transformers_version": "4.57.6",
   "use_cache": true,
   "vocab_size": 49152

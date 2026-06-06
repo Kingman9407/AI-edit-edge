@@ -8,47 +8,27 @@ Goal: Explicitly teach the model what operations are valid and invalid.
 
 examples = [
     {
-        "metadata": "Name: video.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "play the video from 10s to 20s",
-        "response":  "",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nplay the video from 10s to 20s",
+        "output": "{\"message\":\"I'm sorry, I couldn't find any video edits in your request, but I am a video editor AI and I'm happy to help!\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: video.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "pause the playback at 30 seconds",
-        "response":  "",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\npause the playback at 30 seconds",
+        "output": "{\"message\":\"I'm sorry, I couldn't find any video edits in your request, but I am a video editor AI and I'm happy to help!\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: video.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "stop playing at the end",
-        "response":  "",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nstop playing at the end",
+        "output": "{\"message\":\"I'm sorry, I couldn't find any video edits in your request, but I am a video editor AI and I'm happy to help!\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: video.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: [{\"start\": 10.0, \"end\": 20.0}]\nSilent Sections: []\nBackground Music: []",
-        "request":   "restore the cut from 10 to 20 seconds",
-        "response":  "",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- 10.0 -> 20.0\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nrestore the cut from 10 to 20 seconds",
+        "output": "{\"message\":\"I'm sorry, I couldn't find any video edits in your request, but I am a video editor AI and I'm happy to help!\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: video.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "end_all edits",
-        "response":  "",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nend_all edits",
+        "output": "{\"message\":\"I'm sorry, I couldn't find any video edits in your request, but I am a video editor AI and I'm happy to help!\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: video.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "play from 5s to 10s then pause, then cut from 15 to 20s",
-        "response":  "",
-        "actions": [
-            {"operation": "cut", "start": 15.0, "end": 20.0, "reason": "Cut from 15 to 20s"}
-        ]
+        "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nplay from 5s to 10s then pause, then cut from 15 to 20s",
+        "output": "{\"message\":\"I have applied the requested edits to the timeline.\",\"operations\":[{\"operation\":\"cut\",\"start\":15.0,\"end\":20.0,\"reason\":\"Cut from 15 to 20s\"}]}"
     }
 ]

@@ -24,15 +24,34 @@ def get_folder(name):
     print(f"❌ Error: Cannot find '{name}' directory.")
     sys.exit(1)
 
+def push_onnx_variant(api, target_dir, format_name):
+    folder_path = get_folder(target_dir)
+    print(f"\n📦 Uploading {format_name.upper()} ONNX model from '{folder_path}' to 'onnx/{format_name}'...")
+    uploaded = False
+    for item in os.listdir(folder_path):
+        if item.endswith(".onnx"):
+            api.upload_file(
+                path_or_fileobj=os.path.join(folder_path, item),
+                path_in_repo=f"onnx/{format_name}/{item}",
+                repo_id=REPO_ID,
+                repo_type="model",
+            )
+            uploaded = True
+    if uploaded:
+        print(f"✅ {format_name.upper()} ONNX model uploaded.")
+    else:
+        print(f"⚠️  No .onnx files found in {folder_path}!")
+
 def push_onnx(api):
-    folder_path = get_folder("fine_tuned_smollm_onnx")
-    print(f"\n📦 Uploading ONNX model from '{folder_path}' ...")
-    api.upload_folder(
-        folder_path=folder_path,
-        repo_id=REPO_ID,
-        repo_type="model",
-    )
-    print("✅ ONNX model uploaded.")
+    format_name = os.environ.get("FORMAT_NAME", "int8")
+    
+    if format_name == "all":
+        push_onnx_variant(api, "fine_tuned_smollm_onnx", "int8")
+        push_onnx_variant(api, "fine_tuned_smollm_onnx_fp16", "fp16")
+        push_onnx_variant(api, "fine_tuned_smollm_onnx_fp32", "fp32")
+    else:
+        target_dir = os.environ.get("ONNX_MODEL_DIR", "fine_tuned_smollm_onnx")
+        push_onnx_variant(api, target_dir, format_name)
 
 def push_tokenizer(api):
     source_dir = get_folder("fine_tuned_smollm")

@@ -26,6 +26,7 @@ def run_script(script_name, env_vars: dict = None):
 
 def chat_menu():
     int8_exists  = os.path.exists("./fine_tuned_smollm_onnx/model.onnx")
+    fp16_exists  = os.path.exists("./fine_tuned_smollm_onnx_fp16/model.onnx")
     fp32_exists  = os.path.exists("./fine_tuned_smollm_onnx_fp32/model.onnx")
 
     while True:
@@ -34,7 +35,8 @@ def chat_menu():
         print("=" * 70)
         print(f"  [A]  PyTorch float32    (MPS/CPU)  — ground truth")
         print(f"  [B]  ONNX INT8          {'✅' if int8_exists else '❌ missing'}  — web worker exact replica")
-        print(f"  [C]  ONNX FP32          {'✅' if fp32_exists else '❌ missing'}  — full precision ONNX")
+        print(f"  [C]  ONNX FP16          {'✅' if fp16_exists else '❌ missing'}  — medium precision ONNX")
+        print(f"  [D]  ONNX FP32          {'✅' if fp32_exists else '❌ missing'}  — full precision ONNX")
         print(f"  [0]  ← Back")
         print("=" * 70)
         choice = input("Choice: ").strip().upper()
@@ -47,6 +49,11 @@ def chat_menu():
             else:
                 run_script("chat_onnx.py", {"ONNX_MODEL_OVERRIDE": "./fine_tuned_smollm_onnx"})
         elif choice == "C":
+            if not fp16_exists:
+                print("❌ ONNX FP16 model not found. Run Convert → FP16 first.")
+            else:
+                run_script("chat_onnx.py", {"ONNX_MODEL_OVERRIDE": "./fine_tuned_smollm_onnx_fp16"})
+        elif choice == "D":
             if not fp32_exists:
                 print("❌ ONNX FP32 model not found. Run Convert → FP32 first.")
             else:
@@ -63,6 +70,7 @@ def chat_menu():
 
 def compare_menu():
     int8_exists  = os.path.exists("./fine_tuned_smollm_onnx/model.onnx")
+    fp16_exists  = os.path.exists("./fine_tuned_smollm_onnx_fp16/model.onnx")
     fp32_exists  = os.path.exists("./fine_tuned_smollm_onnx_fp32/model.onnx")
     base_exists  = os.path.exists("./SmolLM2-135M-Instruct")
 
@@ -72,9 +80,9 @@ def compare_menu():
         print("=" * 70)
         print(f"  [A]  Untrained base vs Fine-tuned PyTorch   {'✅' if base_exists else '❌ missing base'}")
         print(f"  [B]  PyTorch (float32) vs ONNX INT8         {'✅' if int8_exists else '❌ INT8 missing'}")
-        print(f"  [C]  PyTorch (float32) vs ONNX FP32         {'✅' if fp32_exists else '❌ FP32 missing'}")
-        print(f"  [D]  ONNX INT8 vs ONNX FP32                 {'✅' if int8_exists and fp32_exists else '❌ one or both missing'}")
-        print(f"  [E]  All three: PyTorch + ONNX INT8 + FP32  {'✅' if int8_exists and fp32_exists else '❌ ONNX models missing'}")
+        print(f"  [C]  PyTorch (float32) vs ONNX FP16         {'✅' if fp16_exists else '❌ FP16 missing'}")
+        print(f"  [D]  PyTorch (float32) vs ONNX FP32         {'✅' if fp32_exists else '❌ FP32 missing'}")
+        print(f"  [E]  All variants (PyTorch vs INT8 vs FP16 vs FP32)")
         print(f"  [0]  ← Back")
         print("=" * 70)
         choice = input("Choice: ").strip().upper()
@@ -93,25 +101,25 @@ def compare_menu():
                            {"COMPARE_MODE": "pytorch_vs_int8"})
 
         elif choice == "C":
+            if not fp16_exists:
+                print("❌ ONNX FP16 not found.")
+            else:
+                run_script("test_onnx_model.py",
+                           {"COMPARE_MODE": "pytorch_vs_fp16"})
+
+        elif choice == "D":
             if not fp32_exists:
                 print("❌ ONNX FP32 not found.")
             else:
                 run_script("test_onnx_model.py",
                            {"COMPARE_MODE": "pytorch_vs_fp32"})
 
-        elif choice == "D":
-            if not (int8_exists and fp32_exists):
-                print("❌ Both ONNX models required. Run Convert → Both first.")
-            else:
-                run_script("test_onnx_model.py",
-                           {"COMPARE_MODE": "int8_vs_fp32"})
-
         elif choice == "E":
-            if not (int8_exists and fp32_exists):
-                print("❌ Both ONNX models required. Run Convert → Both first.")
+            if not (int8_exists and fp16_exists and fp32_exists):
+                print("❌ Need all ONNX variants (INT8, FP16, FP32) to run this comparison.")
             else:
                 run_script("test_onnx_model.py",
-                           {"COMPARE_MODE": "all_three"})
+                           {"COMPARE_MODE": "all_four"})
 
         elif choice == "0":
             break
@@ -125,6 +133,7 @@ def compare_menu():
 
 def show_menu():
     int8_exists = os.path.exists("./fine_tuned_smollm_onnx/model.onnx")
+    fp16_exists = os.path.exists("./fine_tuned_smollm_onnx_fp16/model.onnx")
     fp32_exists = os.path.exists("./fine_tuned_smollm_onnx_fp32/model.onnx")
 
     print("\n" + "=" * 70)
@@ -132,9 +141,10 @@ def show_menu():
     print("=" * 70)
     print("  [1]  ⚙️   TRAINING     — overwrite data & retrain model (GPU)")
     print("  [2]  💬  CHAT         — talk to any model variant")
-    print(f"  [3]  🔬  COMPARE      — side-by-side analysis (INT8={'✅' if int8_exists else '❌'} FP32={'✅' if fp32_exists else '❌'})")
-    print("  [4]  📦  CONVERT      — export PyTorch → ONNX (INT8 / FP32 / Both)")
-    print("  [5]  ❌  EXIT")
+    print(f"  [3]  🔬  COMPARE      — side-by-side analysis (INT8={'✅' if int8_exists else '❌'} FP16={'✅' if fp16_exists else '❌'} FP32={'✅' if fp32_exists else '❌'})")
+    print("  [4]  📦  CONVERT      — export PyTorch → ONNX (INT8 / FP16 / FP32 / All)")
+    print("  [5]  ☁️   UPLOAD       — push ONNX to Hugging Face (for Web UI)")
+    print("  [6]  ❌  EXIT")
     print("=" * 70)
 
 
@@ -147,7 +157,7 @@ def main():
     while True:
         show_menu()
         try:
-            choice = input("Enter choice (1-5): ").strip()
+            choice = input("Enter choice (1-6): ").strip()
             if choice == "1":
                 print("\n⚙️  Overwriting training data with video editor samples...")
                 run_script("prepare_data.py")
@@ -161,11 +171,27 @@ def main():
             elif choice == "4":
                 print("\n📦 Launching ONNX converter...")
                 run_script("convert_to_onnx.py")
-            elif choice == "5" or choice.lower() in ["exit", "quit"]:
+            elif choice == "5":
+                print("\n☁️  Upload ONNX model to Hugging Face")
+                print("  [A] Upload INT8 (~137MB) - Smallest, used by default in browser")
+                print("  [B] Upload FP16 (~270MB) - Good precision, medium size")
+                print("  [C] Upload FP32 (~500MB) - Perfect precision, largest size")
+                print("  [D] Upload All Three Variants")
+                print("  [0] ← Back")
+                up_choice = input("Choice: ").strip().upper()
+                if up_choice == "A":
+                    run_script("push_to_hf.py", {"ONNX_MODEL_DIR": "fine_tuned_smollm_onnx", "FORMAT_NAME": "int8"})
+                elif up_choice == "B":
+                    run_script("push_to_hf.py", {"ONNX_MODEL_DIR": "fine_tuned_smollm_onnx_fp16", "FORMAT_NAME": "fp16"})
+                elif up_choice == "C":
+                    run_script("push_to_hf.py", {"ONNX_MODEL_DIR": "fine_tuned_smollm_onnx_fp32", "FORMAT_NAME": "fp32"})
+                elif up_choice == "D":
+                    run_script("push_to_hf.py", {"ONNX_MODEL_DIR": "fine_tuned_smollm_onnx", "FORMAT_NAME": "all"})
+            elif choice == "6" or choice.lower() in ["exit", "quit"]:
                 print("\nGoodbye! Happy editing! 🎬")
                 sys.exit(0)
             else:
-                print("\n⚠️  Invalid selection. Please enter 1-5.")
+                print("\n⚠️  Invalid selection. Please enter 1-6.")
             print()
         except (KeyboardInterrupt, EOFError):
             print("\n\nGoodbye!")

@@ -1,9 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const modelUrl = process.env.MODEL_URL || "https://huggingface.co/Kingman9407/hornet/resolve/main/model.onnx";
+export async function GET(request: NextRequest) {
+  const format = request.nextUrl.searchParams.get("format") || "int8";
+  let modelUrl = process.env.MODEL_URL;
+  if (!modelUrl) {
+    modelUrl = `https://huggingface.co/Kingman9407/hornet/resolve/main/onnx/${format}/model.onnx`;
+  }
 
   console.log(`[HuggingFace] Starting model fetch from: ${modelUrl}`);
 
@@ -120,9 +124,11 @@ export async function GET() {
       headers.set("Content-Length", contentLen);
       console.log(`[HuggingFace] Streaming model — Content-Length: ${contentLen} bytes.`);
     } else {
-      // Fallback content length for the fine-tuned ONNX model (approx 137MB)
-      headers.set("Content-Length", "137452646");
-      console.log("[HuggingFace] Content-Length header missing from HuggingFace response — using fallback (137452646 bytes).");
+      let fallbackLen = "137452646";
+      if (format === "fp16") fallbackLen = "274900000";
+      if (format === "fp32") fallbackLen = "549800000";
+      headers.set("Content-Length", fallbackLen);
+      console.log(`[HuggingFace] Content-Length header missing from HuggingFace response — using fallback (${fallbackLen} bytes).`);
     }
 
     headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");

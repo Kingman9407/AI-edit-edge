@@ -38,6 +38,13 @@ def run_model(pipe, tokenizer, system_prompt: str, user_content: str,
         messages, tokenize=False, add_generation_prompt=True
     )
 
+    tokens = pipe.tokenizer.encode(prompt, add_special_tokens=False)
+    print("Token count:", len(tokens))
+    print("First 20:", tokens[:20])
+    print("Last 20:", tokens[-20:])
+    print("ALL TOKENS:", tokens)
+    print("DECODED PROMPT:\n", pipe.tokenizer.decode(tokens, skip_special_tokens=False))
+
     start = time.perf_counter()
     outputs = pipe(
         prompt,
@@ -248,7 +255,7 @@ def main():
 
             # ── Single Stage Inference ──────────────────────────────
             print("⏳ Generating unified response...")
-            full_user_content = f"{video_context}\n\n[USER MESSAGE]\n{user_input}"
+            full_user_content = f"{video_context}\n\n[USER REQUEST]\n{user_input}"
 
             raw_text, elapsed, n_tok = run_model(
                 pipe, tokenizer,
@@ -258,8 +265,6 @@ def main():
                 max_new_tokens=256,
             )
             
-            chat_history.append({"role": "user", "content": full_user_content})
-            chat_history.append({"role": "assistant", "content": raw_text.strip()})
 
             print("\n🤖 AGENT RAW OUTPUT:")
             print("-" * 50)
@@ -276,6 +281,10 @@ def main():
                 if not parsed_intents:
                     print("\n⚠️  No valid edit operations found (likely just conversation).")
                 else:
+                    # Append successful edits to history to avoid apology loops
+                    chat_history.append({"role": "user", "content": full_user_content})
+                    chat_history.append({"role": "assistant", "content": raw_text.strip()})
+                    
                     print(f"\n✅ TIMELINE OPERATIONS ({len(parsed_intents)} op(s)):")
                     print(json.dumps(parsed_intents, indent=2))
                     

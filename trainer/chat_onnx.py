@@ -137,6 +137,13 @@ def run_onnx(session, tokenizer, eos_id: int,
 
     # add_special_tokens=False — ChatML already has all special tokens
     input_ids = tokenizer.encode(prompt_str, add_special_tokens=False)
+    
+    print("Token count:", len(input_ids))
+    print("First 20:", input_ids[:20])
+    print("Last 20:", input_ids[-20:])
+    print("ALL TOKENS:", input_ids)
+    print("DECODED PROMPT:\n", tokenizer.decode(input_ids, skip_special_tokens=False))
+
     generated = []
 
     # KV cache shape constants — matches config.json

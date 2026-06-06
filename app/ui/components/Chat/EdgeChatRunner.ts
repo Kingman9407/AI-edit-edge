@@ -92,7 +92,7 @@ function buildMessages(req: EdgeChatRequest): ChatMLMessage[] {
 
   // 3. Current user message turn (context + query matching SFT training format)
   const userLines: string[] = [];
-  
+
   userLines.push("[VIDEO METADATA]");
   userLines.push(`Name: ${req.videoContext?.name || "untitled_video.mp4"}`);
   const duration = req.videoContext?.duration ?? 0;
@@ -175,11 +175,11 @@ export async function runEdgeChat(
     // The WebWorker guarantees `raw` is just the JSON block
     const parsedObj = JSON.parse(raw);
     console.log("🤖 [Edge LLM] Parsed JSON:\n", parsedObj);
-    
+
     if (parsedObj.message) {
       assistantMessage = parsedObj.message;
     }
-    
+
     if (Array.isArray(parsedObj.operations)) {
       actions = parsedObj.operations.map((op: any) => {
         let startVal = op.start !== undefined && op.start !== null ? Number(op.start) : null;
@@ -189,7 +189,7 @@ export async function runEdgeChat(
         if (startVal === null || endVal === null) {
           const textToParse = (op.reason || req.message || "").toLowerCase();
           const duration = req.videoContext?.duration || 60;
-          
+
           let amount = 10; // default to 10s if no number is found
           const match = textToParse.match(/(\d+(?:\.\d+)?)\s*(min|minute|sec|second)/);
           if (match) {

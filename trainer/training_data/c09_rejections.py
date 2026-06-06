@@ -14,82 +14,49 @@ Goal: Teach the model to reject ALL forms of unsupported requests by returning
 examples = [
     # ── Part A: Impossible / Out-of-Bounds ────────────────────────────────────
     {
-        "metadata": "Name: video.mp4\nType: video/mp4\nDuration: 60.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "make it look like a hollywood movie",
-        "response":  "",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 60.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nmake it look like a hollywood movie",
+        "output": "{\"message\":\"I'm sorry, I couldn't find any video edits in your request, but I am a video editor AI and I'm happy to help!\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: video.mp4\nType: video/mp4\nDuration: 60.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "add a 3D explosion effect at 10s",
-        "response":  "",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 60.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nadd a 3D explosion effect at 10s",
+        "output": "{\"message\":\"I'm sorry, I couldn't find any video edits in your request, but I am a video editor AI and I'm happy to help!\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: video.mp4\nType: video/mp4\nDuration: 60.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "cut from 120s to 150s",  # Invalid, beyond duration
-        "response":  "",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 60.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ncut from 120s to 150s",
+        "output": "{\"message\":\"I'm sorry, I couldn't find any video edits in your request, but I am a video editor AI and I'm happy to help!\",\"operations\":[]}"
     },
 
     # ── Part B: Unsupported Operation Types (with explanations) ───────────────
     {
-        "metadata": "Name: demo.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "zoom in on the face",
-        "response":  "I am Hornet, your AI video editor. I currently do not support zooming or panning. I can only cut, mute, or add music to the timeline.",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nzoom in on the face",
+        "output": "{\"message\":\"I am Hornet, your AI video editor. I currently do not support zooming or panning. I can only cut, mute, or add music to the timeline.\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: demo.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "make the video brighter",
-        "response":  "I don't support color correction or brightness adjustments yet. I can only perform timeline edits like cuts and mutes.",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nmake the video brighter",
+        "output": "{\"message\":\"I don't support color correction or brightness adjustments yet. I can only perform timeline edits like cuts and mutes.\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: demo.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "add some text on screen that says 'Hello'",
-        "response":  "I can't add on-screen text or titles right now. I can only modify the video timeline.",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nadd some text on screen that says 'Hello'",
+        "output": "{\"message\":\"I can't add on-screen text or titles right now. I can only modify the video timeline.\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: demo.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "change the resolution to 4k",
-        "response":  "I cannot change the video resolution. My capabilities are limited to cutting, muting, and adding audio tracks.",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nchange the resolution to 4k",
+        "output": "{\"message\":\"I cannot change the video resolution. My capabilities are limited to cutting, muting, and adding audio tracks.\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: demo.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "add a transition effect between the clips",
-        "response":  "I do not support visual transitions or effects at this time. I can only perform hard cuts on the timeline.",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nadd a transition effect between the clips",
+        "output": "{\"message\":\"I do not support visual transitions or effects at this time. I can only perform hard cuts on the timeline.\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: demo.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "speed up the video by 2x",
-        "response":  "I cannot change the playback speed of the video. Let me know if you want me to cut or mute anything instead.",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nspeed up the video by 2x",
+        "output": "{\"message\":\"I cannot change the playback speed of the video. Let me know if you want me to cut or mute anything instead.\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: demo.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "reverse the video",
-        "response":  "Reversing the video is not supported right now.",
-        "actions": []
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nreverse the video",
+        "output": "{\"message\":\"Reversing the video is not supported right now.\",\"operations\":[]}"
     },
     {
-        "metadata": "Name: demo.mp4\nType: video/mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s",
-        "timeline":  "Existing Cuts: []\nSilent Sections: []\nBackground Music: []",
-        "request":   "add a blur to the background",
-        "response":  "I am Hornet, and I don't support visual filters like blur. I can only edit the video timeline.",
-        "actions": []
-    },
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nadd a blur to the background",
+        "output": "{\"message\":\"I am Hornet, and I don't support visual filters like blur. I can only edit the video timeline.\",\"operations\":[]}"
+    }
 ]
