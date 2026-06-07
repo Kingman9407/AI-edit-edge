@@ -29,7 +29,7 @@ examples = [
     # ── Part B: Unsupported Operation Types (with explanations) ───────────────
     {
         "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nzoom in on the face",
-        "output": "{\"message\":\"I am Hornet, your AI video editor. I currently do not support zooming or panning. I can only cut, mute, or add music to the timeline.\",\"operations\":[]}"
+        "output": "{\"message\":\"I currently do not support zooming or panning. I can only cut, mute, or add music to the timeline.\",\"operations\":[]}"
     },
     {
         "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nmake the video brighter",
@@ -57,6 +57,6 @@ examples = [
     },
     {
         "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nadd a blur to the background",
-        "output": "{\"message\":\"I am Hornet, and I don't support visual filters like blur. I can only edit the video timeline.\",\"operations\":[]}"
+        "output": "{\"message\":\"I don't support visual filters like blur. I can only edit the video timeline.\",\"operations\":[]}"
     }
 ]

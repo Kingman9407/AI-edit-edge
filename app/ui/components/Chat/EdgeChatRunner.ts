@@ -26,6 +26,7 @@ export interface EdgeChatResponse {
     actions: ModelAction[];
   };
   usage: null;
+  raw: string;
 }
 
 interface ChatMLMessage {
@@ -234,5 +235,6 @@ export async function runEdgeChat(
       actions,
     },
     usage: null,
+    raw,
   };
 }

@@ -10,12 +10,14 @@ interface Message {
   id: string;
   text: string;
   sender: "user" | "system";
+  rawJson?: string;
 }
 
 type MessageLike = {
   id?: string | number;
   text: string;
   sender: "user" | "system";
+  rawJson?: string;
 };
 
 interface VideoContext {
@@ -1104,24 +1106,36 @@ export default function Chat({
     setStatusLog([]);
 
     // Filter out error/system messages and limit history to avoid overwhelming the lite model
-    const relevantMessages = [...messages, userMessage].filter(
-      (msg) =>
-        !(msg.sender === "system" && (
+    const relevantMessages = [...messages, userMessage].filter((msg) => {
+      if (msg.sender === "system") {
+        if (
           msg.text.startsWith("Error:") ||
           msg.text.includes("couldn't return a valid JSON") ||
           msg.text.includes("Welcome to the video editor") ||
           msg.text.startsWith("Applied ") ||
           msg.text.startsWith("Starting export") ||
           msg.text.startsWith("Export ")
-        ))
-    );
+        ) {
+          return false;
+        }
+
+        if (msg.rawJson) {
+          try {
+            JSON.parse(msg.rawJson);
+          } catch (e) {
+            return false;
+          }
+        }
+      }
+      return true;
+    });
     const maxHistoryMessages = 4;
     const trimmedHistory = relevantMessages.length > maxHistoryMessages
       ? relevantMessages.slice(-maxHistoryMessages)
       : relevantMessages;
     const historyForModel = trimmedHistory.map((msg) => ({
       role: msg.sender === "user" ? "user" : "assistant",
-      content: msg.text,
+      content: msg.sender === "system" && msg.rawJson ? msg.rawJson : msg.text,
     }));
 
     pushStatus(
@@ -1228,7 +1242,7 @@ export default function Chat({
           : undefined,
       };
 
-      let data: { assistantMessage?: string; parsed?: { assistant_message?: string; status?: string; follow_up?: string; actions?: ModelAction[] }; usage?: unknown } | null = null;
+      let data: { assistantMessage?: string; parsed?: { assistant_message?: string; status?: string; follow_up?: string; actions?: ModelAction[] }; usage?: unknown; raw?: string } | null = null;
 
       if (inferenceMode.startsWith("edge")) {
         // ─── Edge (local) path ─────────────────────────────────────────────────
@@ -1261,15 +1275,8 @@ export default function Chat({
               end: o.videoEnd,
               track: o.label,
             })),
-            recentEdits: edgeHistoryForModel
-              .filter((h) => h.role === "user")
-              .map((h) => h.content),
-            lastAction: (() => {
-              const lastAssistant = [...edgeHistoryForModel]
-                .reverse()
-                .find((h) => h.role === "assistant");
-              return lastAssistant ? lastAssistant.content : "None";
-            })(),
+            recentEdits: [],
+            lastAction: "None",
           },
           edgeLLM
         );
@@ -1379,6 +1386,7 @@ export default function Chat({
         id: createMessageId(),
         text: aiText,
         sender: "system",
+        rawJson: data?.raw,
       };
 
       setMessages((prev) => [...prev, botMessage]);
