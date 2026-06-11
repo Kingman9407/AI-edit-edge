@@ -9,6 +9,7 @@ Goal: Teach the model to reject ALL forms of unsupported requests by returning
             a short explanation.
   Part B — Unsupported Operation Types: zoom, pan, color, text, speed, blur, etc.
             Return [] with a clear, friendly explanation of what IS supported.
+  Part C — Merge with no available clip: model bin is empty, gracefully decline.
 """
 
 examples = [
@@ -58,5 +59,15 @@ examples = [
     {
         "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nadd a blur to the background",
         "output": "{\"message\":\"I don't support visual filters like blur. I can only edit the video timeline.\",\"operations\":[]}"
+    },
+
+    # ── Part C: Merge with no available clip ───────────────────────────────────────
+    {
+        "input": "[VIDEO METADATA]\nName: solo.mp4\nDuration: 60.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[MEDIA BIN]\n- None\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nmerge another video here",
+        "output": "{\"message\":\"There are no additional clips in your media bin to merge. Please upload or add a second video first.\",\"operations\":[]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: clip.mp4\nDuration: 45.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[MEDIA BIN]\n- None\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\njoin this with another clip",
+        "output": "{\"message\":\"I don't see any other clip available to merge with. Add a second video to the media bin and I'll join them for you.\",\"operations\":[]}"
     }
 ]
