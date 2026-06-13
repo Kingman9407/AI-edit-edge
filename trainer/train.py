@@ -107,7 +107,7 @@ def main():
     
     training_args = TrainingArguments(
         output_dir=output_dir,
-        num_train_epochs=8,                 # Train for 8 epochs
+        num_train_epochs=5,                 # Train for 5 epochs
         per_device_train_batch_size=2,      # Small batch size to optimize memory
         gradient_accumulation_steps=2,      # Accumulate gradients for stable steps
         learning_rate=5e-5,                 # Standard learning rate for SFT

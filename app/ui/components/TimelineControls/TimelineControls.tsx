@@ -25,6 +25,7 @@ interface TimelineControlsProps {
   timelineCurrentTime: number;
   timelineDuration: number;
   edits: { start: number; end: number }[];
+  mutedSegments?: { start: number; end: number }[];
   isSkippingEdits: boolean;
   toggleIsSkippingEdits: () => void;
   onProgressClick: (e: React.MouseEvent<HTMLDivElement>) => void;
@@ -39,6 +40,7 @@ export default function TimelineControls({
   timelineCurrentTime,
   timelineDuration,
   edits = [],
+  mutedSegments = [],
   isSkippingEdits,
   toggleIsSkippingEdits,
   onProgressClick,
@@ -118,6 +120,18 @@ export default function TimelineControls({
                 style={{
                   left: `${(edit.start / duration) * 100}%`,
                   width: `${((edit.end - edit.start) / duration) * 100}%`,
+                }}
+              />
+            ))}
+
+            {/* Muted segments (pink) */}
+            {mutedSegments.map((mute, i) => (
+              <div
+                key={`mute-${i}`}
+                className="absolute h-full bg-pink-500/85 shadow-[0_0_8px_rgba(244,63,94,0.45)]"
+                style={{
+                  left: `${(mute.start / duration) * 100}%`,
+                  width: `${((mute.end - mute.start) / duration) * 100}%`,
                 }}
               />
             ))}

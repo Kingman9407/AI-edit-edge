@@ -76,5 +76,82 @@ examples = [
     {
         "input": "[VIDEO METADATA]\nName: travel_vlog.mp4\nDuration: 450.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ncut out from 2:00 to 2:30",
         "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":120.0,\"end\":150.0,\"reason\":\"Cut from 2:00 to 2:30\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: game_session.mp4\nDuration: 900.0s\nResolution: 1920x1080\nPlayhead: 300.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ndiscard the next 20 seconds from the playhead",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":300.0,\"end\":320.0,\"reason\":\"Discard next 20 seconds from playhead\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: presentation.mp4\nDuration: 180.0s\nResolution: 1280x720\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ncrop out the first 2 minutes of the video",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":0.0,\"end\":120.0,\"reason\":\"Crop out first 2 minutes\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: vlog.mp4\nDuration: 350.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ncut the segment between 100 seconds and 150 seconds",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":100.0,\"end\":150.0,\"reason\":\"Cut segment between 100s and 150s\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: interview.mp4\nDuration: 500.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ndiscard the final 15 seconds of the video",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":485.0,\"end\":500.0,\"reason\":\"Discard final 15 seconds\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: soundcheck.mp4\nDuration: 120.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ntrim the portion from 45s to 90s",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":45.0,\"end\":90.0,\"reason\":\"Trim portion from 45s to 90s\"}]}"
+    },
+   
+    {
+        "input": "[VIDEO METADATA]\nName: car_review.mp4\nDuration: 762.7s\nResolution: 1280x720\nPlayhead: 60.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 60.0\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nremove last 1min",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":702.7,\"end\":762.7,\"reason\":\"Remove last 1 min\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: vlog.mp4\nDuration: 500.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ncut last 1 min",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":440.0,\"end\":500.0,\"reason\":\"Remove last 1 min\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: presentation_recording.mp4\nDuration: 920.5s\nResolution: 1920x1080\nPlayhead: 120.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 120.0\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nremove the last minute",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":860.5,\"end\":920.5,\"reason\":\"Remove last minute\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: unboxing_vlog.mp4\nDuration: 415.2s\nResolution: 1920x1080\nPlayhead: 30.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 30.0\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nplease discard the last 60 seconds",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":355.2,\"end\":415.2,\"reason\":\"Discard last 60 seconds\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: vlog_unboxing.mp4\nDuration: 377.2s\nResolution: 1920x1080\nPlayhead: 15.3s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nremove first 1 min",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":0.0,\"end\":60.0,\"reason\":\"Remove first 1 min\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: daily_vlog.mp4\nDuration: 955.1s\nResolution: 1920x1080\nPlayhead: 882.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ncut first 1 min",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":0.0,\"end\":60.0,\"reason\":\"Cut first 1 min\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: game_stream.mov\nDuration: 1042.9s\nResolution: 1280x720\nPlayhead: 501.1s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ndelete the first minute",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":0.0,\"end\":60.0,\"reason\":\"Delete first minute\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: cooking_show.mp4\nDuration: 833.3s\nResolution: 1920x1080\nPlayhead: 211.5s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nremove last 1 min",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":773.3,\"end\":833.3,\"reason\":\"Remove last 1 min\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: family_trip.mp4\nDuration: 401.5s\nResolution: 1920x1080\nPlayhead: 399.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nremove the last 1 minute",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":341.5,\"end\":401.5,\"reason\":\"Remove last 1 minute\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: product_review.mp4\nDuration: 188.8s\nResolution: 1920x1080\nPlayhead: 12.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ncut last 1 min",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":128.8,\"end\":188.8,\"reason\":\"Cut last 1 min\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: drone_footage.mov\nDuration: 544.7s\nResolution: 3840x2160\nPlayhead: 50.5s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ndelete last 1 min",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":484.7,\"end\":544.7,\"reason\":\"Delete last 1 min\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: podcast_clip.mp4\nDuration: 991.1s\nResolution: 1920x1080\nPlayhead: 80.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nremove last 30 sec",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":961.1,\"end\":991.1,\"reason\":\"Remove last 30 sec\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: teaser.mp4\nDuration: 202.2s\nResolution: 1280x720\nPlayhead: 15.1s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ncut the last 30 seconds",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":172.2,\"end\":202.2,\"reason\":\"Cut last 30 seconds\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: random_video.mp4\nDuration: 645.9s\nResolution: 1920x1080\nPlayhead: 333.3s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ndelete last 30s",
+        "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":615.9,\"end\":645.9,\"reason\":\"Delete last 30s\"}]}"
     }
 ]

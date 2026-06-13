@@ -63,16 +63,24 @@ def format_video_context(state: dict) -> str:
 
 
 def random_video() -> dict:
-    names = [
-        "vlog_park_walk.mp4", "lecture_deep_learning.mp4",
-        "cooking_tutorial_lasagna.mp4", "family_gathering.mov",
-        "gaming_highlights.mp4", "podcast_episode_42.mp4",
+    videos = [
+        {"name": "vlog_park_walk.mp4", "duration": 480.0},
+        {"name": "lecture_deep_learning.mp4", "duration": 1200.0},
+        {"name": "cooking_tutorial_lasagna.mp4", "duration": 600.0},
+        {"name": "family_gathering.mov", "duration": 240.0},
+        {"name": "gaming_highlights.mp4", "duration": 300.0},
+        {"name": "podcast_episode_42.mp4", "duration": 762.7},
+        {"name": "quick_update.mp4", "duration": 60.0},
+        {"name": "short_clip.mp4", "duration": 120.0}
     ]
+    chosen = random.choice(videos)
+    duration = chosen["duration"]
+    
     return {
-        "name": random.choice(names),
-        "duration": 480.0,
+        "name": chosen["name"],
+        "duration": duration,
         "resolution": random.choice(["1920x1080", "1280x720", "3840x2160"]),
-        "playhead": round(random.uniform(0.0, 480.0), 1),
+        "playhead": round(random.uniform(0.0, duration), 1),
         "silent_sections": [],
         "existing_cuts": [],
         "bg_music": [],

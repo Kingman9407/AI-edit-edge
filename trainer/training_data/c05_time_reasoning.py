@@ -147,5 +147,37 @@ examples = [
     {
         "input": "[VIDEO METADATA]\nName: vid7.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ncut last 30s",
         "output": "{\"message\":\"I have applied the requested edits to the timeline.\",\"operations\":[{\"operation\":\"cut\",\"start\":70.0,\"end\":100.0,\"reason\":\"Cut last 30s\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: project_final.mp4\nDuration: 762.7s\nResolution: 1280x720\nPlayhead: 60.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 60.0\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nremove last 1 min",
+        "output": "{\"message\":\"I have applied the requested edits to the timeline.\",\"operations\":[{\"operation\":\"cut\",\"start\":702.7,\"end\":762.7,\"reason\":\"Remove last 1 min\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: tutorial.mov\nDuration: 314.8s\nResolution: 1920x1080\nPlayhead: 157.3s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ncut the last 30 seconds",
+        "output": "{\"message\":\"I have applied the requested edits to the timeline.\",\"operations\":[{\"operation\":\"cut\",\"start\":284.8,\"end\":314.8,\"reason\":\"Cut last 30 seconds\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: quick_vlog.mp4\nDuration: 143.2s\nResolution: 1920x1080\nPlayhead: 45.7s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nremove last 30 sec",
+        "output": "{\"message\":\"I have applied the requested edits to the timeline.\",\"operations\":[{\"operation\":\"cut\",\"start\":113.2,\"end\":143.2,\"reason\":\"Remove last 30 seconds\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: class_lecture.mp4\nDuration: 1255.4s\nResolution: 1920x1080\nPlayhead: 112.5s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 112.5\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ndelete the last minute",
+        "output": "{\"message\":\"I have applied the requested edits to the timeline.\",\"operations\":[{\"operation\":\"cut\",\"start\":1195.4,\"end\":1255.4,\"reason\":\"Delete last minute\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: short_clip.mp4\nDuration: 87.6s\nResolution: 1920x1080\nPlayhead: 12.3s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nsnip the last 30s of the clip",
+        "output": "{\"message\":\"I have applied the requested edits to the timeline.\",\"operations\":[{\"operation\":\"cut\",\"start\":57.6,\"end\":87.6,\"reason\":\"Snip last 30s\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: podcast_ad.mp4\nDuration: 253.9s\nResolution: 1920x1080\nPlayhead: 45.8s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 45.8\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nremove the last 1min",
+        "output": "{\"message\":\"I have applied the requested edits to the timeline.\",\"operations\":[{\"operation\":\"cut\",\"start\":193.9,\"end\":253.9,\"reason\":\"Remove last 1min\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: unboxing_vlog.mp4\nDuration: 415.2s\nResolution: 1920x1080\nPlayhead: 30.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 30.0\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nplease discard the last 60 seconds",
+        "output": "{\"message\":\"I have applied the requested edits to the timeline.\",\"operations\":[{\"operation\":\"cut\",\"start\":355.2,\"end\":415.2,\"reason\":\"Discard last 60 seconds\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: review_shoot.mp4\nDuration: 531.4s\nResolution: 1920x1080\nPlayhead: 120.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 120.0\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ndelete last 1 min",
+        "output": "{\"message\":\"I have applied the requested edits to the timeline.\",\"operations\":[{\"operation\":\"cut\",\"start\":471.4,\"end\":531.4,\"reason\":\"Delete last 1 min\"}]}"
     }
 ]

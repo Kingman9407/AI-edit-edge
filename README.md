@@ -25,6 +25,26 @@ The `trainer/` directory contains the complete PyTorch/Hugging Face pipeline to 
 * `chat_agent.py`: A local CLI chat environment to test the fine-tuned PyTorch model directly on your GPU (MPS/CUDA) before exporting.
 * `main.py`: Interactive CLI workspace manager for running the above scripts easily.
 
+### Training Data & Curriculum
+The synthetic training dataset (`trainer/training_data/`) is broken down into specific skill modules to teach the SLM. It contains approximately **200 examples** across these core areas:
+
+| Module | Description | Test/Train Examples |
+|--------|-------------|---------------------|
+| **`c01_json_formatting`** | Enforces strict JSON formatting and escaping discipline. | ~12 |
+| **`c02_single_cut`** | Teaches the model to execute precise timeline cuts. | ~38 |
+| **`c03_single_mute`** | Muting specific timeframes in the video audio track. | 4 |
+| **`c04_single_music`** | Adding and overlaying background music onto the timeline. | ~4 |
+| **`c05_time_reasoning`** | Converts relative human language ("last 5s") to absolute MM:SS. | ~45 |
+| **`c07_multi_step`** | Handling chained requests (e.g., "Cut the intro and mute the end"). | ~8 |
+| **`c08_natural_chat`** | Persona alignment to keep the model conversational as "Hornet". | ~21 |
+| **`c09_rejections`** | Polite refusal of impossible tasks or unsupported operations. | ~15 |
+| **`c10_context_aware`** | Understanding edits relative to the *current* state of the timeline. | ~8 |
+| **`c11_schema_strictness`** | Prevents hallucinations of non-existent JSON keys or wrong types. | 4 |
+| **`c12_operation_whitelist`** | Restricts the model to operations supported by the video player. | ~8 |
+| **`c13_chat_history`** | Multi-turn conversation management and intent retention. | ~5 |
+| **`c14_merge_concat`** | Advanced timeline manipulation combining different video segments. | ~28 |
+| **Total Examples** | | **~200** |
+
 ## Getting Started 🚀
 
 ### Running the Web App

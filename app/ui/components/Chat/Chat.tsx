@@ -258,7 +258,7 @@ export default function Chat({
     }
   }, [allowSuggestions]);
 
-  
+
 
   const buildSessionTitle = (sessionMessages: MessageLike[]) => {
     const firstUser = sessionMessages.find((msg) => msg.sender === "user");
@@ -373,7 +373,7 @@ export default function Chat({
         ? storedCurrent
         : nextSessions[0].id;
     const activeSession = nextSessions.find((session) => session.id === activeId);
-    
+
     setTimeout(() => {
       if (activeSession) {
         setMessages(activeSession.messages);
@@ -556,8 +556,7 @@ export default function Chat({
         )} - ${segment.note}`
     );
     pushSystemMessage(
-      `I found ${nextSuggestions.length} trim suggestion${
-        nextSuggestions.length > 1 ? "s" : ""
+      `I found ${nextSuggestions.length} trim suggestion${nextSuggestions.length > 1 ? "s" : ""
       }:\n${lines.join("\n")}\nReply with "trim 1" to apply one.`
     );
     return nextSuggestions.length;
@@ -1197,24 +1196,24 @@ export default function Chat({
               : undefined,
         suggestions: suggestions.length
           ? suggestions.map((suggestion) => ({
-              start: suggestion.start,
-              end: suggestion.end,
-              note: suggestion.note,
-            }))
+            start: suggestion.start,
+            end: suggestion.end,
+            note: suggestion.note,
+          }))
           : undefined,
         video: videoContext
           ? {
-              name: videoContext.name,
-              type: videoContext.type,
-              sizeBytes: videoContext.sizeBytes,
-              duration: videoContext.duration,
-              width: videoContext.width,
-              height: videoContext.height,
-              currentTime: videoContext.currentTime,
-              trimStartSeconds,
-              trimEndSeconds,
-              isEditorMode: videoContext.isEditorMode,
-            }
+            name: videoContext.name,
+            type: videoContext.type,
+            sizeBytes: videoContext.sizeBytes,
+            duration: videoContext.duration,
+            width: videoContext.width,
+            height: videoContext.height,
+            currentTime: videoContext.currentTime,
+            trimStartSeconds,
+            trimEndSeconds,
+            isEditorMode: videoContext.isEditorMode,
+          }
           : undefined,
         activeTimeline: activeTimeline.length
           ? activeTimeline.map((s) => ({ start: s.start, end: s.end }))
@@ -1222,20 +1221,20 @@ export default function Chat({
         frame: frameDataUrl,
         audio: audioSummary
           ? {
-              status: audioStatus,
-              summary: audioSummary,
-              error: audioError,
-            }
+            status: audioStatus,
+            summary: audioSummary,
+            error: audioError,
+          }
           : undefined,
         visual: visualSummary
           ? {
-              summary: visualSummary,
-            }
+            summary: visualSummary,
+          }
           : undefined,
         clips: clipSummary
           ? {
-              summary: clipSummary,
-            }
+            summary: clipSummary,
+          }
           : undefined,
         audioFiles: audioFiles.length
           ? audioFiles.map((f, index) => ({ name: f.name, sizeBytes: f.size, index }))
@@ -1252,7 +1251,7 @@ export default function Chat({
         pushStatus("Running on your device (edge inference)...");
         const edgeHistoryForModel =
           historyForModel.at(-1)?.role === "user" &&
-          historyForModel.at(-1)?.content === currentInput
+            historyForModel.at(-1)?.content === currentInput
             ? historyForModel.slice(0, -1)
             : historyForModel;
         const edgeRes = await runEdgeChat(
@@ -1261,12 +1260,12 @@ export default function Chat({
             history: edgeHistoryForModel as { role: "user" | "assistant"; content: string }[],
             videoContext: videoContext
               ? {
-                  name: videoContext.name,
-                  duration: videoContext.duration,
-                  width: videoContext.width,
-                  height: videoContext.height,
-                  currentTime: videoContext.currentTime,
-                }
+                name: videoContext.name,
+                duration: videoContext.duration,
+                width: videoContext.width,
+                height: videoContext.height,
+                currentTime: videoContext.currentTime,
+              }
               : null,
             existingCuts: edits.map((e) => ({ start: e.start, end: e.end })),
             mutedSegments: mutedSegments.map((e) => ({ start: e.start, end: e.end })),
@@ -1359,8 +1358,7 @@ export default function Chat({
         const suggestionCount = pushActionSuggestions(parsedActions);
         if (suggestionCount > 0) {
           pushStatus(
-            `Shared ${suggestionCount} trim suggestion${
-              suggestionCount > 1 ? "s" : ""
+            `Shared ${suggestionCount} trim suggestion${suggestionCount > 1 ? "s" : ""
             } for review.`
           );
         }
@@ -1560,17 +1558,15 @@ export default function Chat({
           return (
             <div
               key={msg.id}
-              className={`flex items-end gap-2.5 ${
-                isUser ? "flex-row-reverse" : "flex-row"
-              }`}
+              className={`flex items-end gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"
+                }`}
             >
               {/* Avatar */}
               <div
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-sm ${
-                  isUser
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-sm ${isUser
                     ? "bg-gradient-to-br from-blue-500 to-blue-600"
                     : "bg-gradient-to-br from-zinc-700 to-zinc-800 border border-zinc-700/50"
-                }`}
+                  }`}
               >
                 {isUser ? (
                   <User size={14} className="text-white" />
@@ -1580,11 +1576,10 @@ export default function Chat({
               </div>
               {/* Bubble */}
               <div
-                className={`max-w-[78%] whitespace-pre-line rounded-2xl px-4 py-3 text-[13px] leading-relaxed shadow-md transition-all ${
-                  isUser
+                className={`max-w-[78%] whitespace-pre-line rounded-2xl px-4 py-3 text-[13px] leading-relaxed shadow-md transition-all ${isUser
                     ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-md"
                     : "bg-zinc-800/80 text-zinc-200 rounded-bl-md border border-zinc-700/40"
-                }`}
+                  }`}
               >
                 {msg.text}
               </div>
@@ -1614,9 +1609,8 @@ export default function Chat({
                   return (
                     <div
                       key={`${line}-${index}`}
-                      className={`transition-colors ${
-                        isLatest ? "text-zinc-200" : "text-zinc-500"
-                      }`}
+                      className={`transition-colors ${isLatest ? "text-zinc-200" : "text-zinc-500"
+                        }`}
                     >
                       {isLatest ? "⚡ " : "✓ "}{line}
                     </div>
@@ -1714,11 +1708,10 @@ export default function Chat({
                         key={planOption}
                         type="button"
                         onClick={() => onPlanSelect(planOption)}
-                        className={`rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition border ${
-                          isActive
+                        className={`rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition border ${isActive
                             ? "bg-blue-600/20 text-blue-400 border-blue-500/50"
                             : "bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:text-white hover:bg-zinc-800"
-                        }`}
+                          }`}
                       >
                         {PLAN_CONFIGS[planOption].label}
                       </button>
@@ -1749,11 +1742,10 @@ export default function Chat({
                         key={session.id}
                         type="button"
                         onClick={() => { handleSelectSession(session.id); setIsMenuOpen(false); }}
-                        className={`flex w-full flex-col rounded-xl border px-3 py-2 text-left transition-all ${
-                          isActive
+                        className={`flex w-full flex-col rounded-xl border px-3 py-2 text-left transition-all ${isActive
                             ? "border-blue-500/60 bg-blue-500/10 text-zinc-100 shadow-sm shadow-blue-500/10"
                             : "border-zinc-800/60 bg-zinc-950/60 hover:border-blue-500/40 hover:bg-zinc-900/60"
-                        }`}
+                          }`}
                       >
                         <span className="text-sm font-semibold text-zinc-200">
                           {session.title}
@@ -1859,11 +1851,10 @@ export default function Chat({
           <button
             type="button"
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all ${
-              isMenuOpen 
-                ? "bg-blue-500/20 text-blue-400 border border-blue-500/30" 
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all ${isMenuOpen
+                ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
                 : "bg-zinc-800/50 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200"
-            }`}
+              }`}
           >
             <MoreHorizontal size={18} />
           </button>
@@ -1874,13 +1865,12 @@ export default function Chat({
             id="inference-mode-toggle"
             onClick={handleEdgeToggle}
             title={inferenceMode === "cloud" ? "Switch to Edge (local device)" : "Switch to Cloud (OpenRouter)"}
-            className={`flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all ${
-              inferenceMode.startsWith("edge")
+            className={`flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all ${inferenceMode.startsWith("edge")
                 ? edgeLLM.status === "ready"
                   ? "border-amber-500/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
                   : "border-amber-500/30 bg-amber-500/10 text-amber-400"
                 : "border-zinc-700/50 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-            }`}
+              }`}
           >
             {inferenceMode.startsWith("edge") ? (
               <><Cpu size={13} /><span>Edge</span></>

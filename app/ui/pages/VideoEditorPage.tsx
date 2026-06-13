@@ -1162,6 +1162,7 @@ export default function VideoEditor() {
                 timelineCurrentTime={timelineCurrentTime}
                 timelineDuration={timelineDuration}
                 edits={edits}
+                mutedSegments={muteEdits}
                 isSkippingEdits={isSkippingEdits}
                 toggleIsSkippingEdits={toggleIsSkippingEdits}
                 onProgressClick={handleProgressClick}
