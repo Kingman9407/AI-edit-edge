@@ -40,7 +40,7 @@ def resolve_intent(intent, workspace_state):
         "existing_cuts": [{"start": float, "end": float}]
     }
     """
-    duration = float(workspace_state.get("duration", 180.0))
+    duration = float(workspace_state.get("duration", 300.0))
     playhead = float(workspace_state.get("playhead", 0.0))
     silent_sections = workspace_state.get("silent_sections", [])
     

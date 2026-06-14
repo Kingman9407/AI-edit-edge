@@ -62,7 +62,7 @@ examples = [
         "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":35.0,\"end\":45.0,\"reason\":\"Cut 10 seconds before playhead\"}]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: vlog_raw.mp4\nDuration: 180.0s\nResolution: 1920x1080\nPlayhead: 60.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ndelete the next 5 seconds starting from the playhead",
+        "input": "[VIDEO METADATA]\nName: vlog_raw.mp4\nDuration: 215.0s\nResolution: 1920x1080\nPlayhead: 60.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ndelete the next 5 seconds starting from the playhead",
         "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":60.0,\"end\":65.0,\"reason\":\"Delete next 5 seconds from playhead\"}]}"
     },
     {
@@ -82,7 +82,7 @@ examples = [
         "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":300.0,\"end\":320.0,\"reason\":\"Discard next 20 seconds from playhead\"}]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: presentation.mp4\nDuration: 180.0s\nResolution: 1280x720\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ncrop out the first 2 minutes of the video",
+        "input": "[VIDEO METADATA]\nName: presentation.mp4\nDuration: 144.0s\nResolution: 1280x720\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ncrop out the first 2 minutes of the video",
         "output": "{\"message\":\"the cut operation have been performed\",\"operations\":[{\"operation\":\"cut\",\"start\":0.0,\"end\":120.0,\"reason\":\"Crop out first 2 minutes\"}]}"
     },
     {

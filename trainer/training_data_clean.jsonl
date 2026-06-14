@@ -1,7 +1,7 @@
 {"instruction": "Generate video edit actions", "input": "cut the first 5 seconds", "output": [{"operation": "cut", "start": 0.0, "end": 5.0, "reason": "Remove first 5 seconds"}]}
 {"instruction": "Generate video edit actions", "input": "mute from 10 to 20 seconds", "output": [{"operation": "mute", "start": 10.0, "end": 20.0, "reason": "Mute requested range"}]}
 {"instruction": "Generate video edit actions", "input": "add music.mp3 to entire video", "output": [{"operation": "add_audio_overlay", "start": 0.0, "end": 90.0, "reason": "Add background music to full video", "track": "music.mp3"}]}
-{"instruction": "Generate video edit actions", "input": "remove the last 10 seconds", "output": [{"operation": "cut", "start": 170.0, "end": 180.0, "reason": "Remove last 10 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "remove the last 10 seconds", "output": [{"operation": "cut", "start": 143.0, "end": 153.0, "reason": "Remove last 10 seconds"}]}
 {"instruction": "Generate video edit actions", "input": "mute from 60 to 90 seconds", "output": [{"operation": "mute", "start": 60.0, "end": 90.0, "reason": "Mute requested range"}]}
 {"instruction": "Generate video edit actions", "input": "mute the background noise between 30 and 45 seconds", "output": [{"operation": "mute", "start": 30.0, "end": 45.0, "reason": "Mute background noise"}]}
 {"instruction": "Generate video edit actions", "input": "add intro_music.mp3 over the first 10 seconds", "output": [{"operation": "add_audio_overlay", "start": 0.0, "end": 10.0, "reason": "Add intro music", "track": "intro_music.mp3"}]}
@@ -70,7 +70,7 @@
 {"instruction": "Generate video edit actions", "input": "cut the first 2 minutes", "output": [{"operation": "cut", "start": 0.0, "end": 120.0, "reason": "Cut first 2 minutes"}]}
 {"instruction": "Generate video edit actions", "input": "mute last 3 mins", "output": [{"operation": "mute", "start": 300.0, "end": 480.0, "reason": "Mute last 3 minutes"}]}
 {"instruction": "Generate video edit actions", "input": "remove next 1 min", "output": [{"operation": "cut", "start": 0.0, "end": 60.0, "reason": "Cut next 1 min"}]}
-{"instruction": "Generate video edit actions", "input": "remove from 2 min to 3 min", "output": [{"operation": "cut", "start": 120.0, "end": 180.0, "reason": "Cut from 2 min to 3 min"}]}
+{"instruction": "Generate video edit actions", "input": "remove from 2 min to 2.5 min", "output": [{"operation": "cut", "start": 120.0, "end": 150.0, "reason": "Cut from 2 min to 2.5 min"}]}
 {"instruction": "Generate video edit actions", "input": "cut from 1 minute to 4 minutes", "output": [{"operation": "cut", "start": 60.0, "end": 240.0, "reason": "Cut from 1 minute to 4 minutes"}]}
 {"instruction": "Generate video edit actions", "input": "mute audio from 5 mins to 8 mins", "output": [{"operation": "mute", "start": 300.0, "end": 480.0, "reason": "Mute from 5 mins to 8 mins"}]}
 {"instruction": "Generate video edit actions", "input": "cut the first one minute", "output": [{"operation": "cut", "start": 0.0, "end": 60.0, "reason": "Cut first one minute"}]}
@@ -78,7 +78,7 @@
 {"instruction": "Generate video edit actions", "input": "cut first 1m", "output": [{"operation": "cut", "start": 0.0, "end": 60.0, "reason": "Cut first 1m"}]}
 {"instruction": "Generate video edit actions", "input": "remove last 1 min", "output": [{"operation": "cut", "start": 702.7, "end": 762.7, "reason": "Remove last 1 min"}]}
 {"instruction": "Generate video edit actions", "input": "cut last 1m", "output": [{"operation": "cut", "start": 240.0, "end": 300.0, "reason": "Cut last 1m"}]}
-{"instruction": "Generate video edit actions", "input": "mute the first 3 mins", "output": [{"operation": "mute", "start": 0.0, "end": 180.0, "reason": "Mute first 3 mins"}]}
+{"instruction": "Generate video edit actions", "input": "mute the first 2.5 mins", "output": [{"operation": "mute", "start": 0.0, "end": 150.0, "reason": "Mute first 2.5 mins"}]}
 {"instruction": "Generate video edit actions", "input": "cut first 5 minutes", "output": [{"operation": "cut", "start": 0.0, "end": 300.0, "reason": "Cut first 5 minutes"}]}
 {"instruction": "Generate video edit actions", "input": "remove last 2 minutes", "output": [{"operation": "cut", "start": 480.0, "end": 600.0, "reason": "Remove last 2 minutes"}]}
 {"instruction": "Generate video edit actions", "input": "cut last 5 mins", "output": [{"operation": "cut", "start": 600.0, "end": 900.0, "reason": "Cut last 5 mins"}]}

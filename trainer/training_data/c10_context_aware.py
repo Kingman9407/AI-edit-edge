@@ -13,7 +13,7 @@ examples = [
         "output": "{\"message\":\"I have applied the requested edits to the timeline.\",\"operations\":[{\"operation\":\"cut\",\"start\":45.0,\"end\":50.0,\"reason\":\"Cut silent section 1\"},{\"operation\":\"cut\",\"start\":120.0,\"end\":135.0,\"reason\":\"Cut silent section 2\"}]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: tutorial.mp4\nDuration: 180.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- 10.0 -> 20.0\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nmute the silent part just in case",
+        "input": "[VIDEO METADATA]\nName: tutorial.mp4\nDuration: 210.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- 10.0 -> 20.0\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nmute the silent part just in case",
         "output": "{\"message\":\"I have applied the requested edits to the timeline.\",\"operations\":[{\"operation\":\"mute\",\"start\":10.0,\"end\":20.0,\"reason\":\"Mute silent section\"}]}"
     },
     
@@ -38,7 +38,7 @@ examples = [
         "output": "{\"message\":\"Your playhead is currently placed at 145.5 seconds.\",\"operations\":[]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: raw_footage.mp4\nDuration: 180.0s\nResolution: 1920x1080\nPlayhead: 32.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nwhat's my current position in the timeline?",
+        "input": "[VIDEO METADATA]\nName: raw_footage.mp4\nDuration: 264.0s\nResolution: 1920x1080\nPlayhead: 32.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nwhat's my current position in the timeline?",
         "output": "{\"message\":\"You are currently at 32.0 seconds in the video.\",\"operations\":[]}"
     }
 ]

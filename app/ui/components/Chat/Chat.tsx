@@ -1529,17 +1529,7 @@ export default function Chat({
     scrollToBottom();
   }, [messages, status, scrollToBottom]);
 
-  const handleEdgeToggle = () => {
-    if (inferenceMode === "cloud") {
-      if (edgeLLM.status === "idle" || edgeLLM.status === "error") {
-        setShowEdgeConfirm(true);
-      } else {
-        setInferenceMode("edge-int8");
-      }
-    } else {
-      setInferenceMode("cloud");
-    }
-  };
+
 
   const handleEdgeConfirm = (format: "int8" | "fp16" | "fp32") => {
     setInferenceMode(`edge-${format}`);
@@ -1721,6 +1711,43 @@ export default function Chat({
               </div>
             ) : null}
 
+            {/* Model Provider Settings */}
+            <div className="space-y-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Model Provider</div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setInferenceMode("cloud"); setIsMenuOpen(false); }}
+                  className={`rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition border ${inferenceMode === "cloud"
+                      ? "bg-blue-600/20 text-blue-400 border-blue-500/50"
+                      : "bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:text-white hover:bg-zinc-800"
+                    }`}
+                >
+                  Cloud (OpenRouter)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (edgeLLM.status === "idle" || edgeLLM.status === "error") {
+                      setShowEdgeConfirm(true);
+                      setIsMenuOpen(false);
+                    } else if (!inferenceMode.startsWith("edge")) {
+                      setInferenceMode("edge-int8");
+                      setIsMenuOpen(false);
+                    } else {
+                      setIsMenuOpen(false);
+                    }
+                  }}
+                  className={`rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition border ${inferenceMode.startsWith("edge")
+                      ? "bg-amber-500/20 text-amber-400 border-amber-500/50"
+                      : "bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:text-white hover:bg-zinc-800"
+                    }`}
+                >
+                  Edge (Local Device)
+                </button>
+              </div>
+            </div>
+
             {/* Memory */}
             {memorySummary ? (
               <div className="space-y-2">
@@ -1859,12 +1886,12 @@ export default function Chat({
             <MoreHorizontal size={18} />
           </button>
 
-          {/* Cloud / Edge toggle */}
+          {/* Edge Models Toggle */}
           <button
             type="button"
             id="inference-mode-toggle"
-            onClick={handleEdgeToggle}
-            title={inferenceMode === "cloud" ? "Switch to Edge (local device)" : "Switch to Cloud (OpenRouter)"}
+            onClick={() => setShowEdgeConfirm(true)}
+            title="Select Edge Model Variant"
             className={`flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all ${inferenceMode.startsWith("edge")
                 ? edgeLLM.status === "ready"
                   ? "border-amber-500/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
@@ -1872,11 +1899,8 @@ export default function Chat({
                 : "border-zinc-700/50 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
               }`}
           >
-            {inferenceMode.startsWith("edge") ? (
-              <><Cpu size={13} /><span>Edge</span></>
-            ) : (
-              <><Cloud size={13} /><span>Cloud</span></>
-            )}
+            <Cpu size={13} />
+            <span>Edge Models</span>
           </button>
 
           <form onSubmit={handleSend} className="relative flex-1 flex items-center">

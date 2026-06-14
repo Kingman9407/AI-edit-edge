@@ -82,7 +82,7 @@ examples = [
         "output": "{\"message\":\"the merge operation have been performed\",\"operations\":[{\"operation\":\"merge_videos\",\"clips\":[{\"file\":\"presentation.mp4\",\"order\":1},{\"file\":\"thank_you_slide.mp4\",\"order\":2}],\"reason\":\"Append thank_you_slide.mp4 after presentation.mp4\"}]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: highlight_reel.mp4\nDuration: 180.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[MEDIA BIN]\n- brand_logo.mp4 (3.0s)\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nconnect the brand logo clip right after this video",
+        "input": "[VIDEO METADATA]\nName: highlight_reel.mp4\nDuration: 215.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[MEDIA BIN]\n- brand_logo.mp4 (3.0s)\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nconnect the brand logo clip right after this video",
         "output": "{\"message\":\"the merge operation have been performed\",\"operations\":[{\"operation\":\"merge_videos\",\"clips\":[{\"file\":\"highlight_reel.mp4\",\"order\":1},{\"file\":\"brand_logo.mp4\",\"order\":2}],\"reason\":\"Connect brand_logo.mp4 after highlight_reel.mp4\"}]}"
     },
     {

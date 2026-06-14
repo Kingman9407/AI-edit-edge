@@ -22,8 +22,8 @@ examples = [
         "output": "{\"message\":\"I have overlaid the background music track across the entire duration.\",\"operations\":[{\"operation\":\"add_audio_overlay\",\"start\":0.0,\"end\":90.0,\"reason\":\"Add background music to full video\",\"track\":\"music.mp3\"}]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: vlog.mp4\nDuration: 180.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nremove the last 10 seconds",
-        "output": "{\"message\":\"I've removed the final 10 seconds of the video.\",\"operations\":[{\"operation\":\"cut\",\"start\":170.0,\"end\":180.0,\"reason\":\"Remove last 10 seconds\"}]}"
+        "input": "[VIDEO METADATA]\nName: vlog.mp4\nDuration: 153.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nremove the last 10 seconds",
+        "output": "{\"message\":\"I've removed the final 10 seconds of the video.\",\"operations\":[{\"operation\":\"cut\",\"start\":143.0,\"end\":153.0,\"reason\":\"Remove last 10 seconds\"}]}"
     },
     {
         "input": "[VIDEO METADATA]\nName: podcast.mp4\nDuration: 300.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nmute from 60 to 90 seconds",

@@ -7,7 +7,7 @@ Goal: Teach the model mute variations.
 
 examples = [
     {
-        "input": "[VIDEO METADATA]\nName: zoom_meeting.mp4\nDuration: 180.0s\nResolution: 1280x720\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nmute the audio from 45 seconds to 1 minute",
+        "input": "[VIDEO METADATA]\nName: zoom_meeting.mp4\nDuration: 255.0s\nResolution: 1280x720\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nmute the audio from 45 seconds to 1 minute",
         "output": "{\"message\":\"the mute operation have been performed\",\"operations\":[{\"operation\":\"mute\",\"start\":45.0,\"end\":60.0,\"reason\":\"Mute requested range from 0:45 to 1:00\"}]}"
     },
     {

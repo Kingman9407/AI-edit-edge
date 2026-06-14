@@ -81,7 +81,7 @@ system_instruction_ft = (
 
 # Simulated Video Workspace Context
 mock_workspace_state = {
-    "duration": 180.0,
+    "duration": 300.0,
     "playhead": 0.0,
     "silent_sections": [{"start": 25.0, "end": 32.5}]
 }
@@ -90,7 +90,7 @@ mock_video_context = (
     "[VIDEO METADATA]\n"
     "Name: zoom_meeting.mp4\n"
     "Type: video/mp4\n"
-    "Duration: 180.0s\n"
+    "Duration: 300.0s\n"
     "Resolution: 1280x720\n"
     "Playhead: 0.0s\n\n"
     "[TIMELINE STATE]\n"

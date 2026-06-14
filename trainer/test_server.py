@@ -74,7 +74,7 @@ def run_tests():
                 "playhead": 120.0,
                 "silent_sections": [
                     {"start": 10.0, "end": 15.0},
-                    {"start": 150.0, "end": 180.0}
+                    {"start": 150.0, "end": 195.0}
                 ],
                 "existing_cuts": [],
                 "background_music": []
