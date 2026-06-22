@@ -2,7 +2,7 @@ import os
 import json
 from transformers import pipeline
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from resolver import resolve_intents
+from resolver import resolve_semantic_operations
 
 # Paths
 base_model_path = "./SmolLM2-135M-Instruct"
@@ -72,11 +72,12 @@ system_instruction = (
 
 # Video Editor System Instruction (Fine-Tuned Hornet Model)
 system_instruction_ft = (
-    "You are Hornet, a natural language processing (NLP) assistant. "
-    "You analyze the user's video editing requests and return a structured JSON object "
-    "containing two fields: 'message' (a natural response) and 'operations' (a list of video edit actions "
-    "like 'cut', 'mute', 'add_audio_overlay' with start and end timestamps in seconds). "
-    "Output ONLY a raw JSON object. Do NOT use markdown formatting, backticks, or extra text outside the JSON."
+    "You are Hornet, a video editing AI. "
+    "Return JSON: {\"message\": str, \"operations\": [...]}. "
+    "Each op: {operation: cut|mute|add_audio_overlay, variation: first|last|before_playhead|after_playhead|range, "
+    "value: number, unit: seconds|minutes|hours, reason: str}. "
+    "For range use start_seconds+end_seconds instead of value+unit. "
+    "add_audio_overlay also needs track. Output raw JSON only."
 )
 
 # Simulated Video Workspace Context
@@ -165,16 +166,22 @@ def run_comparison(user_text):
         try:
             parsed_ft = json.loads(ans_finetuned)
             if isinstance(parsed_ft, dict) and "operations" in parsed_ft:
-                # Direct operations returned by Hornet SFT
+                # Semantic operations from Hornet — resolve to absolute timestamps
+                semantic_ops = parsed_ft["operations"]
+                resolved_ft  = resolve_semantic_operations(semantic_ops, mock_workspace_state)
                 print(f"🗣️  AGENT MESSAGE: {parsed_ft.get('message', '')}")
-                print(f"✅ DETECTED OPERATIONS:\n{json.dumps(parsed_ft['operations'], indent=2)}")
+                print(f"✅ SEMANTIC OPERATIONS:\n{json.dumps(semantic_ops, indent=2)}")
+                print(f"🎬 RESOLVED (ABSOLUTE) OPERATIONS:\n{json.dumps(resolved_ft, indent=2)}")
             else:
-                # Fallback to resolver if it returned standard intents format
-                resolved_ft = resolve_intents(parsed_ft, mock_workspace_state)
-                print(f"✅ DETECTED INTENTS:\n{json.dumps(parsed_ft, indent=2)}")
-                print(f"🎬 RESOLVED OPERATIONS:\n{json.dumps(resolved_ft, indent=2)}")
+                # Fallback: try resolving as a plain list of semantic ops
+                resolved_ft = resolve_semantic_operations(
+                    parsed_ft if isinstance(parsed_ft, list) else [parsed_ft],
+                    mock_workspace_state
+                )
+                print(f"✅ OPERATIONS:\n{json.dumps(parsed_ft, indent=2)}")
+                print(f"🎬 RESOLVED:\n{json.dumps(resolved_ft, indent=2)}")
         except Exception as e:
-            print(f"⚠️ Fine-tuned model output is not valid JSON intent: {e}")
+            print(f"⚠️ Fine-tuned model output is not valid JSON: {e}")
     else:
         print("\n" + "─" * 30 + " FINE-TUNED MODEL " + "─" * 30)
         print("[No fine-tuned model active yet. Wait for training script to complete!]")

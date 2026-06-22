@@ -50,6 +50,26 @@ def main():
     print(f"\n📖 Loading dataset: {dataset_file} ...")
     dataset = load_dataset("json", data_files=dataset_file, split="train")
 
+    # Pre-tokenize the special role headers we need to find
+    # - assistant turns: we want loss on ALL assistant turns (both tool_call turn and final JSON turn)
+    # - tool_result turns: we want NO loss (masked -100) — the model reads them but doesn't generate them
+    assistant_start_tokens = tokenizer.encode("<|im_start|>assistant\n", add_special_tokens=False)
+    tool_result_start_tokens = tokenizer.encode("<|im_start|>tool_result\n", add_special_tokens=False)
+    im_end_tokens = tokenizer.encode("<|im_end|>", add_special_tokens=False)
+
+    n_assistant = len(assistant_start_tokens)
+    n_tool_result = len(tool_result_start_tokens)
+    n_im_end = len(im_end_tokens)
+
+    def find_all_occurrences(seq: list, pattern: list) -> list[int]:
+        """Return start indices of all occurrences of `pattern` inside `seq`."""
+        indices = []
+        pattern_len = len(pattern)
+        for i in range(len(seq) - pattern_len + 1):
+            if seq[i : i + pattern_len] == pattern:
+                indices.append(i)
+        return indices
+
     def tokenize_function(examples):
         result = tokenizer(
             examples["text"], 
@@ -58,36 +78,55 @@ def main():
             padding=True
         )
         
-        # Build labels
         labels = []
-        assistant_start_tokens = tokenizer.encode("<|im_start|>assistant\n", add_special_tokens=False)
-        n_tokens = len(assistant_start_tokens)
 
         for input_ids in result["input_ids"]:
+            # Start with everything masked
             label = [-100] * len(input_ids)
-            
-            # Find the start of the final assistant response
-            found_idx = -1
-            for i in range(len(input_ids) - n_tokens + 1):
-                if input_ids[i : i + n_tokens] == assistant_start_tokens:
-                    found_idx = i
-            
-            if found_idx != -1:
-                # Mask prompt tokens, keep assistant response tokens
-                start_label_idx = found_idx + n_tokens
-                for j in range(start_label_idx, len(input_ids)):
-                    if input_ids[j] == tokenizer.pad_token_id:
-                        label[j] = -100
-                    else:
-                        label[j] = input_ids[j]
-            else:
-                # Fallback to standard labels if tokenizer splits tags unexpectedly
+
+            # ── Find all assistant turn starts ────────────────────────────
+            assistant_starts = find_all_occurrences(input_ids, assistant_start_tokens)
+
+            # ── Find all tool_result turn starts (to keep them masked) ────
+            tool_result_starts = find_all_occurrences(input_ids, tool_result_start_tokens)
+            tool_result_start_set = set(tool_result_starts)
+
+            if not assistant_starts:
+                # Fallback: no assistant token found — use standard full-sequence labels
                 for j in range(len(input_ids)):
+                    if input_ids[j] != tokenizer.pad_token_id:
+                        label[j] = input_ids[j]
+                labels.append(label)
+                continue
+
+            # ── Unmask every assistant turn (skip those inside tool_result) ─
+            for a_start in assistant_starts:
+                content_start = a_start + n_assistant
+                # Walk forward to find the closing <|im_end|>
+                content_end = len(input_ids)
+                for k in range(content_start, len(input_ids) - n_im_end + 1):
+                    if input_ids[k : k + n_im_end] == im_end_tokens:
+                        content_end = k + n_im_end  # include the <|im_end|> token in the loss
+                        break
+
+                # Unmask this assistant block
+                for j in range(content_start, content_end):
                     if input_ids[j] == tokenizer.pad_token_id:
                         label[j] = -100
                     else:
                         label[j] = input_ids[j]
-                
+
+            # ── Re-mask any tool_result turns (the model must not generate these) ─
+            for tr_start in tool_result_starts:
+                content_start = tr_start  # mask from the role header itself
+                content_end = len(input_ids)
+                for k in range(content_start, len(input_ids) - n_im_end + 1):
+                    if input_ids[k : k + n_im_end] == im_end_tokens:
+                        content_end = k + n_im_end
+                        break
+                for j in range(content_start, content_end):
+                    label[j] = -100
+
             labels.append(label)
             
         result["labels"] = labels

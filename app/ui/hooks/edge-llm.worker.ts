@@ -1,8 +1,76 @@
 const IDB_DB_NAME = "edge-llm-cache";
 const IDB_STORE = "models";
 
-const MAX_NEW_TOKENS = 256;
+const MAX_NEW_TOKENS = 384; // Increased from 256 to support two-phase tool-use responses
 const FALLBACK_EOS_TOKEN_ID = 2; // SmolLM2 uses token 2 (<|im_end|>) as EOS for ChatML
+
+// ─── Inline resolveTime ───────────────────────────────────────────────────────
+// Duplicated here (mirrors app/ui/lib/resolveTime.ts) so the worker bundle
+// stays self-contained without a module import.
+
+function _toSeconds(amount: number, unit: string): number {
+  if (unit === "minutes") return amount * 60;
+  if (unit === "hours")   return amount * 3600;
+  return amount;
+}
+
+function _resolveSingle(
+  call: { anchor: string; direction: string; amount: number; unit: string; default_duration?: number },
+  duration: number,
+  playhead: number
+): { start: number; end: number } {
+  const span = _toSeconds(call.amount, call.unit);
+  const defDur = _toSeconds(call.default_duration ?? 5, "seconds");
+  let start = 0, end = 0;
+
+  if (call.anchor === "start") {
+    start = 0;
+    end   = Math.min(span, duration);
+  } else if (call.anchor === "end") {
+    end   = duration;
+    start = Math.max(0, duration - span);
+  } else { // playhead
+    if (call.direction === "forward") {
+      start = playhead;
+      end   = Math.min(playhead + span, duration);
+    } else {
+      start = Math.max(0, playhead - span);
+      end   = playhead;
+    }
+  }
+  if (start === end) end = Math.min(start + defDur, duration);
+  return { start: Math.round(start * 10) / 10, end: Math.round(end * 10) / 10 };
+}
+
+/**
+ * Execute a <tool_call> JSON payload and return the tool_result string.
+ * Returns null if the tool name is unrecognised or parsing fails.
+ */
+function executeToolCall(
+  rawJson: string,
+  duration: number,
+  playhead: number
+): string | null {
+  try {
+    const req = JSON.parse(rawJson);
+    if (req.tool !== "resolve_time") return null;
+
+    const calls = req.calls;
+    if (calls && Array.isArray(calls)) {
+      const results = calls.map((c: any) => _resolveSingle(c, duration, playhead));
+      return JSON.stringify(results);
+    }
+
+    if (req.anchor && req.direction && req.amount != null && req.unit) {
+      const result = _resolveSingle(req, duration, playhead);
+      return JSON.stringify(result);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 // ─── Fix #3: Module-level ORT reference ──────────────────────────────────────
 // Import ORT once at module level — reused by both loadModel and generate.
@@ -13,7 +81,7 @@ let tokenizer: import("@huggingface/transformers").PreTrainedTokenizer | null = 
 let eosTokenId = FALLBACK_EOS_TOKEN_ID;
 
 interface ChatMLMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool_result";
   content: string;
 }
 
@@ -500,14 +568,14 @@ async function generateFullRefeed(
 
 // ─── Generate entry point ─────────────────────────────────────────────────────
 
-async function generate(prompt: string | ChatMLMessage[], reqId: number) {
+async function generate(prompt: string | ChatMLMessage[], reqId: number, _duration = 0, _playhead = 0) {
   if (!session || !tokenizer || !ort) {
     throw new Error("Model is not loaded yet.");
   }
 
+  // ── Phase 1: Build initial prompt text ────────────────────────────────────
   let promptText = "";
   if (Array.isArray(prompt)) {
-    // Manually build ChatML format — identical to Python's apply_chat_template.
     for (const msg of prompt) {
       promptText += `<|im_start|>${msg.role}\n${msg.content}<|im_end|>\n`;
     }
@@ -518,51 +586,69 @@ async function generate(prompt: string | ChatMLMessage[], reqId: number) {
 
   console.log("🤖 [EdgeLLM Worker] RAW PROMPT PASSED TO AI:\n", promptText);
 
-  // IMPORTANT: add_special_tokens: false — the ChatML string is already fully formatted.
-  // Setting true would prepend an extra BOS token, corrupting the input.
   const encoded = await tokenizer(promptText, { return_tensor: false, add_special_tokens: false });
-  const inputIds = Array.from(encoded.input_ids as number[]).map(Number);
-  const promptLen = inputIds.length;
+  let inputIds = Array.from(encoded.input_ids as number[]).map(Number);
 
   console.log("Token count:", inputIds.length);
-  console.log("First 20:", Array.from(inputIds).slice(0, 20));
-  console.log("Last 20:", Array.from(inputIds).slice(-20));
-  console.log("ALL TOKENS:", Array.from(inputIds));
-  console.log("DECODED PROMPT:\n", tokenizer.decode(inputIds, { skip_special_tokens: false }));
-
-  console.log(
-    `[EdgeLLM Worker] Prompt tokenized to ${promptLen} tokens. ` +
-    `Generating up to ${MAX_NEW_TOKENS} new tokens...`
-  );
 
   const generatedTokenIds: number[] = [];
   const startTime = performance.now();
 
-  // Fix #1: Route to KV-cache path if the model exports present_key_values.
-  // Falls back to the pre-allocated full-refeed path for models that don't.
   const hasKvOutputs = session.outputNames.some(n => n.startsWith("present_key_values.") || n.startsWith("present."));
-  const hasKvInputs = session.inputNames.some(n => n.startsWith("past_key_values."));
+  const hasKvInputs  = session.inputNames.some(n => n.startsWith("past_key_values."));
 
   if (hasKvOutputs && hasKvInputs) {
-    console.log("[EdgeLLM Worker] Using KV-cache path (O(N) per decode step)");
     await generateWithKvCache(inputIds, generatedTokenIds, reqId);
   } else {
-    console.log("[EdgeLLM Worker] Using full-refeed fallback (model lacks KV outputs)");
     await generateFullRefeed(inputIds, generatedTokenIds, reqId);
   }
 
+  let decoded = await tokenizer.decode(generatedTokenIds, { skip_special_tokens: true });
+  console.log("[EdgeLLM Worker] Phase 1 decoded output:", decoded.slice(0, 300));
+
+  // ── Phase 2: Tool call interception ───────────────────────────────────────
+  // Check if the model emitted a <tool_call>...</tool_call> block.
+  const toolCallMatch = decoded.match(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/);
+
+  if (toolCallMatch) {
+    console.log("🔧 [EdgeLLM Worker] Tool call detected — intercepting...");
+    const rawJson = toolCallMatch[1].trim();
+    const toolResult = executeToolCall(rawJson, _duration, _playhead);
+
+    if (toolResult) {
+      console.log("🔧 [EdgeLLM Worker] Tool result:", toolResult);
+
+      // Build extended prompt: append the tool_result turn and a new assistant start
+      const extendedPrompt =
+        promptText +
+        decoded +
+        `<|im_end|>\n` +
+        `<|im_start|>tool_result\n${toolResult}\n<|im_end|>\n` +
+        `<|im_start|>assistant\n`;
+
+      console.log("🔧 [EdgeLLM Worker] Re-running inference with tool result injected...");
+
+      const encoded2 = await tokenizer(extendedPrompt, { return_tensor: false, add_special_tokens: false });
+      const inputIds2 = Array.from(encoded2.input_ids as number[]).map(Number);
+      const generatedTokenIds2: number[] = [];
+
+      if (hasKvOutputs && hasKvInputs) {
+        await generateWithKvCache(inputIds2, generatedTokenIds2, reqId);
+      } else {
+        await generateFullRefeed(inputIds2, generatedTokenIds2, reqId);
+      }
+
+      decoded = await tokenizer.decode(generatedTokenIds2, { skip_special_tokens: true });
+      console.log("[EdgeLLM Worker] Phase 2 decoded output:", decoded.slice(0, 300));
+    } else {
+      console.warn("🔧 [EdgeLLM Worker] Tool call parse failed — using Phase 1 output as-is.");
+    }
+  }
+
+  // ── Final: clean and post ─────────────────────────────────────────────────
   const endTime = performance.now();
-  const elapsedSec = (endTime - startTime) / 1000;
-  const tps = generatedTokenIds.length / elapsedSec;
-
-  console.log(
-    `[EdgeLLM Worker] Generated ${generatedTokenIds.length} tokens ` +
-    `in ${elapsedSec.toFixed(2)}s (${tps.toFixed(2)} tok/s). Decoding...`
-  );
-  console.log("🤖 [EdgeLLM Worker] GENERATED TOKEN IDs:\n", generatedTokenIds);
-
-  const decoded = await tokenizer.decode(generatedTokenIds, { skip_special_tokens: true });
-  console.log("[EdgeLLM Worker] Raw decoded output:", decoded.slice(0, 200));
+  const elapsed = (endTime - startTime) / 1000;
+  console.log(`[EdgeLLM Worker] Total ${elapsed.toFixed(2)}s. Decoding final output.`);
 
   const cleanedText = parseJsonResponse(decoded);
   self.postMessage({ type: "DONE", reqId, text: cleanedText.trim() });
@@ -579,7 +665,7 @@ self.addEventListener("message", (e) => {
       self.postMessage({ type: "ERROR", error: err.message || String(err) });
     });
   } else if (type === "GENERATE") {
-    generate(payload.prompt, payload.reqId).catch((err) => {
+    generate(payload.prompt, payload.reqId, payload.duration ?? 0, payload.playhead ?? 0).catch((err) => {
       self.postMessage({ type: "ERROR", error: err.message || String(err), reqId: payload.reqId });
     });
   } else if (type === "RESET") {

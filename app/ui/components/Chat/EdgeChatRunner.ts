@@ -65,14 +65,10 @@ function buildMessages(req: EdgeChatRequest): ChatMLMessage[] {
   const messages: ChatMLMessage[] = [];
 
   // 1. System instruction turn
+  // NOTE: This string must match SYSTEM_INSTRUCTION in trainer/prepare_data.py exactly.
   messages.push({
     role: "system",
-    content:
-      "You are Hornet, a natural language processing (NLP) assistant. " +
-      "You analyze the user's video editing requests and return a structured JSON object " +
-      "containing two fields: 'message' (a natural response) and 'operations' (a list of video edit actions " +
-      "like 'cut', 'mute', 'add_audio_overlay' with start and end timestamps in seconds). " +
-      "Output ONLY a raw JSON object. Do NOT use markdown formatting, backticks, or extra text outside the JSON."
+    content: "You are Hornet, a video editing AI. Return JSON with 'message' and 'operations' (cut, mute, add_audio_overlay). If the user mentions time expressions requiring calculation, output a <tool_call> block first. Otherwise, output the final JSON directly."
   });
 
   // 2. History turns (exclude the active user request if it is at the end of the history array)
@@ -165,7 +161,14 @@ export async function runEdgeChat(
   }
 
   const messages = buildMessages(req);
-  const raw = await edgeLLM.generate(messages as any);
+  const raw = await edgeLLM.generate(
+    messages as any,
+    undefined,
+    {
+      duration: req.videoContext?.duration ?? 0,
+      playhead: req.videoContext?.currentTime ?? 0,
+    }
+  );
 
   console.log("🤖 [Edge LLM] RAW Output:\n", raw);
 

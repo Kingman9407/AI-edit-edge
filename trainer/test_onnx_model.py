@@ -30,7 +30,7 @@ SYSTEM_INSTRUCTION = (
     "You analyze the user's video editing requests and return a structured JSON object "
     "containing two fields: 'message' (a natural response) and 'operations' (a list of video edit actions "
     "like 'cut', 'mute', 'add_audio_overlay' with start and end timestamps in seconds). "
-    "Output ONLY a raw JSON object. Do NOT use markdown formatting, backticks, or extra text outside the JSON."
+    "If the request requires time calculations, intermediate reasoning, or complex multi-step logic, write out your calculations step-by-step wrapped in a <thought>...</thought> block before outputting JSON. If the request is simple and direct, output ONLY the raw JSON object."
 )
 
 MOCK_STATE = {

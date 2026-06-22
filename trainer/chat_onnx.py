@@ -9,19 +9,18 @@ import json
 import time
 import random
 import numpy as np
+from resolver import resolve_semantic_operations
 
 # Paths — override via env var to support FP32 or INT8 from main.py
 ONNX_MODEL_PATH  = os.environ.get("ONNX_MODEL_OVERRIDE", "./fine_tuned_smollm_onnx") + "/model.onnx"
 ONNX_LABEL       = "INT8" if "fp32" not in ONNX_MODEL_PATH else "FP32"
 TOKENIZER_PATH   = "./fine_tuned_smollm"
-MAX_NEW_TOKENS   = 256
+MAX_NEW_TOKENS   = 128
 
 SYSTEM_INSTRUCTION = (
-    "You are Hornet, a natural language processing (NLP) assistant. "
-    "You analyze the user's video editing requests and return a structured JSON object "
-    "containing two fields: 'message' (a natural response) and 'operations' (a list of video edit actions "
-    "like 'cut', 'mute', 'add_audio_overlay' with start and end timestamps in seconds). "
-    "Output ONLY a raw JSON object. Do NOT use markdown formatting, backticks, or extra text outside the JSON."
+    "You are Hornet, a video editing AI. Return JSON with 'message' and 'operations' (cut, mute, add_audio_overlay). "
+    "If the user mentions time expressions requiring calculation, output a <tool_call> block first. "
+    "Otherwise, output the final JSON directly."
 )
 
 
@@ -127,7 +126,7 @@ def parse_json(text: str) -> dict:
 # ──────────────────────────────────────────────────────────────────────────────
 
 def run_onnx(session, tokenizer, eos_id: int,
-             user_content: str, state: dict) -> tuple[str, float, int]:
+             user_content: str, state: dict, history: list = None) -> tuple[str, float, int]:
     """
     Builds a ChatML prompt (matching the web worker exactly) and runs
     greedy decoding through the ONNX session.
@@ -137,8 +136,13 @@ def run_onnx(session, tokenizer, eos_id: int,
     user_msg = f"{video_ctx}\n\n[USER REQUEST]\n{user_content}"
 
     # Build ChatML — identical to edge-llm.worker.ts
-    prompt_str = (
-        f"<|im_start|>system\n{SYSTEM_INSTRUCTION}<|im_end|>\n"
+    prompt_str = f"<|im_start|>system\n{SYSTEM_INSTRUCTION}<|im_end|>\n"
+    
+    if history:
+        for msg in history:
+            prompt_str += f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n"
+            
+    prompt_str += (
         f"<|im_start|>user\n{user_msg}<|im_end|>\n"
         f"<|im_start|>assistant\n"
     )
@@ -256,6 +260,8 @@ def main():
     print(f"\n🎬 Video loaded: {state['name']}  ({state['duration']}s)\n")
 
     # ── Chat loop ─────────────────────────────────────────────────────────────
+    chat_history = []
+    
     while True:
         try:
             user_input = input("You (Ask Agent to Edit) > ").strip()
@@ -270,8 +276,10 @@ def main():
             break
 
         print("⏳ Generating…")
+        
+        full_user_content = f"{format_video_context(state)}\n\n[USER REQUEST]\n{user_input}"
         raw, elapsed, n_tokens = run_onnx(session, tokenizer, eos_id,
-                                          user_input, state)
+                                          user_input, state, chat_history)
         tok_per_sec = n_tokens / max(elapsed, 0.001)
 
         print(f"\n🤖 ONNX RAW OUTPUT:")
@@ -286,7 +294,12 @@ def main():
         print(f"\n🗣️  AGENT: {msg}")
 
         if ops:
-            apply_ops(ops, state, user_input)
+            chat_history.append({"role": "user", "content": full_user_content})
+            chat_history.append({"role": "assistant", "content": raw.strip()})
+            
+            resolved_ops = resolve_semantic_operations(ops, state)
+            apply_ops(resolved_ops, state, user_input)
+            
             print(f"\n✅ OPERATIONS ({len(ops)}):")
             print(json.dumps(ops, indent=2))
         else:

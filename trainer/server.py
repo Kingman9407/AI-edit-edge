@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from resolver import resolve_semantic_operations
 
 # Config Paths
 MODEL_PATH = "./fine_tuned_smollm"
@@ -21,11 +22,12 @@ os.makedirs(LOG_DIR, exist_ok=True)
 
 # System Instruction — must match prepare_data.py SYSTEM_INSTRUCTION exactly.
 SYSTEM_INSTRUCTION = (
-    "You are Hornet, a natural language processing (NLP) assistant. "
-    "You analyze the user's video editing requests and return a structured JSON object "
-    "containing two fields: 'message' (a natural response) and 'operations' (a list of video edit actions "
-    "like 'cut', 'mute', 'add_audio_overlay' with start and end timestamps in seconds). "
-    "Output ONLY a raw JSON object. Do NOT use markdown formatting, backticks, or extra text outside the JSON."
+    "You are Hornet, a video editing AI. "
+    "Return JSON: {\"message\": str, \"operations\": [...]}. "
+    "Each op: {operation: cut|mute|add_audio_overlay, variation: first|last|before_playhead|after_playhead|range, "
+    "value: number, unit: seconds|minutes|hours, reason: str}. "
+    "For range: use start and end as strings exactly as the user said (e.g. '1:20', '100', '45s'). "
+    "add_audio_overlay also needs track. Output raw JSON only."
 )
 
 app = FastAPI(
@@ -170,20 +172,19 @@ def clean_chatml_response(text: str) -> str:
 
 def extract_actions_from_response(text: str) -> list:
     """
-    Safely extracts the JSON actions list from the assistant output.
+    Extracts the semantic operations list from the model's assistant output.
 
-    Expected format:
-        A raw JSON object containing "message" and "operations" keys (Hornet SFT schema).
-        Fallback to a markdown JSON list or single dictionary block.
+    Expected model output format:
+        A raw JSON object with 'message' and 'operations' keys.
+        Each operation uses the new semantic schema:
+          { "operation": "cut", "variation": "first", "value": 45, "unit": "seconds", "reason": "..." }
+          { "operation": "cut", "variation": "range", "start_seconds": 60.0, "end_seconds": 90.0, "reason": "..." }
+
+        Fallback: bare JSON list, or a single markdown ```json block.
     """
-    import re
-    # Extract only the FIRST ```json block — prevents duplicate-block errors
+    # Strip markdown fences if present (model should not emit them, but be safe)
     blocks = re.findall(r"```json\s*([\s\S]*?)```", text)
-    if blocks:
-        raw_json = blocks[0].strip()
-    else:
-        # Fallback: no fences found, try parsing the whole text as JSON
-        raw_json = text.strip()
+    raw_json = blocks[0].strip() if blocks else text.strip()
 
     parsed = json.loads(raw_json)
     if isinstance(parsed, dict):
@@ -191,7 +192,7 @@ def extract_actions_from_response(text: str) -> list:
             return parsed["operations"]
         parsed = [parsed]
     if not isinstance(parsed, list):
-        raise ValueError(f"Expected a JSON list of actions, got: {type(parsed)}")
+        raise ValueError(f"Expected a JSON list of operations, got: {type(parsed)}")
     return parsed
 
 def construct_video_context(metadata: VideoMetadata, state: WorkspaceState) -> str:
@@ -238,65 +239,84 @@ def log_api_transaction(
         print(f"⚠️ Logger Warning: Failed to save API transaction log: {e}", file=sys.stderr)
 
 def generate_mock_response(user_message: str, state: WorkspaceState) -> tuple[str, list]:
-    """Generates a smart mock response (natural text + actions list) when the model is unavailable."""
+    """
+    Generates a mock response using the new semantic operation format.
+    Returns (raw_text, semantic_operations). Caller resolves to absolute timestamps.
+    """
     msg = user_message.lower()
-    duration = state.duration
 
     if "silent" in msg or "silence" in msg or "gap" in msg:
-        # Use actual silent sections from state if available
         if state.silent_sections:
+            # Silent sections are already absolute — use range variation
             actions = [
-                {"operation": "cut", "start": s.start, "end": s.end,
-                 "reason": "Remove silent section"}
+                {
+                    "operation": "cut",
+                    "variation": "range",
+                    "start_seconds": s.start,
+                    "end_seconds": s.end,
+                    "reason": "Remove silent section",
+                }
                 for s in state.silent_sections
             ]
             text = "Removed all silent sections from the video."
         else:
-            actions = [{"operation": "cut", "start": 0.0, "end": 5.0,
-                        "reason": "Remove detected silence"}]
+            actions = [{
+                "operation": "cut", "variation": "first",
+                "value": 5, "unit": "seconds",
+                "reason": "Remove detected silence",
+            }]
             text = "Removed the silent section from the video."
 
     elif "mute" in msg or "quiet" in msg:
-        # Parse rough timestamps from message if present, else sensible default
-        actions = [{"operation": "mute", "start": 15.0, "end": 45.0,
-                    "reason": "Mute requested segment"}]
+        actions = [{
+                "operation": "mute", "variation": "range",
+                "start": "15", "end": "45",
+                "reason": "Mute requested segment",
+            }]
         text = "Muted the audio for the requested segment."
 
     elif "music" in msg or "audio" in msg or "overlay" in msg or "song" in msg:
-        actions = [{"operation": "add_audio_overlay", "start": 0.0, "end": duration,
-                    "reason": "Add background music overlay", "track": "background_music.mp3"}]
+        actions = [{
+            "operation": "add_audio_overlay", "variation": "range",
+            "start": "0", "end": str(state.duration),
+            "track": "background_music.mp3",
+            "reason": "Add background music overlay",
+        }]
         text = "Added background music overlay to the video."
 
-    elif "beginning" in msg or "start" in msg or "intro" in msg:
-        actions = [{"operation": "cut", "start": 0.0, "end": 10.0,
-                    "reason": "Remove intro/beginning"}]
-        text = "Cut the intro from the video."
-
-    elif "end" in msg or "outro" in msg or "last" in msg:
-        trim = 15.0
-        actions = [{"operation": "cut", "start": max(0.0, duration - trim), "end": duration,
-                    "reason": "Remove end/outro"}]
+    elif "last" in msg or "end" in msg or "outro" in msg:
+        actions = [{
+            "operation": "cut", "variation": "last",
+            "value": 15, "unit": "seconds",
+            "reason": "Remove end/outro",
+        }]
         text = "Cut the end section from the video."
 
-    elif "middle" in msg:
-        mid_start = round(duration / 3, 1)
-        mid_end   = round(2 * duration / 3, 1)
-        actions = [{"operation": "cut", "start": mid_start, "end": mid_end,
-                    "reason": "Remove middle section"}]
-        text = "Removed the middle section of the video."
+    elif "beginning" in msg or "start" in msg or "intro" in msg or "first" in msg:
+        actions = [{
+            "operation": "cut", "variation": "first",
+            "value": 10, "unit": "seconds",
+            "reason": "Remove intro/beginning",
+        }]
+        text = "Cut the intro from the video."
 
     elif "cut" in msg or "remove" in msg or "trim" in msg or "delete" in msg:
-        actions = [{"operation": "cut", "start": 0.0, "end": min(10.0, duration),
-                    "reason": "Cut requested segment"}]
+        actions = [{
+            "operation": "cut", "variation": "first",
+            "value": 10, "unit": "seconds",
+            "reason": "Cut requested segment",
+        }]
         text = "Cut the requested segment from the video."
 
     else:
-        actions = [{"operation": "cut", "start": 0.0, "end": 5.0,
-                    "reason": "Default cut operation"}]
+        actions = [{
+            "operation": "cut", "variation": "first",
+            "value": 5, "unit": "seconds",
+            "reason": "Default cut operation",
+        }]
         text = "Applied the requested edit to the video."
 
-    actions_json = json.dumps(actions, indent=2)
-    raw = f"{text}\n\n```json\n{actions_json}\n```"
+    raw = json.dumps({"message": text, "operations": actions})
     return raw, actions
 
 # --- API Routes ---
@@ -375,9 +395,8 @@ def edit_timeline(request: EditRequest, background_tasks: BackgroundTasks):
             total_token_count  = len(model_pipeline.tokenizer.encode(raw_text))
             tokens_generated   = max(1, total_token_count - prompt_token_count)
 
-            # Extract the actions list from the single ```json block
-            # extract_actions_from_response uses only the FIRST block found,
-            # preventing duplicate-block and empty-parse errors.
+            # Extract the semantic operations list from the model output.
+            # parsed_intents holds the raw semantic format (variation/value/unit).
             parsed_intents = extract_actions_from_response(raw_output)
         except Exception as e:
             # Handle model runtime error or JSON parsing error gracefully
@@ -385,8 +404,9 @@ def edit_timeline(request: EditRequest, background_tasks: BackgroundTasks):
             warning_msg = f"Inference or JSON parsing failed: {e}. Fallback to mock mode."
             raw_output, parsed_intents = generate_mock_response(request.user_message, request.workspace_state)
 
-    # 3. Operations are directly returned by the model
-    resolved_ops = parsed_intents
+    # 3. Resolve semantic operations → absolute {start, end} timestamps
+    workspace_dict = request.workspace_state.dict()
+    resolved_ops = resolve_semantic_operations(parsed_intents, workspace_dict)
 
     # 4. Latency calculations
     latency = time.perf_counter() - start_time

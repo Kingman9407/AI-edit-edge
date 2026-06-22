@@ -85,6 +85,8 @@ type ToolCallResult = {
   actions: ModelAction[];
   usage: UsageTotals | null;
   rawContent: string;
+  /** Raw tool call args are stored so the caller can resolve with live duration/playhead */
+  rawToolCalls: Array<{ name: string; args: Record<string, unknown> }>;
 };
 
 type OpenRouterToolResponse = {
@@ -144,8 +146,8 @@ async function requestWithTools({
   const toolCalls = choice?.message?.tool_calls;
   const assistantText: string = choice?.message?.content ?? "";
 
-  const actions: ModelAction[] = [];
-
+  // Collect raw tool calls — actions will be resolved later with live duration/playhead
+  const rawToolCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
   if (toolCalls?.length) {
     for (const tc of toolCalls) {
       const name: string = tc?.function?.name ?? "";
@@ -157,16 +159,14 @@ async function requestWithTools({
       } catch {
         args = {};
       }
-      const parsedAction = parseToolCallToAction(name, args);
-      if (parsedAction) {
-        actions.push(parsedAction);
-      }
+      rawToolCalls.push({ name, args });
     }
   }
 
   return {
     assistantText,
-    actions,
+    actions: [], // resolved below once we have duration/playhead
+    rawToolCalls,
     usage,
     rawContent: raw,
   };
@@ -445,6 +445,16 @@ export async function POST(req: Request) {
   });
   console.log("==============================================\n");
 
+  // Capture duration and playhead for semantic time resolution
+  const videoDuration: number =
+    typeof video?.duration === "number" && Number.isFinite(video.duration)
+      ? video.duration
+      : 0;
+  const videoPlayhead: number =
+    typeof video?.currentTime === "number" && Number.isFinite(video.currentTime)
+      ? video.currentTime
+      : 0;
+
   // Call model with tools
   const modelCallStart = Date.now();
   let toolResult: ToolCallResult;
@@ -457,6 +467,14 @@ export async function POST(req: Request) {
     return Response.json({ error: { message: errMessage } }, { status: 500 });
   }
   const modelCallMs = Date.now() - modelCallStart;
+
+  // Resolve semantic tool calls → ModelActions now that we have duration/playhead
+  const resolvedActions: ModelAction[] = [];
+  for (const { name, args } of toolResult.rawToolCalls) {
+    const action = parseToolCallToAction(name, args, videoDuration, videoPlayhead);
+    if (action) resolvedActions.push(action);
+  }
+  toolResult.actions = resolvedActions;
 
   addUsage(toolResult.usage);
 

@@ -5,17 +5,16 @@ import json
 import torch
 import random
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from resolver import resolve_semantic_operations
 
 # Paths
 finetuned_model_path = "./fine_tuned_smollm"
 
 # Unified System Instruction for single-stage architecture
 SYSTEM_INSTRUCTION = (
-    "You are Hornet, a natural language processing (NLP) assistant. "
-    "You analyze the user's video editing requests and return a structured JSON object "
-    "containing two fields: 'message' (a natural response) and 'operations' (a list of video edit actions "
-    "like 'cut', 'mute', 'add_audio_overlay' with start and end timestamps in seconds). "
-    "Output ONLY a raw JSON object. Do NOT use markdown formatting, backticks, or extra text outside the JSON."
+    "You are Hornet, a video editing AI. Return JSON with 'message' and 'operations' (cut, mute, add_audio_overlay). "
+    "If the user mentions time expressions requiring calculation, output a <tool_call> block first. "
+    "Otherwise, output the final JSON directly."
 )
 
 
@@ -294,8 +293,10 @@ def main():
                     print(f"\n✅ TIMELINE OPERATIONS ({len(parsed_intents)} op(s)):")
                     print(json.dumps(parsed_intents, indent=2))
                     
+                    resolved_intents = resolve_semantic_operations(parsed_intents, workspace_state)
+                    
                     action_descs = []
-                    for op in parsed_intents:
+                    for op in resolved_intents:
                         op_type = op.get("operation")
                         start_time = op.get("start")
                         end_time = op.get("end")
@@ -306,7 +307,7 @@ def main():
                             workspace_state["silent_sections"].append({"start": start_time, "end": end_time})
                             action_descs.append(f"Muted section from {start_time}s -> {end_time}s")
                         elif op_type in ["add_audio_overlay", "add_music"]:
-                            workspace_state["bg_music"].append({"start": start_time, "end": end_time, "asset": op.get("asset", "unknown")})
+                            workspace_state["bg_music"].append({"start": start_time, "end": end_time, "asset": op.get("track", "unknown")})
                             action_descs.append(f"Added audio overlay from {start_time}s -> {end_time}s")
                     
                     if action_descs:

@@ -2,72 +2,69 @@
 Category 09 — Rejections & Unsupported Operations
 
 Goal: Teach the model to reject ALL forms of unsupported requests by returning
-      an EMPTY operations array, with a helpful explanation when appropriate.
+      an EMPTY operations array with a helpful explanation.
 
-  Part A — Impossible / Out-of-Bounds Edits: requests that are beyond capability
-            (visual effects, out-of-range timestamps). Return [] silently or with
-            a short explanation.
-  Part B — Unsupported Operation Types: zoom, pan, color, text, speed, blur, etc.
-            Return [] with a clear, friendly explanation of what IS supported.
-  Part C — Merge with no available clip: model bin is empty, gracefully decline.
+  Part A — Unsupported visual effects: zoom, color, text, blur, speed, reverse.
+  Part B — Merge with no available clip in media bin.
+
+Note: Out-of-bounds timestamp requests (e.g. cut at 120s on a 60s video) are
+      NOT rejected here — they are valid semantic ops that the backend clamps.
+      This file covers operations the system fundamentally cannot perform.
 """
 
 examples = [
-    # ── Part A: Impossible / Out-of-Bounds ────────────────────────────────────
-    {
-        "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 60.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nmake it look like a hollywood movie",
-        "output": "{\"message\":\"I'm sorry, I couldn't find any video edits in your request, but I am a video editor AI and I'm happy to help!\",\"operations\":[]}"
-    },
-    {
-        "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 60.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nadd a 3D explosion effect at 10s",
-        "output": "{\"message\":\"I'm sorry, I couldn't find any video edits in your request, but I am a video editor AI and I'm happy to help!\",\"operations\":[]}"
-    },
-    {
-        "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 60.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\ncut from 120s to 150s",
-        "output": "{\"message\":\"I'm sorry, I couldn't find any video edits in your request, but I am a video editor AI and I'm happy to help!\",\"operations\":[]}"
-    },
 
-    # ── Part B: Unsupported Operation Types (with explanations) ───────────────
+    # ── Part A: Unsupported visual/effects operations ──────────────────────
+
     {
-        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nzoom in on the face",
-        "output": "{\"message\":\"I currently do not support zooming or panning. I can only cut, mute, or add music to the timeline.\",\"operations\":[]}"
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nzoom in on the face",
+        "output": "{\"message\":\"I don't support zooming or panning. I can cut, mute, or add music to the timeline.\",\"operations\":[]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nmake the video brighter",
-        "output": "{\"message\":\"I don't support color correction or brightness adjustments yet. I can only perform timeline edits like cuts and mutes.\",\"operations\":[]}"
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nmake the video brighter",
+        "output": "{\"message\":\"I don't support color correction or brightness adjustments. I can only perform timeline edits like cuts and mutes.\",\"operations\":[]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nadd some text on screen that says 'Hello'",
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nadd some text on screen that says 'Hello'",
         "output": "{\"message\":\"I can't add on-screen text or titles right now. I can only modify the video timeline.\",\"operations\":[]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nchange the resolution to 4k",
-        "output": "{\"message\":\"I cannot change the video resolution. My capabilities are limited to cutting, muting, and adding audio tracks.\",\"operations\":[]}"
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nchange the resolution to 4k",
+        "output": "{\"message\":\"I can't change the video resolution. My capabilities are limited to cutting, muting, and adding audio tracks.\",\"operations\":[]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nadd a transition effect between the clips",
-        "output": "{\"message\":\"I do not support visual transitions or effects at this time. I can only perform hard cuts on the timeline.\",\"operations\":[]}"
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nadd a transition effect between the clips",
+        "output": "{\"message\":\"I don't support visual transitions or effects. I can only perform hard cuts on the timeline.\",\"operations\":[]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nspeed up the video by 2x",
-        "output": "{\"message\":\"I cannot change the playback speed of the video. Let me know if you want me to cut or mute anything instead.\",\"operations\":[]}"
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nspeed up the video by 2x",
+        "output": "{\"message\":\"I can't change the playback speed. Let me know if you want me to cut or mute anything instead.\",\"operations\":[]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nreverse the video",
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nreverse the video",
         "output": "{\"message\":\"Reversing the video is not supported right now.\",\"operations\":[]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nadd a blur to the background",
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nadd a blur to the background",
         "output": "{\"message\":\"I don't support visual filters like blur. I can only edit the video timeline.\",\"operations\":[]}"
     },
-
-    # ── Part C: Merge with no available clip ───────────────────────────────────────
     {
-        "input": "[VIDEO METADATA]\nName: solo.mp4\nDuration: 60.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[MEDIA BIN]\n- None\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\nmerge another video here",
-        "output": "{\"message\":\"There are no additional clips in your media bin to merge. Please upload or add a second video first.\",\"operations\":[]}"
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nmake it look like a hollywood movie",
+        "output": "{\"message\":\"I can't apply cinematic filters or visual effects. I can help you cut, mute, or add music instead.\",\"operations\":[]}"
     },
     {
-        "input": "[VIDEO METADATA]\nName: clip.mp4\nDuration: 45.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[MEDIA BIN]\n- None\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nSubtitles:\n- None\n\nBackground Music:\n- None\n\n[RECENT EDITS]\nNone\n\n[LAST ACTION]\nNone\n\n[USER REQUEST]\njoin this with another clip",
-        "output": "{\"message\":\"I don't see any other clip available to merge with. Add a second video to the media bin and I'll join them for you.\",\"operations\":[]}"
-    }
+        "input": "[VIDEO METADATA]\nName: demo.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nadd a 3D explosion effect at 10s",
+        "output": "{\"message\":\"Visual effects like explosions aren't supported. I can only perform timeline edits.\",\"operations\":[]}"
+    },
+
+    # ── Part B: Merge with no available clip ───────────────────────────────
+
+    {
+        "input": "[VIDEO METADATA]\nName: solo.mp4\nDuration: 60.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[MEDIA BIN]\n- None\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nmerge another video here",
+        "output": "{\"message\":\"There are no additional clips in your media bin to merge. Please upload a second video first.\",\"operations\":[]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: clip.mp4\nDuration: 45.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[MEDIA BIN]\n- None\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\njoin this with another clip",
+        "output": "{\"message\":\"I don't see any other clip available to merge with. Add a second video to the media bin and I'll join them.\",\"operations\":[]}"
+    },
 ]

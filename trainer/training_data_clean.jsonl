@@ -1,128 +1,80 @@
-{"instruction": "Generate video edit actions", "input": "cut the first 5 seconds", "output": [{"operation": "cut", "start": 0.0, "end": 5.0, "reason": "Remove first 5 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "mute from 10 to 20 seconds", "output": [{"operation": "mute", "start": 10.0, "end": 20.0, "reason": "Mute requested range"}]}
-{"instruction": "Generate video edit actions", "input": "add music.mp3 to entire video", "output": [{"operation": "add_audio_overlay", "start": 0.0, "end": 90.0, "reason": "Add background music to full video", "track": "music.mp3"}]}
-{"instruction": "Generate video edit actions", "input": "remove the last 10 seconds", "output": [{"operation": "cut", "start": 143.0, "end": 153.0, "reason": "Remove last 10 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "mute from 60 to 90 seconds", "output": [{"operation": "mute", "start": 60.0, "end": 90.0, "reason": "Mute requested range"}]}
-{"instruction": "Generate video edit actions", "input": "mute the background noise between 30 and 45 seconds", "output": [{"operation": "mute", "start": 30.0, "end": 45.0, "reason": "Mute background noise"}]}
-{"instruction": "Generate video edit actions", "input": "add intro_music.mp3 over the first 10 seconds", "output": [{"operation": "add_audio_overlay", "start": 0.0, "end": 10.0, "reason": "Add intro music", "track": "intro_music.mp3"}]}
-{"instruction": "Generate video edit actions", "input": "cut out the section from 1:00 to 1:30", "output": [{"operation": "cut", "start": 60.0, "end": 90.0, "reason": "Remove 1:00 to 1:30 section"}]}
-{"instruction": "Generate video edit actions", "input": "mute the intro until 120 seconds", "output": [{"operation": "mute", "start": 0.0, "end": 120.0, "reason": "Mute intro"}]}
-{"instruction": "Generate video edit actions", "input": "add lofi_beats.mp3 to the entire clip", "output": [{"operation": "add_audio_overlay", "start": 0.0, "end": 240.0, "reason": "Add lofi beats to montage", "track": "lofi_beats.mp3"}]}
-{"instruction": "Generate video edit actions", "input": "trim off the first 5 seconds", "output": [{"operation": "cut", "start": 0.0, "end": 5.0, "reason": "Remove first 5 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "cut out the segment from minute 2 to minute 2.5", "output": [{"operation": "cut", "start": 120.0, "end": 150.0, "reason": "Cut requested range from 2:00 to 2:30"}]}
-{"instruction": "Generate video edit actions", "input": "cut out the portion from 1:15 to 1:45", "output": [{"operation": "cut", "start": 75.0, "end": 105.0, "reason": "Cut requested range from 1:15 to 1:45"}]}
-{"instruction": "Generate video edit actions", "input": "delete everything from the current playhead position to the very end of the video", "output": [{"operation": "cut", "start": 120.0, "end": 300.0, "reason": "Remove from playhead to end"}]}
-{"instruction": "Generate video edit actions", "input": "delete last 45 seconds", "output": [{"operation": "cut", "start": 75.0, "end": 120.0, "reason": "Remove last 45 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "trim from 1:20 to 2:10", "output": [{"operation": "cut", "start": 80.0, "end": 130.0, "reason": "Cut range from 1:20 to 2:10"}]}
-{"instruction": "Generate video edit actions", "input": "snip the first 10 seconds", "output": [{"operation": "cut", "start": 0.0, "end": 10.0, "reason": "Snip first 10 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "slice out 0:30 to 0:45", "output": [{"operation": "cut", "start": 30.0, "end": 45.0, "reason": "Slice out 0:30 to 0:45"}]}
-{"instruction": "Generate video edit actions", "input": "chop off the last 20 seconds", "output": [{"operation": "cut", "start": 100.0, "end": 120.0, "reason": "Chop off last 20 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "get rid of the segment from 1 minute to 2 minutes", "output": [{"operation": "cut", "start": 60.0, "end": 120.0, "reason": "Get rid of segment from 1 to 2 minutes"}]}
-{"instruction": "Generate video edit actions", "input": "cut everything before the playhead", "output": [{"operation": "cut", "start": 0.0, "end": 150.0, "reason": "Remove everything before playhead"}]}
-{"instruction": "Generate video edit actions", "input": "remove everything after the current position", "output": [{"operation": "cut", "start": 500.0, "end": 1200.0, "reason": "Remove everything after playhead"}]}
-{"instruction": "Generate video edit actions", "input": "cut the 10 seconds before the playhead", "output": [{"operation": "cut", "start": 35.0, "end": 45.0, "reason": "Cut 10 seconds before playhead"}]}
-{"instruction": "Generate video edit actions", "input": "delete the next 5 seconds starting from the playhead", "output": [{"operation": "cut", "start": 60.0, "end": 65.0, "reason": "Delete next 5 seconds from playhead"}]}
-{"instruction": "Generate video edit actions", "input": "remove the last 10 seconds", "output": [{"operation": "cut", "start": 390.0, "end": 400.0, "reason": "Remove last 10 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "cut the first 15 seconds", "output": [{"operation": "cut", "start": 0.0, "end": 15.0, "reason": "Cut first 15 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "cut out from 2:00 to 2:30", "output": [{"operation": "cut", "start": 120.0, "end": 150.0, "reason": "Cut from 2:00 to 2:30"}]}
-{"instruction": "Generate video edit actions", "input": "discard the next 20 seconds from the playhead", "output": [{"operation": "cut", "start": 300.0, "end": 320.0, "reason": "Discard next 20 seconds from playhead"}]}
-{"instruction": "Generate video edit actions", "input": "crop out the first 2 minutes of the video", "output": [{"operation": "cut", "start": 0.0, "end": 120.0, "reason": "Crop out first 2 minutes"}]}
-{"instruction": "Generate video edit actions", "input": "cut the segment between 100 seconds and 150 seconds", "output": [{"operation": "cut", "start": 100.0, "end": 150.0, "reason": "Cut segment between 100s and 150s"}]}
-{"instruction": "Generate video edit actions", "input": "discard the final 15 seconds of the video", "output": [{"operation": "cut", "start": 485.0, "end": 500.0, "reason": "Discard final 15 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "trim the portion from 45s to 90s", "output": [{"operation": "cut", "start": 45.0, "end": 90.0, "reason": "Trim portion from 45s to 90s"}]}
-{"instruction": "Generate video edit actions", "input": "remove last 1min", "output": [{"operation": "cut", "start": 702.7, "end": 762.7, "reason": "Remove last 1 min"}]}
-{"instruction": "Generate video edit actions", "input": "cut last 1 min", "output": [{"operation": "cut", "start": 440.0, "end": 500.0, "reason": "Remove last 1 min"}]}
-{"instruction": "Generate video edit actions", "input": "remove the last minute", "output": [{"operation": "cut", "start": 860.5, "end": 920.5, "reason": "Remove last minute"}]}
-{"instruction": "Generate video edit actions", "input": "please discard the last 60 seconds", "output": [{"operation": "cut", "start": 355.2, "end": 415.2, "reason": "Discard last 60 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "remove first 1 min", "output": [{"operation": "cut", "start": 0.0, "end": 60.0, "reason": "Remove first 1 min"}]}
-{"instruction": "Generate video edit actions", "input": "cut first 1 min", "output": [{"operation": "cut", "start": 0.0, "end": 60.0, "reason": "Cut first 1 min"}]}
-{"instruction": "Generate video edit actions", "input": "delete the first minute", "output": [{"operation": "cut", "start": 0.0, "end": 60.0, "reason": "Delete first minute"}]}
-{"instruction": "Generate video edit actions", "input": "remove last 1 min", "output": [{"operation": "cut", "start": 773.3, "end": 833.3, "reason": "Remove last 1 min"}]}
-{"instruction": "Generate video edit actions", "input": "remove the last 1 minute", "output": [{"operation": "cut", "start": 341.5, "end": 401.5, "reason": "Remove last 1 minute"}]}
-{"instruction": "Generate video edit actions", "input": "cut last 1 min", "output": [{"operation": "cut", "start": 128.8, "end": 188.8, "reason": "Cut last 1 min"}]}
-{"instruction": "Generate video edit actions", "input": "delete last 1 min", "output": [{"operation": "cut", "start": 484.7, "end": 544.7, "reason": "Delete last 1 min"}]}
-{"instruction": "Generate video edit actions", "input": "remove last 30 sec", "output": [{"operation": "cut", "start": 961.1, "end": 991.1, "reason": "Remove last 30 sec"}]}
-{"instruction": "Generate video edit actions", "input": "cut the last 30 seconds", "output": [{"operation": "cut", "start": 172.2, "end": 202.2, "reason": "Cut last 30 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "delete last 30s", "output": [{"operation": "cut", "start": 615.9, "end": 645.9, "reason": "Delete last 30s"}]}
-{"instruction": "Generate video edit actions", "input": "mute the audio from 45 seconds to 1 minute", "output": [{"operation": "mute", "start": 45.0, "end": 60.0, "reason": "Mute requested range from 0:45 to 1:00"}]}
-{"instruction": "Generate video edit actions", "input": "mute audio from 120s to 150s", "output": [{"operation": "mute", "start": 120.0, "end": 150.0, "reason": "Mute requested range from 120s to 150s"}]}
-{"instruction": "Generate video edit actions", "input": "remove sound from the first 10 seconds", "output": [{"operation": "mute", "start": 0.0, "end": 10.0, "reason": "Mute first 10 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "silence the last 30 seconds", "output": [{"operation": "mute", "start": 570.0, "end": 600.0, "reason": "Mute last 30 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "add upbeat.mp3 to the entire video", "output": [{"operation": "add_audio_overlay", "start": 0.0, "end": 420.0, "reason": "Add background music to full video", "track": "upbeat.mp3"}]}
-{"instruction": "Generate video edit actions", "input": "overlay lofi.mp3 from 5 to 25 seconds", "output": [{"operation": "add_audio_overlay", "start": 5.0, "end": 25.0, "reason": "Add music overlay", "track": "lofi.mp3"}]}
-{"instruction": "Generate video edit actions", "input": "insert background.mp3 starting from minute 2 until minute 5", "output": [{"operation": "add_audio_overlay", "start": 120.0, "end": 300.0, "reason": "Add background music", "track": "background.mp3"}]}
-{"instruction": "Generate video edit actions", "input": "cut from 01:20 to 01:50", "output": [{"operation": "cut", "start": 80.0, "end": 110.0, "reason": "Cut from 1:20 to 1:50"}]}
-{"instruction": "Generate video edit actions", "input": "mute audio from 12:30 to 15:45", "output": [{"operation": "mute", "start": 750.0, "end": 945.0, "reason": "Mute from 12:30 to 15:45"}]}
-{"instruction": "Generate video edit actions", "input": "remove 00:15 to 00:30", "output": [{"operation": "cut", "start": 15.0, "end": 30.0, "reason": "Cut from 0:15 to 0:30"}]}
-{"instruction": "Generate video edit actions", "input": "remove first minute", "output": [{"operation": "cut", "start": 0.0, "end": 60.0, "reason": "Remove first minute"}]}
-{"instruction": "Generate video edit actions", "input": "cut first 60 seconds", "output": [{"operation": "cut", "start": 0.0, "end": 60.0, "reason": "Cut first 60 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "trim intro", "output": [{"operation": "cut", "start": 0.0, "end": 10.0, "reason": "Trim intro"}]}
-{"instruction": "Generate video edit actions", "input": "remove beginning", "output": [{"operation": "cut", "start": 0.0, "end": 15.0, "reason": "Remove beginning"}]}
-{"instruction": "Generate video edit actions", "input": "remove opening section", "output": [{"operation": "cut", "start": 0.0, "end": 15.0, "reason": "Remove opening section"}]}
-{"instruction": "Generate video edit actions", "input": "cut ending", "output": [{"operation": "cut", "start": 90.0, "end": 100.0, "reason": "Cut ending"}]}
-{"instruction": "Generate video edit actions", "input": "remove last half", "output": [{"operation": "cut", "start": 100.0, "end": 200.0, "reason": "Remove last half"}]}
-{"instruction": "Generate video edit actions", "input": "trim middle", "output": [{"operation": "cut", "start": 20.0, "end": 40.0, "reason": "Trim middle"}]}
-{"instruction": "Generate video edit actions", "input": "remove section before current playhead", "output": [{"operation": "cut", "start": 0.0, "end": 120.0, "reason": "Remove section before playhead"}]}
-{"instruction": "Generate video edit actions", "input": "cut next 20 seconds", "output": [{"operation": "cut", "start": 150.0, "end": 170.0, "reason": "Cut next 20 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "remove previous 10 sec", "output": [{"operation": "cut", "start": 190.0, "end": 200.0, "reason": "Remove previous 10 sec"}]}
-{"instruction": "Generate video edit actions", "input": "mute the first half of the video", "output": [{"operation": "mute", "start": 0.0, "end": 25.0, "reason": "Mute first half"}]}
-{"instruction": "Generate video edit actions", "input": "remove first 1 min", "output": [{"operation": "cut", "start": 0.0, "end": 60.0, "reason": "Remove first 1 minute"}]}
-{"instruction": "Generate video edit actions", "input": "cut the first 2 minutes", "output": [{"operation": "cut", "start": 0.0, "end": 120.0, "reason": "Cut first 2 minutes"}]}
-{"instruction": "Generate video edit actions", "input": "mute last 3 mins", "output": [{"operation": "mute", "start": 300.0, "end": 480.0, "reason": "Mute last 3 minutes"}]}
-{"instruction": "Generate video edit actions", "input": "remove next 1 min", "output": [{"operation": "cut", "start": 0.0, "end": 60.0, "reason": "Cut next 1 min"}]}
-{"instruction": "Generate video edit actions", "input": "remove from 2 min to 2.5 min", "output": [{"operation": "cut", "start": 120.0, "end": 150.0, "reason": "Cut from 2 min to 2.5 min"}]}
-{"instruction": "Generate video edit actions", "input": "cut from 1 minute to 4 minutes", "output": [{"operation": "cut", "start": 60.0, "end": 240.0, "reason": "Cut from 1 minute to 4 minutes"}]}
-{"instruction": "Generate video edit actions", "input": "mute audio from 5 mins to 8 mins", "output": [{"operation": "mute", "start": 300.0, "end": 480.0, "reason": "Mute from 5 mins to 8 mins"}]}
-{"instruction": "Generate video edit actions", "input": "cut the first one minute", "output": [{"operation": "cut", "start": 0.0, "end": 60.0, "reason": "Cut first one minute"}]}
-{"instruction": "Generate video edit actions", "input": "mute the first 2 min", "output": [{"operation": "mute", "start": 0.0, "end": 120.0, "reason": "Mute first 2 min"}]}
-{"instruction": "Generate video edit actions", "input": "cut first 1m", "output": [{"operation": "cut", "start": 0.0, "end": 60.0, "reason": "Cut first 1m"}]}
-{"instruction": "Generate video edit actions", "input": "remove last 1 min", "output": [{"operation": "cut", "start": 702.7, "end": 762.7, "reason": "Remove last 1 min"}]}
-{"instruction": "Generate video edit actions", "input": "cut last 1m", "output": [{"operation": "cut", "start": 240.0, "end": 300.0, "reason": "Cut last 1m"}]}
-{"instruction": "Generate video edit actions", "input": "mute the first 2.5 mins", "output": [{"operation": "mute", "start": 0.0, "end": 150.0, "reason": "Mute first 2.5 mins"}]}
-{"instruction": "Generate video edit actions", "input": "cut first 5 minutes", "output": [{"operation": "cut", "start": 0.0, "end": 300.0, "reason": "Cut first 5 minutes"}]}
-{"instruction": "Generate video edit actions", "input": "remove last 2 minutes", "output": [{"operation": "cut", "start": 480.0, "end": 600.0, "reason": "Remove last 2 minutes"}]}
-{"instruction": "Generate video edit actions", "input": "cut last 5 mins", "output": [{"operation": "cut", "start": 600.0, "end": 900.0, "reason": "Cut last 5 mins"}]}
-{"instruction": "Generate video edit actions", "input": "trim first half a minute", "output": [{"operation": "cut", "start": 0.0, "end": 30.0, "reason": "Trim first half a minute"}]}
-{"instruction": "Generate video edit actions", "input": "remove first 1.5 mins", "output": [{"operation": "cut", "start": 0.0, "end": 90.0, "reason": "Remove first 1.5 mins"}]}
-{"instruction": "Generate video edit actions", "input": "cut last 30s", "output": [{"operation": "cut", "start": 70.0, "end": 100.0, "reason": "Cut last 30s"}]}
-{"instruction": "Generate video edit actions", "input": "remove last 1 min", "output": [{"operation": "cut", "start": 702.7, "end": 762.7, "reason": "Remove last 1 min"}]}
-{"instruction": "Generate video edit actions", "input": "cut the last 30 seconds", "output": [{"operation": "cut", "start": 284.8, "end": 314.8, "reason": "Cut last 30 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "remove last 30 sec", "output": [{"operation": "cut", "start": 113.2, "end": 143.2, "reason": "Remove last 30 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "delete the last minute", "output": [{"operation": "cut", "start": 1195.4, "end": 1255.4, "reason": "Delete last minute"}]}
-{"instruction": "Generate video edit actions", "input": "snip the last 30s of the clip", "output": [{"operation": "cut", "start": 57.6, "end": 87.6, "reason": "Snip last 30s"}]}
-{"instruction": "Generate video edit actions", "input": "remove the last 1min", "output": [{"operation": "cut", "start": 193.9, "end": 253.9, "reason": "Remove last 1min"}]}
-{"instruction": "Generate video edit actions", "input": "please discard the last 60 seconds", "output": [{"operation": "cut", "start": 355.2, "end": 415.2, "reason": "Discard last 60 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "delete last 1 min", "output": [{"operation": "cut", "start": 471.4, "end": 531.4, "reason": "Delete last 1 min"}]}
-{"instruction": "Generate video edit actions", "input": "cut intro and add bg.mp3 to the rest", "output": [{"operation": "cut", "start": 0.0, "end": 10.0, "reason": "Cut intro"}, {"operation": "add_audio_overlay", "start": 10.0, "end": 120.0, "reason": "Add bg music", "track": "bg.mp3"}]}
-{"instruction": "Generate video edit actions", "input": "mute first 10s and last 10s", "output": [{"operation": "mute", "start": 0.0, "end": 10.0, "reason": "Mute first 10s"}, {"operation": "mute", "start": 290.0, "end": 300.0, "reason": "Mute last 10s"}]}
-{"instruction": "Generate video edit actions", "input": "add outro.mp4 to the end and cut the first 5 seconds", "output": [{"operation": "merge_videos", "clips": [{"file": "interview.mp4", "order": 1}, {"file": "outro.mp4", "order": 2}], "reason": "Append outro.mp4 after interview.mp4"}, {"operation": "cut", "start": 0.0, "end": 5.0, "reason": "Trim first 5 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "append the sponsor ad at the end and mute from 10s to 20s", "output": [{"operation": "merge_videos", "clips": [{"file": "podcast_ep3.mp4", "order": 1}, {"file": "sponsor_ad.mp4", "order": 2}], "reason": "Append sponsor_ad.mp4 after podcast_ep3.mp4"}, {"operation": "mute", "start": 10.0, "end": 20.0, "reason": "Mute 10s to 20s section"}]}
-{"instruction": "Generate video edit actions", "input": "put end_card.mp4 at the back, cut last 30 seconds of the vlog, and add bg.mp3 throughout", "output": [{"operation": "merge_videos", "clips": [{"file": "vlog_raw.mp4", "order": 1}, {"file": "end_card.mp4", "order": 2}], "reason": "Append end_card.mp4 after vlog_raw.mp4"}, {"operation": "cut", "start": 270.0, "end": 300.0, "reason": "Cut last 30 seconds of vlog"}, {"operation": "add_audio_overlay", "start": 0.0, "end": 300.0, "reason": "Add background music throughout", "track": "bg.mp3"}]}
+{"instruction": "Generate video edit actions", "input": "cut the first 5 seconds", "output": [{"operation": "cut", "variation": "first", "value": 5, "unit": "seconds", "reason": "Remove first 5 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "remove the last 10 seconds", "output": [{"operation": "cut", "variation": "last", "value": 10, "unit": "seconds", "reason": "Remove last 10 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "cut out the section from 1:00 to 1:30", "output": [{"operation": "cut", "variation": "range", "start": "1:00", "end": "1:30", "unit": "seconds", "reason": "Remove 1:00 to 1:30"}]}
+{"instruction": "Generate video edit actions", "input": "mute from 10 to 20 seconds", "output": [{"operation": "mute", "variation": "range", "start": "10", "end": "20", "unit": "seconds", "reason": "Mute requested range"}]}
+{"instruction": "Generate video edit actions", "input": "mute from 60 to 90 seconds", "output": [{"operation": "mute", "variation": "range", "start": "60", "end": "90", "unit": "seconds", "reason": "Mute requested range"}]}
+{"instruction": "Generate video edit actions", "input": "mute the background noise between 30 and 45 seconds", "output": [{"operation": "mute", "variation": "range", "start": "30", "end": "45", "unit": "seconds", "reason": "Mute background noise"}]}
+{"instruction": "Generate video edit actions", "input": "mute the intro until 120 seconds", "output": [{"operation": "mute", "variation": "first", "value": 120, "unit": "seconds", "reason": "Mute intro"}]}
+{"instruction": "Generate video edit actions", "input": "add intro_music.mp3 over the first 10 seconds", "output": [{"operation": "add_audio_overlay", "variation": "first", "value": 10, "unit": "seconds", "track": "intro_music.mp3", "reason": "Add intro music"}]}
+{"instruction": "Generate video edit actions", "input": "add music.mp3 to entire video", "output": [{"operation": "add_audio_overlay", "variation": "range", "start": "0", "end": "90", "unit": "seconds", "track": "music.mp3", "reason": "Add background music to full video"}]}
+{"instruction": "Generate video edit actions", "input": "add lofi_beats.mp3 to the entire clip", "output": [{"operation": "add_audio_overlay", "variation": "range", "start": "0", "end": "240", "unit": "seconds", "track": "lofi_beats.mp3", "reason": "Add lofi beats to full video"}]}
+{"instruction": "Generate video edit actions", "input": "trim off the first 5 seconds", "output": [{"operation": "cut", "variation": "first", "value": 5, "unit": "seconds", "reason": "Remove first 5 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "trim the first 45 seconds", "output": [{"operation": "cut", "variation": "first", "value": 45, "unit": "seconds", "reason": "Trim first 45 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "snip the first 10 seconds", "output": [{"operation": "cut", "variation": "first", "value": 10, "unit": "seconds", "reason": "Snip first 10 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "cut the first 30s", "output": [{"operation": "cut", "variation": "first", "value": 30, "unit": "seconds", "reason": "Cut first 30 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "crop out the first 2 minutes of the video", "output": [{"operation": "cut", "variation": "first", "value": 2, "unit": "minutes", "reason": "Crop out first 2 minutes"}]}
+{"instruction": "Generate video edit actions", "input": "remove first 1 minute", "output": [{"operation": "cut", "variation": "first", "value": 1, "unit": "minutes", "reason": "Remove first 1 minute"}]}
+{"instruction": "Generate video edit actions", "input": "delete last 45 seconds", "output": [{"operation": "cut", "variation": "last", "value": 45, "unit": "seconds", "reason": "Remove last 45 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "remove last 1min", "output": [{"operation": "cut", "variation": "last", "value": 1, "unit": "minutes", "reason": "Remove last 1 min"}]}
+{"instruction": "Generate video edit actions", "input": "delete the last 2 mins", "output": [{"operation": "cut", "variation": "last", "value": 2, "unit": "minutes", "reason": "Delete last 2 minutes"}]}
+{"instruction": "Generate video edit actions", "input": "cut the segment between 100 seconds and 150 seconds", "output": [{"operation": "cut", "variation": "range", "start": "100", "end": "150", "unit": "seconds", "reason": "Cut segment between 100s and 150s"}]}
+{"instruction": "Generate video edit actions", "input": "trim from 1:20 to 2:10", "output": [{"operation": "cut", "variation": "range", "start": "1:20", "end": "2:10", "unit": "seconds", "reason": "Cut range from 1:20 to 2:10"}]}
+{"instruction": "Generate video edit actions", "input": "slice out 0:30 to 0:45", "output": [{"operation": "cut", "variation": "range", "start": "0:30", "end": "0:45", "unit": "seconds", "reason": "Slice out 0:30 to 0:45"}]}
+{"instruction": "Generate video edit actions", "input": "get rid of the segment from 1 minute to 2 minutes", "output": [{"operation": "cut", "variation": "range", "start": "1", "end": "2", "unit": "minutes", "reason": "Cut segment from 1 to 2 minutes"}]}
+{"instruction": "Generate video edit actions", "input": "cut everything before the playhead", "output": [{"operation": "cut", "variation": "before_playhead", "value": 150, "unit": "seconds", "reason": "Remove everything before playhead"}]}
+{"instruction": "Generate video edit actions", "input": "remove everything after the current position", "output": [{"operation": "cut", "variation": "after_playhead", "value": 700, "unit": "seconds", "reason": "Remove everything after playhead"}]}
+{"instruction": "Generate video edit actions", "input": "cut the 10 seconds before the playhead", "output": [{"operation": "cut", "variation": "before_playhead", "value": 10, "unit": "seconds", "reason": "Cut 10 seconds before playhead"}]}
+{"instruction": "Generate video edit actions", "input": "delete the next 5 seconds starting from the playhead", "output": [{"operation": "cut", "variation": "after_playhead", "value": 5, "unit": "seconds", "reason": "Delete next 5 seconds from playhead"}]}
+{"instruction": "Generate video edit actions", "input": "mute the audio from 45 seconds to 1 minute", "output": [{"operation": "mute", "variation": "range", "start": "45", "end": "1:00", "unit": "seconds", "reason": "Mute requested range from 0:45 to 1:00"}]}
+{"instruction": "Generate video edit actions", "input": "mute audio from 120s to 150s", "output": [{"operation": "mute", "variation": "range", "start": "120", "end": "150", "unit": "seconds", "reason": "Mute requested range from 120s to 150s"}]}
+{"instruction": "Generate video edit actions", "input": "remove sound from the first 10 seconds", "output": [{"operation": "mute", "variation": "first", "value": 10, "unit": "seconds", "reason": "Mute first 10 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "silence the last 30 seconds", "output": [{"operation": "mute", "variation": "last", "value": 30, "unit": "seconds", "reason": "Mute last 30 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "add upbeat.mp3 to the entire video", "output": [{"operation": "add_audio_overlay", "variation": "range", "start": "0", "end": "420", "unit": "seconds", "track": "upbeat.mp3", "reason": "Add background music to full video"}]}
+{"instruction": "Generate video edit actions", "input": "overlay lofi.mp3 from 5 to 25 seconds", "output": [{"operation": "add_audio_overlay", "variation": "range", "start": "5", "end": "25", "unit": "seconds", "track": "lofi.mp3", "reason": "Add music overlay from 5s to 25s"}]}
+{"instruction": "Generate video edit actions", "input": "insert background.mp3 starting from minute 2 until minute 5", "output": [{"operation": "add_audio_overlay", "variation": "range", "start": "2", "end": "5", "unit": "minutes", "track": "background.mp3", "reason": "Add background music from minute 2 to 5"}]}
+{"instruction": "Generate video edit actions", "input": "cut from 01:20 to 01:50", "output": [{"operation": "cut", "variation": "range", "start": "01:20", "end": "01:50", "unit": "seconds", "reason": "Cut from 1:20 to 1:50"}]}
+{"instruction": "Generate video edit actions", "input": "mute audio from 12:30 to 15:45", "output": [{"operation": "mute", "variation": "range", "start": "12:30", "end": "15:45", "unit": "seconds", "reason": "Mute from 12:30 to 15:45"}]}
+{"instruction": "Generate video edit actions", "input": "remove 00:15 to 00:30", "output": [{"operation": "cut", "variation": "range", "start": "00:15", "end": "00:30", "unit": "seconds", "reason": "Cut from 0:15 to 0:30"}]}
+{"instruction": "Generate video edit actions", "input": "remove first minute", "output": [{"operation": "cut", "variation": "first", "value": 1, "unit": "minutes", "reason": "Remove first minute"}]}
+{"instruction": "Generate video edit actions", "input": "mute the first 2.5 mins", "output": [{"operation": "mute", "variation": "first", "value": 2.5, "unit": "minutes", "reason": "Mute first 2.5 mins"}]}
+{"instruction": "Generate video edit actions", "input": "trim first half a minute", "output": [{"operation": "cut", "variation": "first", "value": 0.5, "unit": "minutes", "reason": "Trim first half a minute"}]}
+{"instruction": "Generate video edit actions", "input": "cut first 60 seconds", "output": [{"operation": "cut", "variation": "first", "value": 60, "unit": "seconds", "reason": "Cut first 60 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "cut last 5 mins", "output": [{"operation": "cut", "variation": "last", "value": 5, "unit": "minutes", "reason": "Cut last 5 mins"}]}
+{"instruction": "Generate video edit actions", "input": "remove last 1 min", "output": [{"operation": "cut", "variation": "last", "value": 1, "unit": "minutes", "reason": "Remove last 1 min"}]}
+{"instruction": "Generate video edit actions", "input": "cut the last 30 seconds", "output": [{"operation": "cut", "variation": "last", "value": 30, "unit": "seconds", "reason": "Cut last 30 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "remove from 2 min to 2.5 min", "output": [{"operation": "cut", "variation": "range", "start": "2", "end": "2.5", "unit": "minutes", "reason": "Cut from 2 min to 2.5 min"}]}
+{"instruction": "Generate video edit actions", "input": "mute audio from 5 mins to 8 mins", "output": [{"operation": "mute", "variation": "range", "start": "5", "end": "8", "unit": "minutes", "reason": "Mute from 5 mins to 8 mins"}]}
+{"instruction": "Generate video edit actions", "input": "remove section before current playhead", "output": [{"operation": "cut", "variation": "before_playhead", "value": 120, "unit": "seconds", "reason": "Remove section before playhead"}]}
+{"instruction": "Generate video edit actions", "input": "cut next 20 seconds", "output": [{"operation": "cut", "variation": "after_playhead", "value": 20, "unit": "seconds", "reason": "Cut next 20 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "remove previous 10 sec", "output": [{"operation": "cut", "variation": "before_playhead", "value": 10, "unit": "seconds", "reason": "Remove previous 10 sec"}]}
+{"instruction": "Generate video edit actions", "input": "trim intro", "output": [{"operation": "cut", "variation": "first", "value": 10, "unit": "seconds", "reason": "Trim intro"}]}
+{"instruction": "Generate video edit actions", "input": "remove beginning", "output": [{"operation": "cut", "variation": "first", "value": 15, "unit": "seconds", "reason": "Remove beginning"}]}
+{"instruction": "Generate video edit actions", "input": "cut ending", "output": [{"operation": "cut", "variation": "last", "value": 10, "unit": "seconds", "reason": "Cut ending"}]}
+{"instruction": "Generate video edit actions", "input": "cut intro and add bg.mp3 to the rest", "output": [{"operation": "cut", "variation": "first", "value": 10, "unit": "seconds", "reason": "Cut intro"}, {"operation": "add_audio_overlay", "variation": "range", "start": "10", "end": "120", "unit": "seconds", "track": "bg.mp3", "reason": "Add bg music to the rest"}]}
+{"instruction": "Generate video edit actions", "input": "mute first 10s and last 10s", "output": [{"operation": "mute", "variation": "first", "value": 10, "unit": "seconds", "reason": "Mute first 10s"}, {"operation": "mute", "variation": "last", "value": 10, "unit": "seconds", "reason": "Mute last 10s"}]}
+{"instruction": "Generate video edit actions", "input": "add outro.mp4 to the end and cut the first 5 seconds", "output": [{"operation": "merge_videos", "clips": [{"file": "interview.mp4", "order": 1}, {"file": "outro.mp4", "order": 2}], "reason": "Append outro.mp4 after interview.mp4"}, {"operation": "cut", "variation": "first", "value": 5, "unit": "seconds", "reason": "Trim first 5 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "append the sponsor ad at the end and mute from 10s to 20s", "output": [{"operation": "merge_videos", "clips": [{"file": "podcast_ep3.mp4", "order": 1}, {"file": "sponsor_ad.mp4", "order": 2}], "reason": "Append sponsor_ad.mp4 after podcast_ep3.mp4"}, {"operation": "mute", "variation": "range", "start": "10", "end": "20", "unit": "seconds", "reason": "Mute 10s to 20s section"}]}
+{"instruction": "Generate video edit actions", "input": "put end_card.mp4 at the back, cut last 30 seconds of the vlog, and add bg.mp3 throughout", "output": [{"operation": "merge_videos", "clips": [{"file": "vlog_raw.mp4", "order": 1}, {"file": "end_card.mp4", "order": 2}], "reason": "Append end_card.mp4 after vlog_raw.mp4"}, {"operation": "cut", "variation": "last", "value": 30, "unit": "seconds", "reason": "Cut last 30 seconds of vlog"}, {"operation": "add_audio_overlay", "variation": "range", "start": "0", "end": "300", "unit": "seconds", "track": "bg.mp3", "reason": "Add background music throughout"}]}
 {"instruction": "Generate video edit actions", "input": "hi", "output": []}
+{"instruction": "Generate video edit actions", "input": "hello", "output": []}
+{"instruction": "Generate video edit actions", "input": "hey", "output": []}
+{"instruction": "Generate video edit actions", "input": "yo", "output": []}
+{"instruction": "Generate video edit actions", "input": "good morning", "output": []}
+{"instruction": "Generate video edit actions", "input": "hi hornet", "output": []}
+{"instruction": "Generate video edit actions", "input": "thanks for the help", "output": []}
 {"instruction": "Generate video edit actions", "input": "what can you do?", "output": []}
 {"instruction": "Generate video edit actions", "input": "who are you?", "output": []}
-{"instruction": "Generate video edit actions", "input": "can you make this look cinematic?", "output": []}
-{"instruction": "Generate video edit actions", "input": "hello there", "output": []}
-{"instruction": "Generate video edit actions", "input": "thanks for the help", "output": []}
 {"instruction": "Generate video edit actions", "input": "what is your name?", "output": []}
-{"instruction": "Generate video edit actions", "input": "how do I use you?", "output": []}
 {"instruction": "Generate video edit actions", "input": "are you an AI?", "output": []}
-{"instruction": "Generate video edit actions", "input": "can you do color grading?", "output": []}
+{"instruction": "Generate video edit actions", "input": "how do I use you?", "output": []}
 {"instruction": "Generate video edit actions", "input": "how do i edit this?", "output": []}
 {"instruction": "Generate video edit actions", "input": "i need to edit my video", "output": []}
 {"instruction": "Generate video edit actions", "input": "this video looks too long", "output": []}
-{"instruction": "Generate video edit actions", "input": "can you edit the intro?", "output": []}
 {"instruction": "Generate video edit actions", "input": "i want to make a cut", "output": []}
-{"instruction": "Generate video edit actions", "input": "what is the schema?", "output": []}
 {"instruction": "Generate video edit actions", "input": "i don't like the ending", "output": []}
-{"instruction": "Generate video edit actions", "input": "yo", "output": []}
-{"instruction": "Generate video edit actions", "input": "good morning", "output": []}
-{"instruction": "Generate video edit actions", "input": "hey there", "output": []}
-{"instruction": "Generate video edit actions", "input": "hi hornet", "output": []}
-{"instruction": "Generate video edit actions", "input": "hello", "output": []}
-{"instruction": "Generate video edit actions", "input": "make it look like a hollywood movie", "output": []}
-{"instruction": "Generate video edit actions", "input": "add a 3D explosion effect at 10s", "output": []}
-{"instruction": "Generate video edit actions", "input": "cut from 120s to 150s", "output": []}
+{"instruction": "Generate video edit actions", "input": "can you edit the intro?", "output": []}
+{"instruction": "Generate video edit actions", "input": "can you make this look cinematic?", "output": []}
+{"instruction": "Generate video edit actions", "input": "can you do color grading?", "output": []}
 {"instruction": "Generate video edit actions", "input": "zoom in on the face", "output": []}
 {"instruction": "Generate video edit actions", "input": "make the video brighter", "output": []}
 {"instruction": "Generate video edit actions", "input": "add some text on screen that says 'Hello'", "output": []}
@@ -131,42 +83,37 @@
 {"instruction": "Generate video edit actions", "input": "speed up the video by 2x", "output": []}
 {"instruction": "Generate video edit actions", "input": "reverse the video", "output": []}
 {"instruction": "Generate video edit actions", "input": "add a blur to the background", "output": []}
+{"instruction": "Generate video edit actions", "input": "make it look like a hollywood movie", "output": []}
+{"instruction": "Generate video edit actions", "input": "add a 3D explosion effect at 10s", "output": []}
 {"instruction": "Generate video edit actions", "input": "merge another video here", "output": []}
 {"instruction": "Generate video edit actions", "input": "join this with another clip", "output": []}
-{"instruction": "Generate video edit actions", "input": "cut out the silent parts", "output": [{"operation": "cut", "start": 45.0, "end": 50.0, "reason": "Cut silent section 1"}, {"operation": "cut", "start": 120.0, "end": 135.0, "reason": "Cut silent section 2"}]}
-{"instruction": "Generate video edit actions", "input": "mute the silent part just in case", "output": [{"operation": "mute", "start": 10.0, "end": 20.0, "reason": "Mute silent section"}]}
-{"instruction": "Generate video edit actions", "input": "remove first 10 sec", "output": [{"operation": "cut", "start": 0.0, "end": 10.0, "reason": "Remove first 10 sec"}]}
-{"instruction": "Generate video edit actions", "input": "mute audio from 1:00 to 2:00", "output": [{"operation": "mute", "start": 60.0, "end": 120.0, "reason": "Mute 1:00 to 2:00"}]}
-{"instruction": "Generate video edit actions", "input": "cut last 10 seconds", "output": [{"operation": "cut", "start": 50.0, "end": 60.0, "reason": "Cut last 10 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "cut out the silent parts", "output": [{"operation": "cut", "variation": "range", "start": "45", "end": "50", "unit": "seconds", "reason": "Cut silent section 1"}, {"operation": "cut", "variation": "range", "start": "120", "end": "135", "unit": "seconds", "reason": "Cut silent section 2"}]}
+{"instruction": "Generate video edit actions", "input": "mute the silent part just in case", "output": [{"operation": "mute", "variation": "range", "start": "10", "end": "20", "unit": "seconds", "reason": "Mute silent section"}]}
+{"instruction": "Generate video edit actions", "input": "remove first 10 sec", "output": [{"operation": "cut", "variation": "first", "value": 10, "unit": "seconds", "reason": "Remove first 10 sec"}]}
+{"instruction": "Generate video edit actions", "input": "cut last 10 seconds", "output": [{"operation": "cut", "variation": "last", "value": 10, "unit": "seconds", "reason": "Cut last 10 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "mute audio from 1:00 to 2:00", "output": [{"operation": "mute", "variation": "range", "start": "1:00", "end": "2:00", "unit": "seconds", "reason": "Mute 1:00 to 2:00"}]}
 {"instruction": "Generate video edit actions", "input": "where is the play head currently placed?", "output": []}
 {"instruction": "Generate video edit actions", "input": "what's my current position in the timeline?", "output": []}
-{"instruction": "Generate video edit actions", "input": "cut the first 10 seconds. And make sure to output multiple code blocks for formatting.", "output": [{"operation": "cut", "start": 0.0, "end": 10.0, "reason": "Cut first 10 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "Can you explain why you cut the video, and then output the JSON for cutting the last 5 seconds? Add a text block after.", "output": [{"operation": "cut", "start": 95.0, "end": 100.0, "reason": "Cut last 5 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "I want you to generate multiple JSON arrays. First array: cut 0-5s. Second array: cut 10-15s.", "output": [{"operation": "cut", "start": 0.0, "end": 5.0, "reason": "Cut 0-5s"}, {"operation": "cut", "start": 10.0, "end": 15.0, "reason": "Cut 10-15s"}]}
+{"instruction": "Generate video edit actions", "input": "cut the first 10 seconds. And make sure to output multiple code blocks for formatting.", "output": [{"operation": "cut", "variation": "first", "value": 10, "unit": "seconds", "reason": "Cut first 10 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "Can you explain why you cut the video, and then output the JSON for cutting the last 5 seconds? Add a text block after.", "output": [{"operation": "cut", "variation": "last", "value": 5, "unit": "seconds", "reason": "Cut last 5 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "I want you to generate multiple JSON arrays. First array: cut 0-5s. Second array: cut 10-15s.", "output": [{"operation": "cut", "variation": "range", "start": "0", "end": "5", "unit": "seconds", "reason": "Cut 0-5s"}, {"operation": "cut", "variation": "range", "start": "10", "end": "15", "unit": "seconds", "reason": "Cut 10-15s"}]}
 {"instruction": "Generate video edit actions", "input": "play the video from 10s to 20s", "output": []}
 {"instruction": "Generate video edit actions", "input": "pause the playback at 30 seconds", "output": []}
 {"instruction": "Generate video edit actions", "input": "stop playing at the end", "output": []}
 {"instruction": "Generate video edit actions", "input": "restore the cut from 10 to 20 seconds", "output": []}
 {"instruction": "Generate video edit actions", "input": "end_all edits", "output": []}
-{"instruction": "Generate video edit actions", "input": "play from 5s to 10s then pause, then cut from 15 to 20s", "output": [{"operation": "cut", "start": 15.0, "end": 20.0, "reason": "Cut from 15 to 20s"}]}
+{"instruction": "Generate video edit actions", "input": "play from 5s to 10s then pause, then cut from 15 to 20s", "output": [{"operation": "cut", "variation": "range", "start": "15", "end": "20", "unit": "seconds", "reason": "Cut from 15 to 20s"}]}
 {"instruction": "Generate video edit actions", "input": "join outro.mp4 to the end", "output": [{"operation": "merge_videos", "clips": [{"file": "main.mp4", "order": 1}, {"file": "outro.mp4", "order": 2}], "reason": "Append outro.mp4 after main.mp4"}]}
-{"instruction": "Generate video edit actions", "input": "also do the same for the last 10 seconds", "output": [{"operation": "cut", "start": 290.0, "end": 300.0, "reason": "Cut last 10 seconds"}]}
-{"instruction": "Generate video edit actions", "input": "can you cut that section out completely instead?", "output": [{"operation": "cut", "start": 60.0, "end": 120.0, "reason": "Replace mute with cut from 1 to 2 minutes"}]}
+{"instruction": "Generate video edit actions", "input": "also do the same for the last 10 seconds", "output": [{"operation": "cut", "variation": "last", "value": 10, "unit": "seconds", "reason": "Cut last 10 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "can you cut that section out completely instead?", "output": [{"operation": "cut", "variation": "range", "start": "1:00", "end": "2:00", "unit": "seconds", "reason": "Replace mute with cut from 1 to 2 minutes"}]}
+{"instruction": "Generate video edit actions", "input": "remove last 10 sec", "output": [{"operation": "cut", "variation": "last", "value": 10, "unit": "seconds", "reason": "Remove last 10 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "actually make it 15 seconds instead", "output": [{"operation": "mute", "variation": "first", "value": 15, "unit": "seconds", "reason": "Adjust mute to 15 seconds"}]}
+{"instruction": "Generate video edit actions", "input": "no, mute the beginning instead of cutting it", "output": [{"operation": "mute", "variation": "first", "value": 30, "unit": "seconds", "reason": "Mute beginning instead of cut"}]}
+{"instruction": "Generate video edit actions", "input": "nevermind, remove the music", "output": []}
 {"instruction": "Generate video edit actions", "input": "merge part2.mp4 after this video", "output": [{"operation": "merge_videos", "clips": [{"file": "part1.mp4", "order": 1}, {"file": "part2.mp4", "order": 2}], "reason": "Concatenate part2.mp4 after part1.mp4"}]}
-{"instruction": "Generate video edit actions", "input": "add main_content.mp4 at the end", "output": [{"operation": "merge_videos", "clips": [{"file": "intro.mp4", "order": 1}, {"file": "main_content.mp4", "order": 2}], "reason": "Append main_content.mp4 after intro.mp4"}]}
-{"instruction": "Generate video edit actions", "input": "join segment_b.mp4 to the back of this clip", "output": [{"operation": "merge_videos", "clips": [{"file": "segment_a.mp4", "order": 1}, {"file": "segment_b.mp4", "order": 2}], "reason": "Join segment_b.mp4 after segment_a.mp4"}]}
-{"instruction": "Generate video edit actions", "input": "put opening_card.mp4 before this video", "output": [{"operation": "merge_videos", "clips": [{"file": "opening_card.mp4", "order": 1}, {"file": "main_video.mp4", "order": 2}], "reason": "Prepend opening_card.mp4 before main_video.mp4"}]}
-{"instruction": "Generate video edit actions", "input": "add the recap clip to the beginning", "output": [{"operation": "merge_videos", "clips": [{"file": "recap.mp4", "order": 1}, {"file": "episode2.mp4", "order": 2}], "reason": "Prepend recap.mp4 before episode2.mp4"}]}
-{"instruction": "Generate video edit actions", "input": "place intro_clip.mp4 at the front", "output": [{"operation": "merge_videos", "clips": [{"file": "intro_clip.mp4", "order": 1}, {"file": "body.mp4", "order": 2}], "reason": "Prepend intro_clip.mp4 before body.mp4"}]}
-{"instruction": "Generate video edit actions", "input": "attach the outro clip at the end", "output": [{"operation": "merge_videos", "clips": [{"file": "tutorial.mp4", "order": 1}, {"file": "outro.mp4", "order": 2}], "reason": "Attach outro.mp4 after tutorial.mp4"}]}
-{"instruction": "Generate video edit actions", "input": "append the subscribe call-to-action clip at the tail end", "output": [{"operation": "merge_videos", "clips": [{"file": "vlog_day1.mp4", "order": 1}, {"file": "subscribe_cta.mp4", "order": 2}], "reason": "Append subscribe_cta.mp4 after vlog_day1.mp4"}]}
-{"instruction": "Generate video edit actions", "input": "combine act1, act2, and act3 in order", "output": [{"operation": "merge_videos", "clips": [{"file": "act1.mp4", "order": 1}, {"file": "act2.mp4", "order": 2}, {"file": "act3.mp4", "order": 3}], "reason": "Concatenate all three acts in order"}]}
-{"instruction": "Generate video edit actions", "input": "join all three clips one after another", "output": [{"operation": "merge_videos", "clips": [{"file": "clip_a.mp4", "order": 1}, {"file": "clip_b.mp4", "order": 2}, {"file": "clip_c.mp4", "order": 3}], "reason": "Concatenate clip_a, clip_b, and clip_c in sequence"}]}
-{"instruction": "Generate video edit actions", "input": "stitch b_roll.mp4 to the end of this", "output": [{"operation": "merge_videos", "clips": [{"file": "raw_footage.mp4", "order": 1}, {"file": "b_roll.mp4", "order": 2}], "reason": "Stitch b_roll.mp4 after raw_footage.mp4"}]}
-{"instruction": "Generate video edit actions", "input": "glue thank_you_slide.mp4 at the back", "output": [{"operation": "merge_videos", "clips": [{"file": "presentation.mp4", "order": 1}, {"file": "thank_you_slide.mp4", "order": 2}], "reason": "Append thank_you_slide.mp4 after presentation.mp4"}]}
-{"instruction": "Generate video edit actions", "input": "connect the brand logo clip right after this video", "output": [{"operation": "merge_videos", "clips": [{"file": "highlight_reel.mp4", "order": 1}, {"file": "brand_logo.mp4", "order": 2}], "reason": "Connect brand_logo.mp4 after highlight_reel.mp4"}]}
 {"instruction": "Generate video edit actions", "input": "link credits.mp4 to the end of the documentary", "output": [{"operation": "merge_videos", "clips": [{"file": "documentary.mp4", "order": 1}, {"file": "credits.mp4", "order": 2}], "reason": "Append credits.mp4 after documentary.mp4"}]}
-{"instruction": "Generate video edit actions", "input": "merge closing_shot.mp4 at the end and then cut the first 10 seconds", "output": [{"operation": "merge_videos", "clips": [{"file": "interview_raw.mp4", "order": 1}, {"file": "closing_shot.mp4", "order": 2}], "reason": "Append closing_shot.mp4 after interview_raw.mp4"}, {"operation": "cut", "start": 0.0, "end": 10.0, "reason": "Remove first 10 seconds of interview"}]}
+{"instruction": "Generate video edit actions", "input": "put opening_card.mp4 before this video", "output": [{"operation": "merge_videos", "clips": [{"file": "opening_card.mp4", "order": 1}, {"file": "main_video.mp4", "order": 2}], "reason": "Prepend opening_card.mp4 before main_video.mp4"}]}
+{"instruction": "Generate video edit actions", "input": "combine act1, act2, and act3 in order", "output": [{"operation": "merge_videos", "clips": [{"file": "act1.mp4", "order": 1}, {"file": "act2.mp4", "order": 2}, {"file": "act3.mp4", "order": 3}], "reason": "Concatenate all three acts in order"}]}
 {"instruction": "Generate video edit actions", "input": "combine the two clips", "output": [{"operation": "merge_videos", "clips": [{"file": "part_one.mp4", "order": 1}, {"file": "part_two.mp4", "order": 2}], "reason": "Concatenate part_one.mp4 and part_two.mp4"}]}
-{"instruction": "Generate video edit actions", "input": "put these two videos together", "output": [{"operation": "merge_videos", "clips": [{"file": "video_a.mp4", "order": 1}, {"file": "video_b.mp4", "order": 2}], "reason": "Concatenate video_a.mp4 and video_b.mp4"}]}
+{"instruction": "Generate video edit actions", "input": "merge closing_shot.mp4 at the end and then cut the first 10 seconds", "output": [{"operation": "merge_videos", "clips": [{"file": "interview_raw.mp4", "order": 1}, {"file": "closing_shot.mp4", "order": 2}], "reason": "Append closing_shot.mp4 after interview_raw.mp4"}, {"operation": "cut", "variation": "first", "value": 10, "unit": "seconds", "reason": "Remove first 10 seconds of interview"}]}
 {"instruction": "Generate video edit actions", "input": "merge another clip to this video", "output": []}

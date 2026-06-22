@@ -16,7 +16,7 @@ export interface EdgeLLMState {
   progress: number; // 0–1 during download
   error: string | null;
   loadModel: (format?: "int8" | "fp16" | "fp32") => Promise<void>;
-  generate: (prompt: string, onToken?: (token: string) => void) => Promise<string>;
+  generate: (prompt: string, onToken?: (token: string) => void, opts?: { duration?: number; playhead?: number }) => Promise<string>;
   reset: () => void;
 }
 
@@ -78,7 +78,7 @@ export function useEdgeLLM(): EdgeLLMState {
     workerRef.current?.postMessage({ type: "LOAD", payload: { format } });
   }, [status]);
 
-  const generate = useCallback((prompt: string, onToken?: (token: string) => void): Promise<string> => {
+  const generate = useCallback((prompt: string, onToken?: (token: string) => void, opts?: { duration?: number; playhead?: number }): Promise<string> => {
     return new Promise((resolve, reject) => {
       if (status !== "ready") {
         reject(new Error("Model is not loaded yet. Call loadModel() first."));
@@ -86,7 +86,15 @@ export function useEdgeLLM(): EdgeLLMState {
       }
       const reqId = reqIdRef.current++;
       resolversRef.current.set(reqId, { resolve, reject, onToken });
-      workerRef.current?.postMessage({ type: "GENERATE", payload: { prompt, reqId } });
+      workerRef.current?.postMessage({
+        type: "GENERATE",
+        payload: {
+          prompt,
+          reqId,
+          duration: opts?.duration ?? 0,
+          playhead: opts?.playhead ?? 0,
+        },
+      });
     });
   }, [status]);
 

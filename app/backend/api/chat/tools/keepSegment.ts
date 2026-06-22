@@ -1,22 +1,40 @@
 import type { ModelAction } from "@/app/backend/api/chat/types";
-import { asClip, asNumber, asReason, type ToolSchema } from "./shared";
+import { asClip, asNumber, asReason, asString, resolveSemanticTime, type ToolSchema } from "./shared";
 
 export const keepSegmentTool: ToolSchema = {
   type: "function",
   function: {
     name: "keep_segment",
     description:
-      "Keep only one exact time range and remove everything before and after it. Use this for requests like keep only, retain only, or focus on just one part.",
+      "Keep only one exact time range and remove everything before and after it. Use this for requests like 'keep only', 'retain only', or 'focus on just one part'.",
     parameters: {
       type: "object",
       properties: {
-        start: {
+        variation: {
+          type: "string",
+          description:
+            "Which part of the video to keep. Use 'first', 'last', 'before_playhead', 'after_playhead', or 'range' for an explicit start/end.",
+          enum: ["first", "last", "before_playhead", "after_playhead", "range"],
+        },
+        value: {
           type: "number",
-          description: "Start time in seconds of the part to keep.",
+          description:
+            "The amount of time to keep. Required unless variation is 'range'.",
+        },
+        unit: {
+          type: "string",
+          description: "The time unit for the value. One of: seconds, minutes, hours.",
+          enum: ["seconds", "minutes", "hours"],
+        },
+        start: {
+          type: "string",
+          description:
+            "Explicit start time as the user stated it (e.g. '1:20', '100', '45s'). Required only when variation is 'range'.",
         },
         end: {
-          type: "number",
-          description: "End time in seconds of the part to keep.",
+          type: "string",
+          description:
+            "Explicit end time as the user stated it (e.g. '2:10', '150', '90s'). Required only when variation is 'range'.",
         },
         clip: {
           type: "number",
@@ -28,25 +46,30 @@ export const keepSegmentTool: ToolSchema = {
           description: "Short human-readable reason for keeping this range.",
         },
       },
-      required: ["start", "end"],
+      required: ["variation"],
     },
   },
 };
 
 export const parseKeepSegmentCall = (
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  duration: number,
+  playhead: number
 ): ModelAction | null => {
-  const start = asNumber(args.start);
-  const end = asNumber(args.end);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
-    return null;
-  }
+  const variation = asString(args.variation);
+  const value = asNumber(args.value);
+  const unit = asString(args.unit) || "seconds";
+  const start = args.start != null ? asString(args.start) : undefined;
+  const end   = args.end   != null ? asString(args.end)   : undefined;
+
+  const range = resolveSemanticTime(variation, value, unit, duration, playhead, start, end);
+  if (!range || range.start >= range.end) return null;
+
   return {
     type: "keep",
-    start,
-    end,
+    start: range.start,
+    end: range.end,
     clip: asClip(args.clip),
     reason: asReason(args.reason),
   };
 };
-
