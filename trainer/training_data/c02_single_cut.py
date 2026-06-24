@@ -81,6 +81,28 @@ examples = [
         "output": "{\"message\":\"Removed the segment from 1 to 2 minutes.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"range\",\"start\":\"1\",\"end\":\"2\",\"unit\":\"minutes\",\"reason\":\"Cut segment from 1 to 2 minutes\"}]}"
     },
 
+    # ── range: MM:SS with prior cuts in timeline ───────────────────────────
+    {
+        "input": "[VIDEO METADATA]\nName: vlog.mp4\nDuration: 762.7s\nResolution: 1280x720\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- 702.7 -> 762.7\n- 0.0 -> 60.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nremove from 3:00 to 4:00",
+        "output": "{\"message\":\"Removed the segment from 3:00 to 4:00.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"range\",\"start\":\"3:00\",\"end\":\"4:00\",\"unit\":\"seconds\",\"reason\":\"Cut range from 3:00 to 4:00\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: interview.mp4\nDuration: 900.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 60.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ncut from 2:00 to 3:30",
+        "output": "{\"message\":\"Cut the segment from 2:00 to 3:30.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"range\",\"start\":\"2:00\",\"end\":\"3:30\",\"unit\":\"seconds\",\"reason\":\"Cut range from 2:00 to 3:30\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: gaming.mp4\nDuration: 1200.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- 1140.0 -> 1200.0\n- 0.0 -> 45.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ntrim from 5:00 to 6:00",
+        "output": "{\"message\":\"Trimmed the segment from 5:00 to 6:00.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"range\",\"start\":\"5:00\",\"end\":\"6:00\",\"unit\":\"seconds\",\"reason\":\"Cut range from 5:00 to 6:00\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: podcast.mp4\nDuration: 3600.0s\nResolution: 1280x720\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- 3540.0 -> 3600.0\n- 0.0 -> 120.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ndelete from 10:00 to 12:00",
+        "output": "{\"message\":\"Deleted the segment from 10:00 to 12:00.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"range\",\"start\":\"10:00\",\"end\":\"12:00\",\"unit\":\"seconds\",\"reason\":\"Cut range from 10:00 to 12:00\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: tutorial.mp4\nDuration: 500.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- 440.0 -> 500.0\n- 0.0 -> 30.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nsnip from 1:30 to 2:45",
+        "output": "{\"message\":\"Snipped the segment from 1:30 to 2:45.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"range\",\"start\":\"1:30\",\"end\":\"2:45\",\"unit\":\"seconds\",\"reason\":\"Cut range from 1:30 to 2:45\"}]}"
+    },
+
     # ── before_playhead: whole video ──────────────────────────────────────
     {
         "input": "[VIDEO METADATA]\nName: gameplay.mp4\nDuration: 600.0s\nResolution: 1920x1080\nPlayhead: 150.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ncut everything before the playhead",
