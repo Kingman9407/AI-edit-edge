@@ -61,41 +61,11 @@ def run_model(pipe, tokenizer, system_prompt: str, user_content: str,
 
 def parse_json_response(text: str) -> dict:
     """
-    Finds and returns the FIRST complete JSON object from model output.
-    Prevents markdown / trailing garbage parse errors.
+    Finds and returns the FIRST complete JSON object from model output,
+    applying error correction via json_corrector.
     """
-    start = text.find('{')
-    if start == -1:
-        return {}
-
-    depth = 0
-    in_string = False
-    escape_next = False
-
-    for i, ch in enumerate(text[start:], start=start):
-        if escape_next:
-            escape_next = False
-            continue
-        if ch == '\\' and in_string:
-            escape_next = True
-            continue
-        if ch == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if ch == '{':
-            depth += 1
-        elif ch == '}':
-            depth -= 1
-            if depth == 0:
-                candidate = text[start:i + 1]
-                try:
-                    parsed = json.loads(candidate)
-                    return parsed if isinstance(parsed, dict) else {}
-                except json.JSONDecodeError:
-                    return {}
-    return {}
+    from json_corrector import correct_json
+    return correct_json(text)
 
 
 # ==============================================================================

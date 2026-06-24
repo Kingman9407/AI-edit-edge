@@ -182,11 +182,9 @@ def extract_actions_from_response(text: str) -> list:
 
         Fallback: bare JSON list, or a single markdown ```json block.
     """
-    # Strip markdown fences if present (model should not emit them, but be safe)
-    blocks = re.findall(r"```json\s*([\s\S]*?)```", text)
-    raw_json = blocks[0].strip() if blocks else text.strip()
-
-    parsed = json.loads(raw_json)
+    from json_corrector import correct_json
+    
+    parsed = correct_json(text)
     if isinstance(parsed, dict):
         if "operations" in parsed:
             return parsed["operations"]

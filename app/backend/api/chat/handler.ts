@@ -149,13 +149,14 @@ async function requestWithTools({
   // Collect raw tool calls — actions will be resolved later with live duration/playhead
   const rawToolCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
   if (toolCalls?.length) {
+    const { correctJson } = await import("./jsonCorrector");
     for (const tc of toolCalls) {
       const name: string = tc?.function?.name ?? "";
       let args: Record<string, unknown> = {};
       try {
-        args = tc?.function?.arguments
-          ? (JSON.parse(tc.function.arguments) as Record<string, unknown>)
-          : {};
+        if (tc?.function?.arguments) {
+          args = correctJson(tc.function.arguments) || {};
+        }
       } catch {
         args = {};
       }

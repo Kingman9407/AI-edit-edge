@@ -1,3 +1,4 @@
+import { parseToolCallToAction } from "@/app/backend/api/chat/tools";
 import type { ModelAction } from "@/app/backend/api/chat/types";
 import type { EdgeLLMState } from "@/app/ui/hooks/useEdgeLLM";
 
@@ -186,6 +187,21 @@ export async function runEdgeChat(
 
     if (Array.isArray(parsedObj.operations)) {
       actions = parsedObj.operations.map((op: any) => {
+        let toolName = op.operation;
+        if (toolName === "cut") toolName = "cut_segment";
+        if (toolName === "mute") toolName = "mute_segment";
+        if (toolName === "keep") toolName = "keep_segment";
+        
+        const action = parseToolCallToAction(
+          toolName,
+          op,
+          req.videoContext?.duration ?? 0,
+          req.videoContext?.currentTime ?? 0
+        );
+
+        if (action) return action;
+
+        // Fallback for absolute timestamps if parse fails or it wasn't a known tool
         const startVal = op.start !== undefined && op.start !== null ? Number(op.start) : null;
         const endVal = op.end !== undefined && op.end !== null ? Number(op.end) : null;
 
@@ -195,7 +211,7 @@ export async function runEdgeChat(
           end: endVal,
           reason: op.reason || "Edge LLM Edit"
         };
-      });
+      }).filter(Boolean) as ModelAction[];
     }
   } catch (err) {
     console.error("🤖 [Edge LLM] Failed to parse JSON:", raw);
