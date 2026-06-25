@@ -126,4 +126,55 @@ examples = [
         "input": "[VIDEO METADATA]\nName: vlog_raw.mp4\nDuration: 215.0s\nResolution: 1920x1080\nPlayhead: 60.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ndelete the next 5 seconds starting from the playhead",
         "output": "{\"message\":\"Deleted the next 5 seconds from the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"after_playhead\",\"value\":5,\"unit\":\"seconds\",\"reason\":\"Delete next 5 seconds from playhead\"}]}"
     },
+    # ── before_playhead: N minutes ────────────────────────────────────────
+    {
+        "input": "[VIDEO METADATA]\nName: lecture.mp4\nDuration: 3600.0s\nResolution: 1920x1080\nPlayhead: 300.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ncut the 2 minutes before the playhead",
+        "output": "{\"message\":\"Cut the 2 minutes before the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"before_playhead\",\"value\":2,\"unit\":\"minutes\",\"reason\":\"Cut 2 minutes before playhead\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: podcast_raw.mp4\nDuration: 7200.0s\nResolution: 1280x720\nPlayhead: 600.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nremove the 5 minutes leading up to the playhead",
+        "output": "{\"message\":\"Removed the 5 minutes before the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"before_playhead\",\"value\":5,\"unit\":\"minutes\",\"reason\":\"Remove 5 minutes before playhead\"}]}"
+    },
+
+    # ── after_playhead: N minutes ─────────────────────────────────────────
+    {
+        "input": "[VIDEO METADATA]\nName: seminar.mp4\nDuration: 5400.0s\nResolution: 1920x1080\nPlayhead: 1200.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ndelete the next 3 minutes from the playhead",
+        "output": "{\"message\":\"Deleted the next 3 minutes from the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"after_playhead\",\"value\":3,\"unit\":\"minutes\",\"reason\":\"Delete next 3 minutes from playhead\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: vlog.mp4\nDuration: 900.0s\nResolution: 1920x1080\nPlayhead: 180.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ntrim the next 1 minute after the playhead",
+        "output": "{\"message\":\"Trimmed the next 1 minute from the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"after_playhead\",\"value\":1,\"unit\":\"minutes\",\"reason\":\"Trim next 1 minute from playhead\"}]}"
+    },
+
+    # ── before_playhead: with prior cuts in timeline ───────────────────────
+    {
+        "input": "[VIDEO METADATA]\nName: interview.mp4\nDuration: 1800.0s\nResolution: 1920x1080\nPlayhead: 240.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 60.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ncut the 30 seconds before the playhead",
+        "output": "{\"message\":\"Cut the 30 seconds before the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"before_playhead\",\"value\":30,\"unit\":\"seconds\",\"reason\":\"Cut 30 seconds before playhead\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: gaming.mp4\nDuration: 1200.0s\nResolution: 1920x1080\nPlayhead: 500.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 45.0\n- 1140.0 -> 1200.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nsnip the 20 seconds before current position",
+        "output": "{\"message\":\"Snipped the 20 seconds before the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"before_playhead\",\"value\":20,\"unit\":\"seconds\",\"reason\":\"Snip 20 seconds before playhead\"}]}"
+    },
+
+    # ── after_playhead: with prior cuts in timeline ────────────────────────
+    {
+        "input": "[VIDEO METADATA]\nName: tutorial.mp4\nDuration: 600.0s\nResolution: 1280x720\nPlayhead: 120.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 30.0\n- 570.0 -> 600.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nremove the next 15 seconds from here",
+        "output": "{\"message\":\"Removed the next 15 seconds from the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"after_playhead\",\"value\":15,\"unit\":\"seconds\",\"reason\":\"Remove next 15 seconds from playhead\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: stream_clip.mp4\nDuration: 3600.0s\nResolution: 1920x1080\nPlayhead: 900.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 120.0\n- 3480.0 -> 3600.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ncut the next 45 seconds starting from the playhead",
+        "output": "{\"message\":\"Cut the next 45 seconds from the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"after_playhead\",\"value\":45,\"unit\":\"seconds\",\"reason\":\"Cut next 45 seconds from playhead\"}]}"
+    },
+
+    # ── before_playhead: whole video with prior cuts ───────────────────────
+    {
+        "input": "[VIDEO METADATA]\nName: documentary.mp4\nDuration: 4800.0s\nResolution: 1920x1080\nPlayhead: 600.0s\n\n[TIMELINE STATE]\nCuts:\n- 4740.0 -> 4800.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ndelete everything before the playhead",
+        "output": "{\"message\":\"Deleted everything before the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"before_playhead\",\"value\":600,\"unit\":\"seconds\",\"reason\":\"Remove everything before playhead\"}]}"
+    },
+
+    # ── after_playhead: whole video with prior cuts ────────────────────────
+    {
+        "input": "[VIDEO METADATA]\nName: wedding.mp4\nDuration: 7200.0s\nResolution: 3840x2160\nPlayhead: 3600.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 180.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ntrim everything after the current position",
+        "output": "{\"message\":\"Trimmed everything after the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"after_playhead\",\"value\":3600,\"unit\":\"seconds\",\"reason\":\"Trim everything after playhead\"}]}"
+    },
 ]
