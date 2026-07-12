@@ -914,5 +914,8 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     captureFrame,
     seekToTime,
     replaceEdits,
+    setVolume,
+    setIsMuted,
+    setEdits,
   };
 }

@@ -5,21 +5,21 @@ export const LoginDescription = () => {
             <div className="md:mx-25">
                 <h2 className="text-4xl md:text-6xl font-bold mb-6 leading-tight tracking-tight text-blue-100" style={{ fontFamily: "'Outfit', sans-serif" }}>AI Edit</h2>
                 <p className="text-lg text-white/80 leading-relaxed max-w-[650px] mb-10">
-                    The ultimate edge AI-powered video editing workspace. Experience seamless editing, smart scene detection, and instant rendering—all powered by state-of-the-art models running entirely in your browser. Say goodbye to upload times and hello to privacy-first, lightning-fast workflows.
+                    A next-generation, browser-based video editing workspace. Seamlessly manage your projects locally, leverage WebGPU for high-performance processing, and experience a true privacy-first video editor without relying on cloud servers.
                 </p>
 
                 <ul className="flex flex-col gap-5 m-0 p-0 list-none">
                     <li className="flex items-center gap-4 text-[17px] text-zinc-200 font-medium">
                         <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">✓</div>
-                        <span>Smart Video Editing</span>
+                        <span>Local Project Management</span>
                     </li>
                     <li className="flex items-center gap-4 text-[17px] text-zinc-200 font-medium">
                         <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">✓</div>
-                        <span>AI-Driven Scene Detection</span>
+                        <span>WebGPU-Accelerated Processing</span>
                     </li>
                     <li className="flex items-center gap-4 text-[17px] text-zinc-200 font-medium">
                         <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm">✓</div>
-                        <span>Lightning Fast Rendering</span>
+                        <span>Multi-Track Timeline Editing</span>
                     </li>
                 </ul>
             </div>

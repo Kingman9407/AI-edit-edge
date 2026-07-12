@@ -26,6 +26,7 @@ import {
   formatDurationString,
   formatResolutionString,
 } from "@/app/lib/projectStorage";
+import { loadProjectMedia, saveProjectEdits, loadProjectEdits } from "@/app/lib/mediaStorage";
 
 export default function Home() {
   const { user, loading } = useFirebaseAuth();
@@ -260,7 +261,7 @@ function VideoEditorComponent() {
   const [audioFiles, setAudioFiles] = useState<File[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
 
-  // Load files from Context on mount if they exist
+  // Load files from Context or IndexedDB on mount
   useEffect(() => {
     if (pendingVideoFiles.length > 0 || pendingAudioFiles.length > 0) {
       if (pendingVideoFiles.length > 0) {
@@ -270,8 +271,37 @@ function VideoEditorComponent() {
         setAudioFiles(pendingAudioFiles);
       }
       clearPendingFiles();
+    } else if (projectId) {
+      loadProjectMedia(projectId)
+        .then((media) => {
+          if (media) {
+            if (media.videoFiles.length > 0) setMultiFiles(media.videoFiles);
+            if (media.audioFiles.length > 0) setAudioFiles(media.audioFiles);
+          }
+        })
+        .catch(console.error);
     }
-  }, [pendingVideoFiles, pendingAudioFiles, clearPendingFiles]);
+  }, [pendingVideoFiles, pendingAudioFiles, clearPendingFiles, projectId]);
+
+  // Load saved edits from IndexedDB on mount
+  useEffect(() => {
+    if (projectId) {
+      loadProjectEdits(projectId)
+        .then((savedEdits) => {
+          if (savedEdits && savedEdits.length > 0) {
+            replaceEdits(savedEdits);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [projectId, replaceEdits]);
+
+  // Auto-save edits to IndexedDB whenever they change
+  useEffect(() => {
+    if (projectId) {
+      saveProjectEdits(projectId, edits).catch(console.error);
+    }
+  }, [projectId, edits]);
   const multiInputRef = useRef<HTMLInputElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const lastActiveKeyRef = useRef<string | null>(null);

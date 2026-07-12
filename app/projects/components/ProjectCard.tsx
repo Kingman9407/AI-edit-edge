@@ -22,8 +22,12 @@ export default function ProjectCard({ project, onOpenProject, onDeleteRequest }:
       onClick={() => onOpenProject(project.id)}
     >
       {/* Thumbnail */}
-      <div className="h-[150px] bg-gray-900 flex items-center justify-center relative border-b border-white/10">
-        <span className="text-[48px] drop-shadow-md">{project.thumbnail}</span>
+      <div className="h-[150px] bg-gray-900 flex items-center justify-center relative border-b border-white/10 overflow-hidden">
+        {project.thumbnail.startsWith("data:image/") ? (
+          <img src={project.thumbnail} alt={project.name} className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-[48px] drop-shadow-md">{project.thumbnail}</span>
+        )}
         
         {/* Delete Button (Top Left over Image) */}
         <button

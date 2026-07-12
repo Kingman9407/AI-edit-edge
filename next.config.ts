@@ -31,9 +31,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Apply strict COOP/COEP headers to everything EXCEPT the /login page
-        // so that Firebase's signInWithPopup can successfully use window.opener
-        source: "/((?!login).*)",
+        source: "/editor/:path*",
         headers: [
           {
             key: "Cross-Origin-Opener-Policy",
@@ -42,6 +40,15 @@ const nextConfig: NextConfig = {
           {
             key: "Cross-Origin-Embedder-Policy",
             value: "require-corp",
+          },
+        ],
+      },
+      {
+        source: "/login",
+        headers: [
+          {
+            key: "Cross-Origin-Opener-Policy",
+            value: "same-origin-allow-popups",
           },
         ],
       },

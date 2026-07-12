@@ -2,6 +2,7 @@ import React, { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useProjectFiles } from "@/app/context/ProjectFilesContext";
 import { generateProjectId, upsertProject } from "@/app/lib/projectStorage";
+import { saveProjectMedia } from "@/app/lib/mediaStorage";
 
 interface CreateProjectOverlayProps {
   onClose: () => void;
@@ -23,20 +24,75 @@ export default function CreateProjectOverlay({ onClose }: CreateProjectOverlayPr
     event.target.value = "";
   };
 
-
-
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (selectedVideos.length === 0) return;
 
-    // Save files to context so the editor can grab them
+    // Save files to context so the editor can grab them instantly
     setPendingFiles(selectedVideos, []);
 
-    // Pre-create the project record so it has the custom name
+    // Generate stable project ID
     const newId = generateProjectId();
+
+    // Persist to IndexedDB so files survive page reloads
+    try {
+      await saveProjectMedia(newId, selectedVideos);
+    } catch (err) {
+      console.error("Failed to save media to cache:", err);
+    }
+
+    // Generate thumbnail from first video
+    const generateThumbnail = (file: File): Promise<string> => {
+      return new Promise((resolve) => {
+        const video = document.createElement("video");
+        video.preload = "metadata";
+        video.playsInline = true;
+        video.muted = true;
+        const objectUrl = URL.createObjectURL(file);
+        video.src = objectUrl;
+
+        video.onloadeddata = () => {
+          video.currentTime = 0;
+        };
+
+        video.onseeked = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = 320; // 16:9 thumbnail width
+          canvas.height = 180;
+          const ctx = canvas.getContext("2d");
+          if (ctx) {
+            // Draw maintaining aspect ratio and filling canvas
+            const scale = Math.max(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
+            const w = video.videoWidth * scale;
+            const h = video.videoHeight * scale;
+            const x = (canvas.width - w) / 2;
+            const y = (canvas.height - h) / 2;
+            ctx.drawImage(video, x, y, w, h);
+            resolve(canvas.toDataURL("image/jpeg", 0.7));
+          } else {
+            resolve("🎬");
+          }
+          URL.revokeObjectURL(objectUrl);
+        };
+
+        video.onerror = () => {
+          resolve("🎬");
+          URL.revokeObjectURL(objectUrl);
+        };
+      });
+    };
+
+    let thumbnail = "🎬";
+    try {
+      thumbnail = await generateThumbnail(selectedVideos[0]);
+    } catch (e) {
+      console.error("Failed to generate thumbnail", e);
+    }
+
+    // Pre-create the project record so it has the custom name
     upsertProject({
       id: newId,
       name: projectName.trim() || "Untitled Project",
-      thumbnail: "🎬",
+      thumbnail: thumbnail,
       updatedAt: new Date().toLocaleDateString(),
       duration: "--:--",
       resolution: "---p",
