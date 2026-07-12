@@ -45,7 +45,9 @@ def push_onnx_variant(api, target_dir, format_name):
 def push_onnx(api):
     format_name = os.environ.get("FORMAT_NAME", "int8")
     
-    if format_name == "all":
+    if format_name == "none":
+        return
+    elif format_name == "all":
         push_onnx_variant(api, "fine_tuned_smollm_onnx", "int8")
         push_onnx_variant(api, "fine_tuned_smollm_onnx_fp16", "fp16")
         push_onnx_variant(api, "fine_tuned_smollm_onnx_fp32", "fp32")
@@ -54,7 +56,7 @@ def push_onnx(api):
         push_onnx_variant(api, target_dir, format_name)
 
 def push_tokenizer(api):
-    source_dir = get_folder("fine_tuned_smollm")
+    source_dir = get_folder(os.environ.get("MODEL_DIR", "fine_tuned_smollm"))
     print(f"\n📦 Uploading tokenizer files from '{source_dir}' ...")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -104,6 +106,36 @@ def push_tokenizer(api):
 
     print("✅ Tokenizer uploaded.")
 
+def push_normal_model(api):
+    if os.environ.get("SKIP_NORMAL_MODEL") == "1":
+        print("\n⏭️ Skipping normal model upload (SKIP_NORMAL_MODEL=1).")
+        return
+
+    source_dir = get_folder(os.environ.get("MODEL_DIR", "fine_tuned_smollm"))
+    print(f"\n📦 Uploading normal model files from '{source_dir}' ...")
+    
+    uploaded = False
+    for fname in os.listdir(source_dir):
+        # Skip files that are already handled and patched by push_tokenizer
+        if fname in TOKENIZER_FILES or fname == "tokenizer_config.json":
+            continue
+            
+        fpath = os.path.join(source_dir, fname)
+        if os.path.isfile(fpath):
+            api.upload_file(
+                path_or_fileobj=fpath,
+                path_in_repo=fname,
+                repo_id=REPO_ID,
+                repo_type="model",
+            )
+            print(f"  ↑ {fname}")
+            uploaded = True
+            
+    if uploaded:
+        print("✅ Normal model files uploaded.")
+    else:
+        print("⚠️ No additional normal model files found!")
+
 def main():
     token = os.environ.get("HF_TOKEN")
     api = HfApi(token=token)
@@ -114,6 +146,7 @@ def main():
     try:
         push_onnx(api)
         push_tokenizer(api)
+        push_normal_model(api)
         print(f"\n✅ All done! https://huggingface.co/{REPO_ID}")
     except Exception as e:
         print(f"\n❌ Upload failed: {e}")

@@ -2,15 +2,20 @@ import sys
 import subprocess
 import os
 
-def run_script(script_name, env_vars: dict = None):
+def run_script(script_name, env_vars: dict = None, args: list = None):
     """Run a python script using the active interpreter."""
     print(f"\n⚡ Launching {script_name}...")
     print("=" * 70)
     env = os.environ.copy()
     if env_vars:
         env.update(env_vars)
+    
+    cmd = [sys.executable, script_name]
+    if args:
+        cmd.extend(args)
+
     try:
-        result = subprocess.run([sys.executable, script_name], check=True, env=env)
+        result = subprocess.run(cmd, check=True, env=env)
         return result.returncode == 0
     except subprocess.CalledProcessError as e:
         print(f"\n❌ Error: Failed to execute {script_name} ({e})")
@@ -172,11 +177,13 @@ def main():
                 print("\n📦 Launching ONNX converter...")
                 run_script("convert_to_onnx.py")
             elif choice == "5":
-                print("\n☁️  Upload ONNX model to Hugging Face")
-                print("  [A] Upload INT8 (~137MB) - Smallest, used by default in browser")
-                print("  [B] Upload FP16 (~270MB) - Good precision, medium size")
-                print("  [C] Upload FP32 (~500MB) - Perfect precision, largest size")
-                print("  [D] Upload All Three Variants")
+                print("\n☁️  Upload model to Hugging Face")
+                print("  [A] Upload Trained INT8 (~137MB) - Smallest, used by default in browser")
+                print("  [B] Upload Trained FP16 (~270MB) - Good precision, medium size")
+                print("  [C] Upload Trained FP32 (~500MB) - Perfect precision, largest size")
+                print("  [D] Upload All Three Trained Variants")
+                print("  [E] Upload Trained Normal Model (PyTorch/Safetensors)")
+                print("  [F] Upload Untrained Base Model (INT8 Only, for test)")
                 print("  [0] ← Back")
                 up_choice = input("Choice: ").strip().upper()
                 if up_choice == "A":
@@ -187,6 +194,22 @@ def main():
                     run_script("push_to_hf.py", {"ONNX_MODEL_DIR": "fine_tuned_smollm_onnx_fp32", "FORMAT_NAME": "fp32"})
                 elif up_choice == "D":
                     run_script("push_to_hf.py", {"ONNX_MODEL_DIR": "fine_tuned_smollm_onnx", "FORMAT_NAME": "all"})
+                elif up_choice == "E":
+                    run_script("push_to_hf.py", {"FORMAT_NAME": "none"})
+                elif up_choice == "F":
+                    print("\n📦 Ensuring untrained base model is converted to INT8...")
+                    if not os.path.exists("./untrained_smollm_onnx/model.onnx"):
+                        success = run_script("convert_to_onnx.py", args=["--model", "./SmolLM2-135M-Instruct", "--output", "untrained_smollm_onnx", "--format", "int8"])
+                        if not success:
+                            continue
+                    
+                    print("\n☁️  Uploading untrained base model (INT8)...")
+                    run_script("push_to_hf.py", {
+                        "ONNX_MODEL_DIR": "untrained_smollm_onnx", 
+                        "FORMAT_NAME": "untrained",
+                        "MODEL_DIR": "SmolLM2-135M-Instruct",
+                        "SKIP_NORMAL_MODEL": "1"
+                    })
             elif choice == "6" or choice.lower() in ["exit", "quit"]:
                 print("\nGoodbye! Happy editing! 🎬")
                 sys.exit(0)

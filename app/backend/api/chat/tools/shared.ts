@@ -1,5 +1,5 @@
-import { resolveTime } from "@/app/ui/lib/resolveTime";
-import type { TimeUnit } from "@/app/ui/lib/resolveTime";
+import { resolveTime } from "@/app/lib/resolveTime";
+import type { TimeUnit } from "@/app/lib/resolveTime";
 
 export type ToolSchema = {
   type: "function";

@@ -24,7 +24,6 @@ from training_data import ALL_EXAMPLES as TRAINING_EXAMPLES
 def format_chatml(
     user_content: str,
     assistant_output: str,
-    history: list = None,
     tool_call: str = None,   # raw JSON string
     tool_result: str = None, # raw JSON string
     reasoning: str = None,   # legacy reasoning trace
@@ -43,13 +42,9 @@ def format_chatml(
         → assistant(<thought>…</thought> final JSON)
 
     Standard path:
-      system → [history] → user → assistant(final JSON)
+      system → user → assistant(final JSON)
     """
     text = f"<|im_start|>system\n{SYSTEM_INSTRUCTION}<|im_end|>\n"
-
-    if history:
-        for msg in history:
-            text += f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n"
 
     text += f"<|im_start|>user\n{user_content}<|im_end|>\n"
 
@@ -104,7 +99,6 @@ def main():
             record = format_chatml(
                 user_content=ex["input"],
                 assistant_output=ex["output"],
-                history=ex.get("history"),
                 tool_call=tool_call,
                 tool_result=tool_result,
                 reasoning=reasoning,

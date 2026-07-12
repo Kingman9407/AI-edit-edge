@@ -674,5 +674,21 @@ self.addEventListener("message", (e) => {
     ort = null;
     eosTokenId = FALLBACK_EOS_TOKEN_ID;
     self.postMessage({ type: "STATUS", status: "idle", progress: 0 });
+  } else if (type === "CLEAR_CACHE") {
+    if (_idb) {
+      _idb.close();
+      _idb = null;
+    }
+    const req = indexedDB.deleteDatabase(IDB_DB_NAME);
+    req.onsuccess = () => {
+      self.postMessage({ type: "DONE", reqId: payload.reqId, text: "Cache cleared." });
+    };
+    req.onerror = () => {
+      self.postMessage({ type: "ERROR", reqId: payload.reqId, error: "Failed to clear cache." });
+    };
+    req.onblocked = () => {
+      // If blocked, it usually clears on next reload, we just return ok
+      self.postMessage({ type: "DONE", reqId: payload.reqId, text: "Cache clear blocked (might clear on reload)." });
+    };
   }
 });

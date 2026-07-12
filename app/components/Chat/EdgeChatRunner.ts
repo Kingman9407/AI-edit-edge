@@ -1,6 +1,6 @@
 import { parseToolCallToAction } from "@/app/backend/api/chat/tools";
 import type { ModelAction } from "@/app/backend/api/chat/types";
-import type { EdgeLLMState } from "@/app/ui/hooks/useEdgeLLM";
+import type { EdgeLLMState } from "@/app/hooks/useEdgeLLM";
 
 export interface EdgeChatRequest {
   message: string;
@@ -35,29 +35,6 @@ interface ChatMLMessage {
   content: string;
 }
 
-function formatHistoryUserTurn(content: string): string {
-  if (content.includes("[USER REQUEST]")) return content;
-  return [
-    "[VIDEO METADATA]",
-    "Duration: 0.0s",
-    "",
-    "[TIMELINE STATE]",
-    "Cuts:",
-    "- None",
-    "",
-    "Muted Sections:",
-    "- None",
-    "",
-    "Subtitles:",
-    "- None",
-    "",
-    "Background Music:",
-    "- None",
-    "",
-    "[USER REQUEST]",
-    content
-  ].join("\n");
-}
 
 /**
  * Build a structured messages array for SmolLM2-Instruct matching the SFT training structure.
@@ -71,22 +48,6 @@ function buildMessages(req: EdgeChatRequest): ChatMLMessage[] {
     role: "system",
     content: "You are Hornet, a video editing AI. Return JSON with 'message' and 'operations' (cut, mute, add_audio_overlay). If the user mentions time expressions requiring calculation, output a <tool_call> block first. Otherwise, output the final JSON directly."
   });
-
-  // 2. History turns (exclude the active user request if it is at the end of the history array)
-  if (req.history?.length) {
-    let historyTurns = req.history;
-    const lastTurn = historyTurns[historyTurns.length - 1];
-    if (lastTurn && lastTurn.role === "user" && lastTurn.content === req.message) {
-      historyTurns = historyTurns.slice(0, -1);
-    }
-
-    for (const turn of historyTurns.slice(-6)) {
-      messages.push({
-        role: turn.role,
-        content: turn.role === "user" ? formatHistoryUserTurn(turn.content) : turn.content
-      });
-    }
-  }
 
   // 3. Current user message turn (context + query matching SFT training format)
   const userLines: string[] = [];

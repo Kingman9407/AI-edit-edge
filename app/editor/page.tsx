@@ -1,22 +1,76 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useVideoPlayer } from "@/app/ui/hooks/useVideoPlayer";
-import VideoUpload from "../components/VideoUpload/VideoUpload";
-import VideoPlayer from "../components/VideoPlayer/VideoPlayer";
-
-import Chat from "../components/Chat/Chat";
-import SegmentedPreview from "../components/SegmentedPreview/SegmentedPreview";
-import EditList from "../components/EditList/EditList";
-import ExportPanel from "../components/ExportPanel/ExportPanel";
+import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useFirebaseAuth } from "@/app/context/FirebaseAuthContext";
+import { useVideoPlayer } from "@/app/hooks/useVideoPlayer";
+import { useProjectFiles } from "@/app/context/ProjectFilesContext";
+import VideoUpload from "@/app/components/VideoUpload/VideoUpload";
+import VideoPlayer from "@/app/components/VideoPlayer/VideoPlayer";
+import Chat from "@/app/components/Chat/Chat";
+import SegmentedPreview from "@/app/components/SegmentedPreview/SegmentedPreview";
+import EditList from "@/app/components/EditList/EditList";
+import ExportPanel from "@/app/components/ExportPanel/ExportPanel";
 import { buildKeptSegments, normalizeSegments } from "@/app/backend/functions/segments";
-import MediaSidebar from "../components/MediaSidebar/MediaSidebar";
+import MediaSidebar from "@/app/components/MediaSidebar/MediaSidebar";
 import { PLAN_CONFIGS, PLAN_ORDER, PlanId } from "@/app/backend/functions/plans";
 import { formatTime } from "@/app/backend/functions/formatTime";
 import { analyzeAudioFile, getVideoMetadata } from "@/app/backend/functions/mediaAnalysis";
-import TimelineControls from "../components/TimelineControls/TimelineControls";
-import MediaLibraryDrawer from "../components/MediaLibraryDrawer/MediaLibraryDrawer";
+import TimelineControls from "@/app/components/TimelineControls/TimelineControls";
+import MediaLibraryDrawer from "@/app/components/MediaLibraryDrawer/MediaLibraryDrawer";
 import { Library, ChevronDown, List } from "lucide-react";
+import {
+  generateProjectId,
+  upsertProject,
+  getProject,
+  formatDurationString,
+  formatResolutionString,
+} from "@/app/lib/projectStorage";
+
+export default function Home() {
+  const { user, loading } = useFirebaseAuth();
+  const router = useRouter();
+  const [isGuest, setIsGuest] = useState(false);
+  const [guestChecked, setGuestChecked] = useState(false);
+
+  // Read guestMode from sessionStorage once on mount
+  useEffect(() => {
+    setIsGuest(sessionStorage.getItem("guestMode") === "true");
+    setGuestChecked(true);
+  }, []);
+
+  // Redirect to login only if not a guest and not authenticated
+  useEffect(() => {
+    if (!guestChecked) return;
+    if (!loading && !user && !isGuest) {
+      router.replace("/login");
+    }
+  }, [user, loading, router, isGuest, guestChecked]);
+
+  // Wait until we know if they're a guest before deciding to show spinner
+  if (!guestChecked || (loading && !isGuest)) {
+    return (
+      <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-white font-sans">
+        <div className="w-6 h-6 border-2 border-white/10 border-t-[#6366f1] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user && !isGuest) return null;
+
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center text-white font-sans">
+          <div className="w-6 h-6 border-2 border-white/10 border-t-[#6366f1] rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <VideoEditorComponent />
+    </Suspense>
+  );
+}
+
 export type AudioOverlay = {
   id: string;
   file: File;
@@ -71,7 +125,30 @@ type ClipSnapshot = {
   muteEdits: TimelineEdit[];
 };
 
-export default function VideoEditor() {
+function VideoEditorComponent() {
+  // ── Project persistence ────────────────────────────────────────────────────
+  // Read the stable project ID from the URL (?project=<uuid>).
+  // This same ID is passed as Chat's memoryKey, so:
+  //   - Chat text (message.text) is saved per-project in localStorage
+  //   - AI action JSON (message.rawJson) is stored exactly as returned by the model
+  // If no project ID is in the URL, a new one is generated on first video load.
+  const searchParams = useSearchParams();
+  const [projectId, setProjectId] = useState<string | null>(() => {
+    // Can't call useSearchParams during SSR, read eagerly but guard with null
+    return null;
+  });
+
+  const { pendingVideoFiles, pendingAudioFiles, clearPendingFiles } = useProjectFiles();
+
+  useEffect(() => {
+    const idFromUrl = searchParams?.get("project");
+    if (idFromUrl) {
+      setProjectId(idFromUrl);
+    }
+  }, [searchParams]);
+
+
+
   const [editMode, setEditMode] = useState<"single" | "multi">("multi");
   const [multiAiScope, setMultiAiScope] = useState<"active" | "all">("active");
   const [planId, setPlanId] = useState<PlanId>("free");
@@ -182,6 +259,19 @@ export default function VideoEditor() {
   const [multiFiles, setMultiFiles] = useState<File[]>([]);
   const [audioFiles, setAudioFiles] = useState<File[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
+
+  // Load files from Context on mount if they exist
+  useEffect(() => {
+    if (pendingVideoFiles.length > 0 || pendingAudioFiles.length > 0) {
+      if (pendingVideoFiles.length > 0) {
+        setMultiFiles(pendingVideoFiles);
+      }
+      if (pendingAudioFiles.length > 0) {
+        setAudioFiles(pendingAudioFiles);
+      }
+      clearPendingFiles();
+    }
+  }, [pendingVideoFiles, pendingAudioFiles, clearPendingFiles]);
   const multiInputRef = useRef<HTMLInputElement | null>(null);
   const audioInputRef = useRef<HTMLInputElement | null>(null);
   const lastActiveKeyRef = useRef<string | null>(null);
@@ -209,11 +299,37 @@ export default function VideoEditor() {
   const analysisInFlightRef = useRef<Set<string>>(new Set());
   const startedAnalysisRef = useRef<Set<string>>(new Set());
 
-
   const getFileKey = useCallback(
     (file: File) => `${file.name}-${file.size}-${file.lastModified}`,
     []
   );
+
+  // ── Auto-save project to localStorage ──────────────────────────────────────
+  // When a video file is loaded and we have metadata (duration/resolution),
+  // upsert the project record. This keeps the projects page in sync with the editor.
+  // Chat sessions are saved separately by Chat.tsx itself via the memoryKey prop.
+  useEffect(() => {
+    if (!videoFile || !duration) return;
+
+    // Generate a stable project ID if none came from the URL
+    setProjectId((prev) => {
+      const id = prev ?? generateProjectId();
+
+      const existing = getProject(id);
+      upsertProject({
+        id,
+        name: existing?.name ?? videoFile.name.replace(/\.[^.]+$/, ""),
+        thumbnail: existing?.thumbnail ?? "🎬",
+        updatedAt: new Date().toLocaleDateString(),
+        duration: formatDurationString(duration),
+        resolution: formatResolutionString(videoWidth, videoHeight),
+        status: existing?.status ?? "draft",
+      });
+
+      return id;
+    });
+  }, [videoFile, duration, videoWidth, videoHeight]);
+
 
   const buildClipSnapshotSignature = useCallback(
     (snapshot: ClipSnapshot, mode: "single" | "multi") => {
@@ -1033,93 +1149,24 @@ export default function VideoEditor() {
   if (!videoSrc) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-zinc-950 p-4">
-        <div className="flex w-full max-w-2xl flex-col items-center justify-center gap-8 rounded-3xl border border-zinc-800 bg-zinc-900/30 p-12 text-center backdrop-blur-2xl shadow-2xl">
-          <div className="space-y-3">
-            <h1 className="text-2xl md:text-4xl font-bold tracking-tight text-zinc-100">
-              Welcome
+        <div className="flex w-full max-w-xl flex-col items-center justify-center gap-6 rounded-3xl border border-zinc-800 bg-zinc-900/30 p-12 text-center backdrop-blur-2xl shadow-2xl">
+          <div className="h-16 w-16 rounded-full bg-zinc-800/50 flex items-center justify-center text-zinc-500 mb-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-100">
+              No Video Loaded
             </h1>
-            <p className="text-zinc-400 text-sm md:text-lg">
-              Upload your media to begin your creative journey.
+            <p className="text-zinc-400 text-sm md:text-base">
+              The video for this project isn't in memory.
             </p>
           </div>
-
-          <div className="grid w-full grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Video Upload Section */}
-            <div className="flex flex-col items-center gap-4 p-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 hover:border-blue-500/50 transition-colors">
-              <div className="h-12 w-12 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.934a.5.5 0 0 0-.777-.416L16 11" /><rect width="12" height="10" x="2" y="7" rx="2" /></svg>
-              </div>
-              <div className="space-y-1">
-                <h3 className="font-semibold text-zinc-200 text-lg">Video Clips</h3>
-                <p className="text-xs text-zinc-500">MP4, WebM supported</p>
-              </div>
-              <label className="cursor-pointer inline-flex items-center justify-center rounded-full bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-blue-500 active:scale-95 shadow-lg shadow-blue-600/20">
-                <span>Add Videos</span>
-                <input
-                  ref={multiInputRef}
-                  type="file"
-                  accept="video/mp4,video/webm"
-                  multiple
-                  className="hidden"
-                  onChange={handleMultiUpload}
-                />
-              </label>
-            </div>
-
-            {/* Audio Upload Section */}
-            <div className="flex flex-col items-center gap-4 p-6 rounded-2xl border border-zinc-800 bg-zinc-900/50 hover:border-purple-500/50 transition-colors">
-              <div className="h-12 w-12 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-500">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-              </div>
-              <div className="space-y-1">
-                <h3 className="font-semibold text-zinc-200 text-lg">Audio Assets</h3>
-                <p className="text-xs text-zinc-500">MP3, WAV, Background Music</p>
-              </div>
-              <label className="cursor-pointer inline-flex items-center justify-center rounded-full bg-purple-600 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-purple-500 active:scale-95 shadow-lg shadow-purple-600/20">
-                <span>Add Audio</span>
-                <input
-                  ref={audioInputRef}
-                  type="file"
-                  accept="audio/*"
-                  multiple
-                  className="hidden"
-                  onChange={handleAudioUpload}
-                />
-              </label>
-            </div>
-          </div>
-
-          {(multiFiles.length > 0 || audioFiles.length > 0) && (
-            <div className="w-full space-y-4 pt-4 border-t border-zinc-800">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium text-zinc-400">Queue</h4>
-                <span className="text-xs text-zinc-500">
-                  {multiFiles.length} videos, {audioFiles.length} audio files
-                </span>
-              </div>
-
-              <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
-                {multiFiles.map((f, i) => (
-                  <div key={`v-${i}`} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-xs text-blue-400">
-                    <span className="opacity-60 font-bold mr-1">#{i + 1}</span>
-                    <span className="truncate max-w-[120px]">{f.name}</span>
-                    <button onClick={() => handleRemoveFile(i)} className="hover:text-blue-200">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                    </button>
-                  </div>
-                ))}
-                {audioFiles.map((f, i) => (
-                  <div key={`a-${i}`} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs text-purple-400">
-                    <span className="opacity-60 font-bold mr-1">#{i + 1}</span>
-                    <span className="truncate max-w-[120px]">{f.name}</span>
-                    <button onClick={() => handleRemoveAudioFile(i)} className="hover:text-purple-200">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <button
+            onClick={() => setIsDrawerOpen(true)}
+            className="mt-2 inline-flex items-center justify-center rounded-xl bg-white/10 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-white/20 active:scale-95 shadow-lg"
+          >
+            Open Media Library
+          </button>
         </div>
       </div>
     );
@@ -1177,11 +1224,7 @@ export default function VideoEditor() {
             <div className="h-full min-h-[500px]">
               <Chat
                 planId={planId}
-                memoryKey={
-                  videoFile
-                    ? `${videoFile.name}-${videoFile.size}-${videoFile.lastModified}`
-                    : undefined
-                }
+                memoryKey={projectId ?? undefined}
                 multiClipMode={
                   editMode === "multi" && planId === "pro" ? multiAiScope : "active"
                 }

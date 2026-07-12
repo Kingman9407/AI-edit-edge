@@ -15,6 +15,7 @@ Patterns covered:
   whole-relative  — "everything before/after current position"
 """
 
+from torch._higher_order_ops import triton_kernel_wrap
 examples = [
 
     # ── first: seconds ────────────────────────────────────────────────────
@@ -177,4 +178,57 @@ examples = [
         "input": "[VIDEO METADATA]\nName: wedding.mp4\nDuration: 7200.0s\nResolution: 3840x2160\nPlayhead: 3600.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 180.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ntrim everything after the current position",
         "output": "{\"message\":\"Trimmed everything after the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"after_playhead\",\"value\":3600,\"unit\":\"seconds\",\"reason\":\"Trim everything after playhead\"}]}"
     },
+    {
+        "input": "[VIDEO METADATA]\nName: gameplay.mp4\nDuration: 600.0s\nResolution: 1920x1080\nPlayhead: 150.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nkeep only the part after the playhead",
+        "output": "{\"message\":\"Kept only the part after the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"before_playhead\",\"value\":150,\"unit\":\"seconds\",\"reason\":\"Keep only after playhead = remove everything before it\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: vlog_raw.mp4\nDuration: 215.0s\nResolution: 1920x1080\nPlayhead: 60.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\njust keep everything from here on out",
+        "output": "{\"message\":\"Kept everything from the playhead onward.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"before_playhead\",\"value\":60,\"unit\":\"seconds\",\"reason\":\"Keep only after playhead = remove everything before it\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: tutorial.mp4\nDuration: 300.0s\nResolution: 1920x1080\nPlayhead: 45.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nonly keep the part starting at the current position",
+        "output": "{\"message\":\"Kept only the part starting at the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"before_playhead\",\"value\":45,\"unit\":\"seconds\",\"reason\":\"Keep only after playhead = remove everything before it\"}]}"
+    },
+ 
+    # ── keep only after playhead (with prior cuts already in timeline) ──
+    {
+        "input": "[VIDEO METADATA]\nName: interview.mp4\nDuration: 1800.0s\nResolution: 1920x1080\nPlayhead: 240.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 60.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nkeep only what's after the playhead, cut the rest",
+        "output": "{\"message\":\"Kept only the part after the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"before_playhead\",\"value\":240,\"unit\":\"seconds\",\"reason\":\"Keep only after playhead = remove everything before it\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: podcast.mp4\nDuration: 3600.0s\nResolution: 1280x720\nPlayhead: 600.0s\n\n[TIMELINE STATE]\nCuts:\n- 3540.0 -> 3600.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ntoss everything before the playhead, I only want what comes after",
+        "output": "{\"message\":\"Removed everything before the playhead, keeping only what comes after.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"before_playhead\",\"value\":600,\"unit\":\"seconds\",\"reason\":\"Keep only after playhead = remove everything before it\"}]}"
+    },
+ 
+    # ── keep only before playhead (seconds playhead) ────────────────────
+    {
+        "input": "[VIDEO METADATA]\nName: stream_highlight.mp4\nDuration: 1200.0s\nResolution: 1920x1080\nPlayhead: 500.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nkeep only the part before the playhead",
+        "output": "{\"message\":\"Kept only the part before the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"after_playhead\",\"value\":700,\"unit\":\"seconds\",\"reason\":\"Keep only before playhead = remove everything after it\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: lecture.mp4\nDuration: 3600.0s\nResolution: 1920x1080\nPlayhead: 300.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nonly keep up to where the playhead is\n",
+        "output": "{\"message\":\"Kept only the part up to the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"after_playhead\",\"value\":3300,\"unit\":\"seconds\",\"reason\":\"Keep only before playhead = remove everything after it\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: seminar.mp4\nDuration: 5400.0s\nResolution: 1920x1080\nPlayhead: 1200.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\ncut everything past this point, keep only what's before it",
+        "output": "{\"message\":\"Removed everything after the playhead, keeping only what comes before.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"after_playhead\",\"value\":4200,\"unit\":\"seconds\",\"reason\":\"Keep only before playhead = remove everything after it\"}]}"
+    },
+ 
+    # ── keep only before playhead (with prior cuts already in timeline) ─
+    {
+        "input": "[VIDEO METADATA]\nName: gaming.mp4\nDuration: 1200.0s\nResolution: 1920x1080\nPlayhead: 500.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 45.0\n- 1140.0 -> 1200.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nkeep only what's before the current position",
+        "output": "{\"message\":\"Kept only the part before the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"after_playhead\",\"value\":700,\"unit\":\"seconds\",\"reason\":\"Keep only before playhead = remove everything after it\"}]}"
+    },
+    {
+        "input": "[VIDEO METADATA]\nName: wedding.mp4\nDuration: 7200.0s\nResolution: 3840x2160\nPlayhead: 3600.0s\n\n[TIMELINE STATE]\nCuts:\n- 0.0 -> 180.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nI only want the footage before the playhead, ditch the rest",
+        "output": "{\"message\":\"Kept only the footage before the playhead.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"after_playhead\",\"value\":3600,\"unit\":\"seconds\",\"reason\":\"Keep only before playhead = remove everything after it\"}]}"
+    },
+ 
+    # ── keep only after playhead (phrased as "starting from now") ───────
+    {
+        "input": "[VIDEO METADATA]\nName: documentary.mp4\nDuration: 4800.0s\nResolution: 1920x1080\nPlayhead: 600.0s\n\n[TIMELINE STATE]\nCuts:\n- 4740.0 -> 4800.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nkeep the video starting from the playhead onward, cut the beginning",
+        "output": "{\"message\":\"Kept the video starting from the playhead, removed the beginning.\",\"operations\":[{\"operation\":\"cut\",\"variation\":\"before_playhead\",\"value\":600,\"unit\":\"seconds\",\"reason\":\"Keep only after playhead = remove everything before it\"}]}"
+    },
+
 ]

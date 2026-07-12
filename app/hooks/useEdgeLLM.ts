@@ -18,6 +18,7 @@ export interface EdgeLLMState {
   loadModel: (format?: "int8" | "fp16" | "fp32") => Promise<void>;
   generate: (prompt: string, onToken?: (token: string) => void, opts?: { duration?: number; playhead?: number }) => Promise<string>;
   reset: () => void;
+  clearCache: () => Promise<string>;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
@@ -103,5 +104,14 @@ export function useEdgeLLM(): EdgeLLMState {
     workerRef.current?.postMessage({ type: "RESET" });
   }, []);
 
-  return { status, progress, error, loadModel, generate, reset };
+  const clearCache = useCallback((): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      if (!workerRef.current) return reject(new Error("Worker not initialized"));
+      const reqId = reqIdRef.current++;
+      resolversRef.current.set(reqId, { resolve, reject });
+      workerRef.current.postMessage({ type: "CLEAR_CACHE", payload: { reqId } });
+    });
+  }, []);
+
+  return { status, progress, error, loadModel, generate, reset, clearCache };
 }

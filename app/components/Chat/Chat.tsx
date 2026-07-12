@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Send, Bot, User, ChevronDown, MoreHorizontal, Cloud, Cpu } from "lucide-react";
-import { useEdgeLLM } from "@/app/ui/hooks/useEdgeLLM";
-import { runEdgeChat } from "@/app/ui/components/Chat/EdgeChatRunner";
+import { useEdgeLLM } from "@/app/hooks/useEdgeLLM";
+import { runEdgeChat } from "@/app/components/Chat/EdgeChatRunner";
 import { formatTime } from "@/app/backend/functions/formatTime";
 import { normalizeSegments, type Segment } from "@/app/backend/functions/segments";
 import { PLAN_CONFIGS, PlanId, PLAN_ORDER } from "@/app/backend/functions/plans";
+import { useFirebaseAuth } from "@/app/context/FirebaseAuthContext";
+import { signOut } from "firebase/auth";
+import { auth } from "@/app/lib/firebase";
+import { useRouter } from "next/navigation";
 
 interface Message {
   id: string;
@@ -251,6 +255,17 @@ export default function Chat({
   const [inferenceMode, setInferenceMode] = useState<"cloud" | "edge-int8" | "edge-fp16" | "edge-fp32">("cloud");
   const [showEdgeConfirm, setShowEdgeConfirm] = useState(false);
   const edgeLLM = useEdgeLLM();
+  const { user: authUser } = useFirebaseAuth();
+  const router = useRouter();
+
+  async function handleLogout() {
+    try {
+      await signOut(auth);
+      router.push("/login");
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  }
 
   useEffect(() => {
     if (!allowSuggestions) {
@@ -1666,6 +1681,38 @@ export default function Chat({
               </button>
             </div>
 
+            {/* User Profile */}
+            {authUser && (
+              <div className="space-y-2">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Account</div>
+                <div className="flex items-center justify-between bg-zinc-900/40 border border-zinc-800/50 p-2 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-[13px] overflow-hidden shadow-sm">
+                      {authUser.photoURL ? (
+                        <img src={authUser.photoURL} alt="Avatar" className="w-full h-full object-cover" />
+                      ) : (
+                        authUser.displayName?.charAt(0) || "U"
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-[2px]">
+                      <span className="text-[12px] font-semibold text-zinc-200 leading-tight">{authUser.displayName || "User"}</span>
+                      <span className="text-[10px] text-zinc-400 font-medium">Beta User</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="text-[11px] font-medium text-red-400 hover:text-red-300 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+                    </svg>
+                    Logout
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Tokens & Plans */}
             {tokenUsage ? (
               <div className="space-y-2">
@@ -1834,6 +1881,22 @@ export default function Chat({
                   >
                     Cancel
                   </button>
+                  <div className="mt-3 pt-3 border-t border-amber-500/20">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await edgeLLM.clearCache();
+                          setShowEdgeConfirm(false);
+                        } catch (e) {
+                          console.error("Failed to clear edge model cache.");
+                        }
+                      }}
+                      className="w-full rounded-full bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors text-center"
+                    >
+                      Delete Downloaded Models
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

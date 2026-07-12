@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { AuthProvider } from "@/app/ui/context/AuthContext";
+import { FirebaseAuthProvider } from "@/app/context/FirebaseAuthContext";
+import { ProjectFilesProvider } from "@/app/context/ProjectFilesContext";
 
 export const metadata: Metadata = {
-  title: "CutAI – Video Editor",
-  description: "AI-powered video editor",
+  title: "AI Edit",
+  description: "Edge AI-powered video editor",
 };
 
 export default function RootLayout({
@@ -26,7 +27,11 @@ export default function RootLayout({
         `}</style>
       </head>
       <body className="min-h-full flex flex-col" suppressHydrationWarning>
-        <AuthProvider>{children}</AuthProvider>
+        <FirebaseAuthProvider>
+          <ProjectFilesProvider>
+            {children}
+          </ProjectFilesProvider>
+        </FirebaseAuthProvider>
       </body>
     </html>
   );
