@@ -16,7 +16,7 @@ export interface EdgeLLMState {
   progress: number; // 0–1 during download
   error: string | null;
   loadModel: (format?: "int8" | "fp16" | "fp32") => Promise<void>;
-  generate: (prompt: string, onToken?: (token: string) => void, opts?: { duration?: number; playhead?: number }) => Promise<string>;
+  generate: (prompt: string, onToken?: (token: string) => void, opts?: { duration?: number; playhead?: number }) => Promise<{ text: string; tps: number }>;
   reset: () => void;
   clearCache: () => Promise<string>;
 }
@@ -30,7 +30,7 @@ export function useEdgeLLM(): EdgeLLMState {
 
   const workerRef = useRef<Worker | null>(null);
   const reqIdRef = useRef(0);
-  const resolversRef = useRef<Map<number, { resolve: (val: string) => void, reject: (err: Error) => void, onToken?: (val: string) => void }>>(new Map());
+  const resolversRef = useRef<Map<number, { resolve: (val: { text: string; tps: number }) => void, reject: (err: Error) => void, onToken?: (val: string) => void }>>(new Map());
 
   // Initialize Web Worker
   useEffect(() => {
@@ -61,7 +61,7 @@ export function useEdgeLLM(): EdgeLLMState {
         } else if (data.type === "DONE") {
           const resolver = resolversRef.current.get(data.reqId);
           if (resolver) {
-            resolver.resolve(data.text);
+            resolver.resolve({ text: data.text, tps: data.tps || 0 });
             resolversRef.current.delete(data.reqId);
           }
         }
@@ -79,7 +79,7 @@ export function useEdgeLLM(): EdgeLLMState {
     workerRef.current?.postMessage({ type: "LOAD", payload: { format } });
   }, [status]);
 
-  const generate = useCallback((prompt: string, onToken?: (token: string) => void, opts?: { duration?: number; playhead?: number }): Promise<string> => {
+  const generate = useCallback((prompt: string, onToken?: (token: string) => void, opts?: { duration?: number; playhead?: number }): Promise<{ text: string; tps: number }> => {
     return new Promise((resolve, reject) => {
       if (status !== "ready") {
         reject(new Error("Model is not loaded yet. Call loadModel() first."));

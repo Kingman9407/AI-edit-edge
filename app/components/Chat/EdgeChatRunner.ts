@@ -1,7 +1,7 @@
 import { parseToolCallToAction } from "@/app/backend/api/chat/tools";
 import type { ModelAction } from "@/app/backend/api/chat/types";
 import type { EdgeLLMState } from "@/app/hooks/useEdgeLLM";
-
+import { supabase } from "@/app/lib/supabase";
 export interface EdgeChatRequest {
   message: string;
   history?: { role: "user" | "assistant"; content: string }[];
@@ -28,6 +28,7 @@ export interface EdgeChatResponse {
   };
   usage: null;
   raw: string;
+  tps?: number;
 }
 
 interface ChatMLMessage {
@@ -122,8 +123,9 @@ export async function runEdgeChat(
     throw new Error("Edge model is not loaded. Please wait for it to initialize.");
   }
 
+  const startTime = Date.now();
   const messages = buildMessages(req);
-  const raw = await edgeLLM.generate(
+  const { text: raw, tps } = await edgeLLM.generate(
     messages as any,
     undefined,
     {
@@ -131,6 +133,7 @@ export async function runEdgeChat(
       playhead: req.videoContext?.currentTime ?? 0,
     }
   );
+  const latencyMs = Date.now() - startTime;
 
   console.log("🤖 [Edge LLM] RAW Output:\n", raw);
 
@@ -181,6 +184,61 @@ export async function runEdgeChat(
 
   console.log("🤖 [Edge LLM] Final Actions sent to UI:\n", actions);
 
+  // Log to Supabase for further training
+  console.group("🚀 [Edge LLM -> Supabase Logging]");
+  if (supabase) {
+    try {
+      // Estimate token count: raw output word count as a rough proxy
+      const tokenEstimate = raw ? raw.split(/\s+/).filter(Boolean).length : 0;
+      
+      const payload = {
+        user_input: req.message,            // the raw user message (short)
+        ai_output: raw,                     // full raw model output
+        model_name: "hornet-edge-llm",
+        latency_ms: latencyMs,
+        tokens: tokenEstimate,
+      };
+
+      console.log("  Sending payload to 'ai_logs':", payload);
+      
+      const { data, error: sbError, status, statusText } = await supabase
+        .from("ai_logs")
+        .insert(payload)
+        .select();
+
+      if (sbError) {
+        console.error("❌ [Edge LLM] Supabase insert FAILED:", {
+          statusCode: status,
+          statusText: statusText,
+          code: sbError.code,
+          message: sbError.message,
+          details: sbError.details,
+          hint: sbError.hint,
+        });
+
+        if (sbError.code === "42501") {
+          console.warn("  💡 DIAGNOSTIC: Supabase returned 42501 (Permission Denied / RLS Violation).");
+          console.warn("     Solution: Go to Supabase Dashboard -> Table Editor -> 'ai_logs' -> RLS Policies.");
+          console.warn("     Add an INSERT policy allowing 'anon' / 'public' role to insert into 'ai_logs'.");
+        } else if (sbError.code === "42P01") {
+          console.warn("  💡 DIAGNOSTIC: Supabase returned 42P01 (Undefined Table).");
+          console.warn("     Solution: Create table 'ai_logs' in your Supabase SQL Editor with columns:");
+          console.warn("     id (uuid/int8), created_at (timestamp), user_input (text), ai_output (text), model_name (text), latency_ms (numeric), tokens (numeric)");
+        } else if (sbError.code === "PGRST204" || sbError.message?.includes("column")) {
+          console.warn("  💡 DIAGNOSTIC: Column mismatch.");
+          console.warn("     Make sure 'ai_logs' has user_input, ai_output, model_name, latency_ms, and tokens columns.");
+        }
+      } else {
+        console.log("✅ [Edge LLM] Successfully logged to Supabase 'ai_logs'! Returned record:", data);
+      }
+    } catch (e) {
+      console.error("❌ [Edge LLM] Unexpected exception during Supabase logging:", e);
+    }
+  } else {
+    console.warn("⚠️ [Edge LLM] Supabase client is null — check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local");
+  }
+  console.groupEnd();
+
   return {
     assistantMessage,
     parsed: {
@@ -190,5 +248,7 @@ export async function runEdgeChat(
     },
     usage: null,
     raw,
+    tps,
   };
 }
+

@@ -639,6 +639,7 @@ async function generate(prompt: string | ChatMLMessage[], reqId: number, _durati
       }
 
       decoded = await tokenizer.decode(generatedTokenIds2, { skip_special_tokens: true });
+      generatedTokenIds.push(...generatedTokenIds2);
       console.log("[EdgeLLM Worker] Phase 2 decoded output:", decoded.slice(0, 300));
     } else {
       console.warn("🔧 [EdgeLLM Worker] Tool call parse failed — using Phase 1 output as-is.");
@@ -648,10 +649,11 @@ async function generate(prompt: string | ChatMLMessage[], reqId: number, _durati
   // ── Final: clean and post ─────────────────────────────────────────────────
   const endTime = performance.now();
   const elapsed = (endTime - startTime) / 1000;
-  console.log(`[EdgeLLM Worker] Total ${elapsed.toFixed(2)}s. Decoding final output.`);
+  const tps = elapsed > 0 ? generatedTokenIds.length / elapsed : 0;
+  console.log(`[EdgeLLM Worker] Total ${elapsed.toFixed(2)}s, ${tps.toFixed(2)} tokens/sec. Decoding final output.`);
 
   const cleanedText = parseJsonResponse(decoded);
-  self.postMessage({ type: "DONE", reqId, text: cleanedText.trim() });
+  self.postMessage({ type: "DONE", reqId, text: cleanedText.trim(), tps });
 }
 
 // ─── Message handler ──────────────────────────────────────────────────────────

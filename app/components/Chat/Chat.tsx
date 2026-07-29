@@ -15,6 +15,7 @@ interface Message {
   text: string;
   sender: "user" | "system";
   rawJson?: string;
+  tps?: number;
 }
 
 type MessageLike = {
@@ -22,6 +23,7 @@ type MessageLike = {
   text: string;
   sender: "user" | "system";
   rawJson?: string;
+  tps?: number;
 };
 
 interface VideoContext {
@@ -1400,6 +1402,7 @@ export default function Chat({
         text: aiText,
         sender: "system",
         rawJson: data?.raw,
+        tps: data?.tps,
       };
 
       setMessages((prev) => [...prev, botMessage]);
@@ -1587,6 +1590,11 @@ export default function Chat({
                   }`}
               >
                 {msg.text}
+                {msg.tps !== undefined && (
+                  <div className="mt-2 text-[10px] opacity-70 font-mono">
+                    ⚡ {msg.tps.toFixed(1)} tokens/sec
+                  </div>
+                )}
               </div>
             </div>
           );

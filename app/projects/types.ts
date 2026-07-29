@@ -6,4 +6,6 @@ export type Project = {
   duration: string;
   resolution: string;
   status: "draft" | "exported" | "processing";
+  edits?: any[];
+  muteEdits?: any[];
 };

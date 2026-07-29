@@ -147,8 +147,8 @@ def main():
     training_args = TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=5,                 # Train for 5 epochs
-        per_device_train_batch_size=2,      # Small batch size to optimize memory
-        gradient_accumulation_steps=2,      # Accumulate gradients for stable steps
+        per_device_train_batch_size=4,      # Batch size 4 for balanced GPU memory & speed
+        gradient_accumulation_steps=1,      # Update weights every step
         learning_rate=5e-5,                 # Standard learning rate for SFT
         weight_decay=0.01,
         logging_steps=1,

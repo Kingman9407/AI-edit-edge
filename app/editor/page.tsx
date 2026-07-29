@@ -354,11 +354,20 @@ function VideoEditorComponent() {
         duration: formatDurationString(duration),
         resolution: formatResolutionString(videoWidth, videoHeight),
         status: existing?.status ?? "draft",
+        edits,
+        muteEdits,
+        audioOverlays: audioOverlays.map((o) => ({
+          id: o.id,
+          videoStart: o.videoStart,
+          videoEnd: o.videoEnd,
+          volume: o.volume,
+          label: o.label,
+        })),
       });
 
       return id;
     });
-  }, [videoFile, duration, videoWidth, videoHeight]);
+  }, [videoFile, duration, videoWidth, videoHeight, edits, muteEdits, audioOverlays]);
 
 
   const buildClipSnapshotSignature = useCallback(
