@@ -1258,7 +1258,7 @@ export default function Chat({
           : undefined,
       };
 
-      let data: { assistantMessage?: string; parsed?: { assistant_message?: string; status?: string; follow_up?: string; actions?: ModelAction[] }; usage?: unknown; raw?: string } | null = null;
+      let data: { assistantMessage?: string; parsed?: { assistant_message?: string; status?: string; follow_up?: string; actions?: ModelAction[] }; usage?: unknown; raw?: string; tps?: number } | null = null;
 
       if (inferenceMode.startsWith("edge")) {
         // ─── Edge (local) path ─────────────────────────────────────────────────
