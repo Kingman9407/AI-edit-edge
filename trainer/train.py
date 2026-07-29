@@ -14,9 +14,25 @@ def main():
     print("        LOCAL LLM FINE-TUNER (SmolLM2-135M - GPU ACCELERATED)")
     print("=" * 60)
     
-    # 1. Determine active hardware accelerator (Apple Silicon GPU 'mps' on Mac)
-    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    # 1. Determine active hardware accelerator
+    # Priority: CUDA (Colab/Cloud GPU) → MPS (Apple Silicon Mac) → CPU
+    if torch.cuda.is_available():
+        device = "cuda"
+        torch_dtype = torch.float16   # FP16 is 2× faster on CUDA GPUs
+        use_fp16 = True
+    elif torch.backends.mps.is_available():
+        device = "mps"
+        torch_dtype = torch.float32   # MPS requires FP32
+        use_fp16 = False
+    else:
+        device = "cpu"
+        torch_dtype = torch.float32
+        use_fp16 = False
+
     print(f"🚀 Active Accelerator Device: {device.upper()}")
+    if device == "cuda":
+        print(f"   GPU: {torch.cuda.get_device_name(0)}")
+        print(f"   VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
     
     # 2. Check for dataset existence
     dataset_file = "training_data.jsonl"
@@ -40,7 +56,7 @@ def main():
     print(f"📥 Loading model weights strictly from local folder: {model_path} ...")
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
-        torch_dtype=torch.float32,  # Optimized format for Apple Silicon MPS
+        dtype=torch_dtype,           # FP16 on CUDA, FP32 on MPS/CPU
         local_files_only=True
     )
     model = model.to(device)
@@ -146,14 +162,16 @@ def main():
     
     training_args = TrainingArguments(
         output_dir=output_dir,
-        num_train_epochs=5,                 # Train for 5 epochs
-        per_device_train_batch_size=4,      # Batch size 4 for balanced GPU memory & speed
-        gradient_accumulation_steps=1,      # Update weights every step
-        learning_rate=5e-5,                 # Standard learning rate for SFT
+        num_train_epochs=5,                         # Train for 5 epochs
+        per_device_train_batch_size=4,              # Batch size 4 for balanced GPU memory & speed
+        gradient_accumulation_steps=1,              # Update weights every step
+        learning_rate=5e-5,                         # Standard learning rate for SFT
         weight_decay=0.01,
         logging_steps=1,
-        save_strategy="no",                 # Only save final weights
-        use_cpu=False if device == "mps" else True,
+        save_strategy="no",                         # Only save final weights
+        fp16=use_fp16,                              # FP16 enabled on CUDA, disabled on MPS/CPU
+        use_cpu=(device == "cpu"),                  # Only force CPU if no GPU is available
+        dataloader_pin_memory=(device == "cuda"),   # pin_memory only works on CUDA
         report_to="none"
     )
 
@@ -168,7 +186,7 @@ def main():
     )
 
     # 7. Execute Fine-Tuning
-    print("\n🎬 Starting Fine-Tuning on your MacBook GPU...")
+    print(f"\n🎬 Starting Fine-Tuning on {device.upper()} ({'Colab GPU' if device == 'cuda' else 'MacBook GPU' if device == 'mps' else 'CPU'})...")
     print("-" * 60)
     trainer.train()
     print("-" * 60)

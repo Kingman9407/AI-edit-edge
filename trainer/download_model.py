@@ -6,11 +6,20 @@ local_dir = "./SmolLM2-135M-Instruct"
 
 print(f"📥 Starting download of 'HuggingFaceTB/SmolLM2-135M-Instruct' into your project folder: {os.path.abspath(local_dir)}")
 
-# Download the complete model repository locally
+# Download the necessary PyTorch model and tokenizer files locally
 snapshot_download(
     repo_id="HuggingFaceTB/SmolLM2-135M-Instruct",
     local_dir=local_dir,
-    local_dir_use_symlinks=False
+    local_dir_use_symlinks=False,
+    ignore_patterns=[
+        "onnx/*", 
+        "runs/*", 
+        "*.bin", 
+        "*results.json", 
+        "trainer_state.json", 
+        "README.md", 
+        ".gitattributes"
+    ]
 )
 
 print(f"\n✅ Success! All model files are downloaded and saved in: {os.path.abspath(local_dir)}")
