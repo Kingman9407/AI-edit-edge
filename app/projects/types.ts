@@ -8,4 +8,5 @@ export type Project = {
   status: "draft" | "exported" | "processing";
   edits?: any[];
   muteEdits?: any[];
+  audioOverlays?: any[];
 };

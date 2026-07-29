@@ -30,7 +30,7 @@ export function useEdgeLLM(): EdgeLLMState {
 
   const workerRef = useRef<Worker | null>(null);
   const reqIdRef = useRef(0);
-  const resolversRef = useRef<Map<number, { resolve: (val: { text: string; tps: number }) => void, reject: (err: Error) => void, onToken?: (val: string) => void }>>(new Map());
+  const resolversRef = useRef<Map<number, { resolve: (val: { text: string; tps: number } | string) => void, reject: (err: Error) => void, onToken?: (val: string) => void }>>(new Map());
 
   // Initialize Web Worker
   useEffect(() => {
@@ -105,10 +105,10 @@ export function useEdgeLLM(): EdgeLLMState {
   }, []);
 
   const clearCache = useCallback((): Promise<string> => {
-    return new Promise((resolve, reject) => {
+    return new Promise<string>((resolve, reject) => {
       if (!workerRef.current) return reject(new Error("Worker not initialized"));
       const reqId = reqIdRef.current++;
-      resolversRef.current.set(reqId, { resolve, reject });
+      resolversRef.current.set(reqId, { resolve: resolve as (val: { text: string; tps: number } | string) => void, reject });
       workerRef.current.postMessage({ type: "CLEAR_CACHE", payload: { reqId } });
     });
   }, []);
