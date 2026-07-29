@@ -18,7 +18,10 @@ def main():
     # Priority: CUDA (Colab/Cloud GPU) → MPS (Apple Silicon Mac) → CPU
     if torch.cuda.is_available():
         device = "cuda"
-        torch_dtype = torch.float16   # FP16 is 2× faster on CUDA GPUs
+        # Always load model in FP32 — AMP (fp16=True) will cast to FP16
+        # internally during the forward pass. Loading in FP16 directly
+        # causes "ValueError: Attempting to unscale FP16 gradients."
+        torch_dtype = torch.float32
         use_fp16 = True
     elif torch.backends.mps.is_available():
         device = "mps"
