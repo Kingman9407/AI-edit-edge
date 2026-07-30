@@ -25,6 +25,7 @@ from training_data.c10_context_aware      import examples as c10
 from training_data.c11_schema_strictness  import examples as c11
 from training_data.c12_operation_whitelist import examples as c12
 from training_data.c14_merge_concat  import examples as c14
+from training_data.c15_undo_edits    import examples as c15
 
 ALL_EXAMPLES = (
     c01 + c02 + c03 + c04 +
@@ -32,7 +33,7 @@ ALL_EXAMPLES = (
     c07 +
     c08 + c09 + c10 +
     c11 + c12 +
-    c14
+    c14 + c15
 )
 
 CATEGORY_COUNTS = {
@@ -48,4 +49,5 @@ CATEGORY_COUNTS = {
     "c11_schema_strictness":  len(c11),
     "c12_operation_whitelist": len(c12),
     "c14_merge_concat":         len(c14),
+    "c15_undo_edits":         len(c15),
 }

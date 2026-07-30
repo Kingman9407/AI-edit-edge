@@ -1325,6 +1325,7 @@ function VideoEditorComponent() {
                 }}
                 onAddEdit={addEdit}
                 onAddMute={addMuteEdit}
+                onUndoEdits={undoEdits}
                 onPlanSelect={setPlanId}
                 activeTimeline={keptSegments}
                 onActivateMerge={() => setMergeActive(true)}

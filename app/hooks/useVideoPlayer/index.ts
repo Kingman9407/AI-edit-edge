@@ -796,6 +796,11 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
   const clearEdits = () => setEdits([]);
   const undoLastEdit = () =>
     setEdits((prev) => (prev.length ? prev.slice(0, -1) : prev));
+  const undoEdits = (count: number) => {
+    // The user requested to keep max undo count to 2 for now.
+    const maxCount = Math.min(count, 2);
+    setEdits((prev) => (prev.length >= maxCount ? prev.slice(0, -maxCount) : []));
+  };
   const removeEdit = (id: string) =>
     setEdits((prev) => prev.filter((edit) => edit.id !== id));
 
@@ -910,6 +915,7 @@ export function useVideoPlayer(options: UseVideoPlayerOptions = {}) {
     addEdit,
     clearEdits,
     undoLastEdit,
+    undoEdits,
     removeEdit,
     captureFrame,
     seekToTime,

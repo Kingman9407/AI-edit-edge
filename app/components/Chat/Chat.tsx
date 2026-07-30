@@ -72,6 +72,7 @@ type ModelAction = {
   reason?: string | null;
   audioFileIndex?: number | null;
   volume?: number | null;
+  count?: number | null;
 };
 
 type MultiClipFile = {
@@ -165,6 +166,7 @@ interface ChatProps {
   audioOverlays?: { videoStart: number; videoEnd: number; label?: string }[];
   /** Called when the AI requests a merge — activates merge mode in the parent */
   onActivateMerge?: () => void;
+  onUndoEdits?: (count: number) => void;
 }
 
 const createMessageId = () => {
@@ -220,6 +222,7 @@ export default function Chat({
   tokenUsage,
   activeTimeline = [],
   onActivateMerge,
+  onUndoEdits,
   allLoadedFiles = [],
   allClipSnapshots = [],
 }: ChatProps) {
@@ -748,6 +751,18 @@ export default function Chat({
           applied += 1;
         });
       };
+
+      if (actionType === "undo") {
+        const count = Number(action?.count) || 1;
+        if (onUndoEdits) {
+          onUndoEdits(count);
+          pushSystemMessage(`Undoing last ${count} edit${count > 1 ? "s" : ""}.`);
+          applied += 1;
+        } else {
+          pushSystemMessage("Undo is not supported in this view.");
+        }
+        return;
+      }
 
       if (["trim", "cut", "remove", "delete"].includes(actionType)) {
         const start = Number(action?.start);
