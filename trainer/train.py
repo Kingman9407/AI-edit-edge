@@ -37,7 +37,16 @@ def main():
         print(f"   GPU: {torch.cuda.get_device_name(0)}")
         print(f"   VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
     
-    # 2. Check for dataset existence
+    # 2. Automatically prepare dataset from Python files
+    print("\n🔄 Automatically building training dataset...")
+    import sys
+    sys.path.append(os.path.dirname(__file__))
+    try:
+        import prepare_data
+        prepare_data.main()
+    except Exception as e:
+        print(f"⚠️ Warning: Could not run prepare_data.py automatically: {e}")
+
     dataset_file = "training_data.jsonl"
     if not os.path.exists(dataset_file):
         print(f"❌ Error: Dataset file '{dataset_file}' not found!")
