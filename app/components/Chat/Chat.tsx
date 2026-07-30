@@ -1,22 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Send, Bot, User, ChevronDown, MoreHorizontal, Cloud, Cpu } from "lucide-react";
 import { useEdgeLLM } from "@/app/hooks/useEdgeLLM";
 import { runEdgeChat } from "@/app/components/Chat/EdgeChatRunner";
 import { formatTime } from "@/app/backend/functions/formatTime";
 import { normalizeSegments, type Segment } from "@/app/backend/functions/segments";
-import { PLAN_CONFIGS, PlanId, PLAN_ORDER } from "@/app/backend/functions/plans";
+import { PLAN_CONFIGS, PlanId } from "@/app/backend/functions/plans";
 import { useFirebaseAuth } from "@/app/context/FirebaseAuthContext";
 import { signOut } from "firebase/auth";
 import { auth } from "@/app/lib/firebase";
 import { useRouter } from "next/navigation";
+import type { Message, AudioSegment, ChatSession, InferenceMode } from "./types";
+import ChatMessage from "./components/ChatMessage";
+import ChatTypingIndicator from "./components/ChatTypingIndicator";
+import SegmentHighlights from "./components/SegmentHighlights";
+import ChatInputBar from "./components/ChatInputBar";
+import ChatMenu from "./components/ChatMenu";
+import EdgeConfirmPanel from "./components/EdgeConfirmPanel";
+import EdgeModelBanners from "./components/EdgeModelBanners";
 
-interface Message {
-  id: string;
-  text: string;
-  sender: "user" | "system";
-  rawJson?: string;
-  tps?: number;
-}
 
 type MessageLike = {
   id?: string | number;
@@ -26,92 +26,6 @@ type MessageLike = {
   tps?: number;
 };
 
-interface VideoContext {
-  name: string;
-  type: string;
-  sizeBytes: number;
-  duration: number;
-  width: number;
-  height: number;
-  currentTime: number;
-  trimStart: number;
-  trimEnd: number;
-  isEditorMode: boolean;
-}
-
-type AudioSegment = {
-  start: number;
-  end: number;
-  transcript: string;
-  category: "speech" | "music" | "sfx";
-};
-
-type ClipSegment = {
-  id: string;
-  start: number;
-  end: number;
-  reason?: string;
-};
-
-type SuggestionSegment = {
-  start: number;
-  end: number;
-  note: string;
-};
-
-type VideoInsight = {
-  time: number;
-  description: string;
-};
-
-type ModelAction = {
-  type?: string;
-  start?: number | null;
-  end?: number | null;
-  clip?: number | null;
-  reason?: string | null;
-  audioFileIndex?: number | null;
-  volume?: number | null;
-  count?: number | null;
-};
-
-type MultiClipFile = {
-  id: string;
-  name: string;
-  type: string;
-  sizeBytes: number;
-};
-
-type ClipSnapshot = {
-  id: string;
-  name: string;
-  type: string;
-  sizeBytes: number;
-  duration: number;
-  width: number;
-  height: number;
-  audioSegments: AudioSegment[];
-  audioStatus: "idle" | "processing" | "done" | "error" | "no-audio";
-  audioError: string | null;
-  videoInsights: VideoInsight[];
-  sceneChanges: number[];
-  edits: ClipSegment[];
-};
-
-type ChatMemory = {
-  lastIntent?: string;
-  lastTrim?: { start: number; end: number };
-  clipCount?: number;
-  lastExportAt?: number;
-};
-
-type ChatSession = {
-  id: string;
-  title: string;
-  messages: Message[];
-  createdAt: number;
-  updatedAt: number;
-};
 
 interface ChatProps {
   planId: PlanId;
@@ -257,8 +171,11 @@ export default function Chat({
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [memory, setMemory] = useState<ChatMemory | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [inferenceMode, setInferenceMode] = useState<"cloud" | "edge-int8" | "edge-fp16" | "edge-fp32">("cloud");
+  const [inferenceMode, setInferenceMode] = useState<InferenceMode>("cloud");
   const [showEdgeConfirm, setShowEdgeConfirm] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const prevEdgeLLMStatusRef = useRef<string>("idle");
   const edgeLLM = useEdgeLLM();
   const { user: authUser } = useFirebaseAuth();
   const router = useRouter();
@@ -472,14 +389,29 @@ export default function Chat({
   }, [status, statusLog.length]);
 
   const handleNewChat = () => {
+    // Cancel any in-flight request before switching
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsProcessing(false);
+    setStatus(null);
     const session = createSession(defaultMessages);
     setSessions((prev) => [session, ...prev]);
     setCurrentSessionId(session.id);
     setMessages(session.messages);
     setIsHistoryOpen(false);
+    setIsMenuOpen(false);
   };
 
   const handleSelectSession = (sessionId: string) => {
+    // Cancel any in-flight request before switching chats
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsProcessing(false);
+    setStatus(null);
     const session = sessions.find((item) => item.id === sessionId);
     if (!session) return;
     setCurrentSessionId(session.id);
@@ -1123,6 +1055,10 @@ export default function Chat({
 
   const submitMessage = async (text: string) => {
     if (!text.trim()) return;
+    if (isProcessing) return;
+    setIsProcessing(true);
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     const userMessage: Message = {
       id: createMessageId(),
@@ -1321,10 +1257,14 @@ export default function Chat({
         for (let attempt = 1; attempt <= maxParseRetries; attempt += 1) {
           console.log("AI Request:", { url: "/api/chat", attempt, payload: requestBody });
 
+          // Abort if the user switched chat or started a new one
+          if (abortController.signal.aborted) throw new Error("Request cancelled.");
+
           res = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(requestBody),
+            signal: abortController.signal,
           });
 
           raw = await res.text();
@@ -1424,18 +1364,24 @@ export default function Chat({
       pushStatus("Ready. Waiting for your next instruction.");
     } catch (error) {
       console.error(error);
-      const errorText =
-        error instanceof Error ? error.message : "Error connecting to AI";
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: createMessageId(),
-          text: `Error: ${errorText}`,
-          sender: "system",
-        },
-      ]);
+      const isAborted =
+        (error instanceof Error && error.name === "AbortError") ||
+        (error instanceof Error && error.message === "Request cancelled.");
+      if (!isAborted) {
+        const errorText =
+          error instanceof Error ? error.message : "Error connecting to AI";
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: createMessageId(),
+            text: `Error: ${errorText}`,
+            sender: "system",
+          },
+        ]);
+      }
     } finally {
+      setIsProcessing(false);
+      abortControllerRef.current = null;
       setStatus(null);
     }
   };
@@ -1562,7 +1508,34 @@ export default function Chat({
     scrollToBottom();
   }, [messages, status, scrollToBottom]);
 
+  // ── Edge model status watcher: push in-chat notifications on state changes ──
+  useEffect(() => {
+    const prev = prevEdgeLLMStatusRef.current;
+    const curr = edgeLLM.status;
+    if (prev === curr) return;
+    prevEdgeLLMStatusRef.current = curr;
 
+    if (curr === "downloading") {
+      pushSystemMessage("⏬ Downloading edge model... please wait.");
+    } else if (curr === "loading") {
+      pushSystemMessage("⚙️ Loading model into memory...");
+    } else if (curr === "ready") {
+      const formatLabel = inferenceMode === "edge-fp16"
+        ? "FP16"
+        : inferenceMode === "edge-fp32"
+          ? "FP32"
+          : "INT8";
+      pushSystemMessage(`✅ Edge model (${formatLabel}) is ready! You can now chat on-device.`);
+    } else if (curr === "error") {
+      pushSystemMessage(`❌ Edge model failed to load: ${edgeLLM.error ?? "Unknown error"}. Switched back to Cloud.`);
+      setInferenceMode("cloud");
+    } else if (curr === "idle" && prev !== "idle") {
+      // Model was deleted/reset
+      pushSystemMessage("🗑️ Edge model removed. Switched back to Cloud.");
+      setInferenceMode("cloud");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edgeLLM.status]);
 
   const handleEdgeConfirm = (format: "int8" | "fp16" | "fp32") => {
     setInferenceMode(`edge-${format}`);
@@ -1573,447 +1546,96 @@ export default function Chat({
   return (
     <div className="flex h-full min-h-[520px] max-h-[82vh] flex-col overflow-hidden rounded-3xl border border-zinc-800/70 bg-gradient-to-b from-zinc-900/90 via-zinc-950/95 to-zinc-950/98 backdrop-blur-2xl shadow-2xl shadow-black/40">
 
-
-      {/* Messages Area */}
+      {/* ── Messages Area ── */}
       <div className="flex-1 overflow-y-auto px-5 py-6 space-y-5 overscroll-y-contain scroll-smooth bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.08),transparent_45%)]">
-        {messages.map((msg) => {
-          const isUser = msg.sender === "user";
-          return (
-            <div
-              key={msg.id}
-              className={`flex items-end gap-2.5 ${isUser ? "flex-row-reverse" : "flex-row"
-                }`}
-            >
-              {/* Avatar */}
-              <div
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg shadow-sm ${isUser
-                    ? "bg-gradient-to-br from-blue-500 to-blue-600"
-                    : "bg-gradient-to-br from-zinc-700 to-zinc-800 border border-zinc-700/50"
-                  }`}
-              >
-                {isUser ? (
-                  <User size={14} className="text-white" />
-                ) : (
-                  <Bot size={14} className="text-zinc-300" />
-                )}
-              </div>
-              {/* Bubble */}
-              <div
-                className={`max-w-[78%] whitespace-pre-line rounded-2xl px-4 py-3 text-[13px] leading-relaxed shadow-md transition-all ${isUser
-                    ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-md"
-                    : "bg-zinc-800/80 text-zinc-200 rounded-bl-md border border-zinc-700/40"
-                  }`}
-              >
-                {msg.text}
-                {msg.tps !== undefined && (
-                  <div className="mt-2 text-[10px] opacity-70 font-mono">
-                    ⚡ {msg.tps.toFixed(1)} tokens/sec
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-
-        {/* Typing / Progress indicator */}
-        {status || statusLog.length ? (
-          <div className="flex items-end gap-2.5">
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-zinc-700 to-zinc-800 border border-zinc-700/50 shadow-sm">
-              <Bot size={14} className="text-zinc-300" />
-            </div>
-            <div className="max-w-[78%] rounded-2xl rounded-bl-md border border-zinc-700/40 bg-zinc-800/80 px-4 py-3 shadow-md">
-              {/* Typing dots */}
-              <div className="flex items-center gap-1 mb-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "0ms" }}></span>
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "150ms" }}></span>
-                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-bounce" style={{ animationDelay: "300ms" }}></span>
-              </div>
-              <div
-                ref={statusScrollRef}
-                className="max-h-28 space-y-0.5 overflow-y-auto pr-2 text-[11px] text-zinc-400"
-              >
-                {statusLog.map((line, index) => {
-                  const isLatest = index === statusLog.length - 1 && status;
-                  return (
-                    <div
-                      key={`${line}-${index}`}
-                      className={`transition-colors ${isLatest ? "text-zinc-200" : "text-zinc-500"
-                        }`}
-                    >
-                      {isLatest ? "⚡ " : "✓ "}{line}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        ) : null}
+        {messages.map((msg) => (
+          <ChatMessage key={msg.id} msg={msg} />
+        ))}
+        <ChatTypingIndicator
+          status={status}
+          statusLog={statusLog}
+          statusScrollRef={statusScrollRef}
+        />
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Segment Highlights */}
-      {audioSegments.length ? (
-        <div className="border-t border-zinc-800/50 bg-zinc-950/50 px-4 py-3">
-          <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-zinc-500">
-            <span>Segment Highlights</span>
-            <span className="text-[10px] font-medium text-zinc-500">
-              {audioSegments.length} segments
-            </span>
-          </div>
-          <div className="mt-3 max-h-32 space-y-2 overflow-y-auto text-xs text-zinc-300">
-            {audioSegments.map((segment, index) => {
-              const range = `${formatTime(segment.start)}-${formatTime(
-                segment.end
-              )}`;
-              const note = buildSegmentNote(segment);
-              return (
-                <div
-                  key={`${segment.start}-${segment.end}-${index}`}
-                  className="flex items-center justify-between gap-2 rounded-xl border border-zinc-800/60 bg-zinc-900/60 px-3 py-2 transition-colors hover:border-blue-500/40 hover:bg-zinc-900/80"
-                >
-                  <div className="min-w-0">
-                    <div className="text-zinc-200 text-[12px] font-medium">{range}</div>
-                    <div className="text-[11px] text-zinc-500">{note}</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void submitMessage(buildQuickPrompt(segment))}
-                    className="shrink-0 rounded-full border border-zinc-700/60 bg-zinc-800/80 px-3 py-1 text-[11px] text-zinc-300 transition-all hover:bg-blue-500/20 hover:border-blue-500/40 hover:text-white"
-                  >
-                    Ask AI
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
+      {/* ── Segment Highlights ── */}
+      <SegmentHighlights
+        segments={audioSegments}
+        onAskAbout={(prompt) => void submitMessage(prompt)}
+      />
 
-      {/* Input Area */}
+      {/* ── Input Area ── */}
       <div className="border-t border-zinc-800/50 bg-gradient-to-r from-zinc-950/90 via-zinc-900/50 to-zinc-950/90 p-4 relative">
+
+        {/* Menu panel */}
         {isMenuOpen && (
-          <div className="absolute bottom-[calc(100%+8px)] left-4 w-[calc(100%-32px)] max-h-[50vh] overflow-y-auto rounded-3xl border border-zinc-700/60 bg-zinc-900/95 p-5 shadow-2xl z-50 backdrop-blur-xl flex flex-col gap-6 custom-scrollbar">
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">Menu</span>
-              <button
-                type="button"
-                onClick={handleNewChat}
-                className="rounded-full border border-zinc-700/60 bg-zinc-800/40 px-3 py-1 text-[10px] font-medium text-zinc-300 transition-all hover:border-emerald-400/60 hover:bg-emerald-500/10 hover:text-white flex items-center gap-1"
-              >
-                + New Chat
-              </button>
-            </div>
-
-            {/* User Profile */}
-            {authUser && (
-              <div className="space-y-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Account</div>
-                <div className="flex items-center justify-between bg-zinc-900/40 border border-zinc-800/50 p-2 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-[13px] overflow-hidden shadow-sm">
-                      {authUser.photoURL ? (
-                        <img src={authUser.photoURL} alt="Avatar" className="w-full h-full object-cover" />
-                      ) : (
-                        authUser.displayName?.charAt(0) || "U"
-                      )}
-                    </div>
-                    <div className="flex flex-col gap-[2px]">
-                      <span className="text-[12px] font-semibold text-zinc-200 leading-tight">{authUser.displayName || "User"}</span>
-                      <span className="text-[10px] text-zinc-400 font-medium">Beta User</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="text-[11px] font-medium text-red-400 hover:text-red-300 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
-                    </svg>
-                    Logout
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Tokens & Plans */}
-            {tokenUsage ? (
-              <div className="space-y-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Usage</div>
-                <div className="flex flex-wrap items-center gap-3 text-[10px] uppercase tracking-wider">
-                  <div className="flex items-center gap-1.5 rounded-full border border-zinc-800/50 bg-zinc-900/40 px-2 py-1 shadow-sm">
-                    <span className="text-zinc-500 font-medium">Total</span>
-                    <span className="font-mono font-bold text-blue-400">{tokenUsage.total.toLocaleString()}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
-                    <span className="text-zinc-500">Chat</span>
-                    <span className="font-mono text-zinc-300">{tokenUsage.chat.toLocaleString()}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 px-1 border-l border-zinc-800/50">
-                    <span className="text-zinc-500">Audio</span>
-                    <span className="font-mono text-zinc-300">{tokenUsage.audio.toLocaleString()}</span>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {onPlanSelect ? (
-              <div className="space-y-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Plans</div>
-                <div className="flex flex-wrap gap-2">
-                  {PLAN_ORDER.map((planOption) => {
-                    const isActive = planOption === planId;
-                    return (
-                      <button
-                        key={planOption}
-                        type="button"
-                        onClick={() => onPlanSelect(planOption)}
-                        className={`rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition border ${isActive
-                            ? "bg-blue-600/20 text-blue-400 border-blue-500/50"
-                            : "bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:text-white hover:bg-zinc-800"
-                          }`}
-                      >
-                        {PLAN_CONFIGS[planOption].label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-
-            {/* Model Provider Settings */}
-            <div className="space-y-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Model Provider</div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => { setInferenceMode("cloud"); setIsMenuOpen(false); }}
-                  className={`rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition border ${inferenceMode === "cloud"
-                      ? "bg-blue-600/20 text-blue-400 border-blue-500/50"
-                      : "bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:text-white hover:bg-zinc-800"
-                    }`}
-                >
-                  Cloud (OpenRouter)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (edgeLLM.status === "idle" || edgeLLM.status === "error") {
-                      setShowEdgeConfirm(true);
-                      setIsMenuOpen(false);
-                    } else if (!inferenceMode.startsWith("edge")) {
-                      setInferenceMode("edge-int8");
-                      setIsMenuOpen(false);
-                    } else {
-                      setIsMenuOpen(false);
-                    }
-                  }}
-                  className={`rounded-full px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide transition border ${inferenceMode.startsWith("edge")
-                      ? "bg-amber-500/20 text-amber-400 border-amber-500/50"
-                      : "bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:text-white hover:bg-zinc-800"
-                    }`}
-                >
-                  Edge (Local Device)
-                </button>
-              </div>
-            </div>
-
-            {/* Memory */}
-            {memorySummary ? (
-              <div className="space-y-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">Memory</div>
-                <div className="text-xs text-zinc-400 leading-relaxed bg-zinc-950/50 p-3 rounded-xl border border-zinc-800/50">{memorySummary}</div>
-              </div>
-            ) : null}
-
-            {/* History */}
-            <div className="space-y-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">History</div>
-              <div className="space-y-2">
-                {sessions.length ? (
-                  sessions.map((session) => {
-                    const isActive = session.id === currentSessionId;
-                    const updated = new Date(session.updatedAt).toLocaleString();
-                    return (
-                      <button
-                        key={session.id}
-                        type="button"
-                        onClick={() => { handleSelectSession(session.id); setIsMenuOpen(false); }}
-                        className={`flex w-full flex-col rounded-xl border px-3 py-2 text-left transition-all ${isActive
-                            ? "border-blue-500/60 bg-blue-500/10 text-zinc-100 shadow-sm shadow-blue-500/10"
-                            : "border-zinc-800/60 bg-zinc-950/60 hover:border-blue-500/40 hover:bg-zinc-900/60"
-                          }`}
-                      >
-                        <span className="text-sm font-semibold text-zinc-200">
-                          {session.title}
-                        </span>
-                        <span className="text-[11px] text-zinc-500">
-                          {updated}
-                        </span>
-                      </button>
-                    );
-                  })
-                ) : (
-                  <div className="rounded-xl border border-dashed border-zinc-700/50 bg-zinc-950/60 p-4 text-center text-xs text-zinc-500">
-                    No chat history yet.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <ChatMenu
+            authUser={authUser}
+            sessions={sessions}
+            currentSessionId={currentSessionId}
+            planId={planId}
+            inferenceMode={inferenceMode}
+            memorySummary={memorySummary}
+            tokenUsage={tokenUsage}
+            edgeLLM={edgeLLM}
+            onNewChat={handleNewChat}
+            onSelectSession={handleSelectSession}
+            onLogout={handleLogout}
+            onPlanSelect={onPlanSelect}
+            setInferenceMode={setInferenceMode}
+            setShowEdgeConfirm={setShowEdgeConfirm}
+            onClose={() => setIsMenuOpen(false)}
+          />
         )}
 
-        {/* Edge confirm overlay */}
+        {/* Edge model selection panel */}
         {showEdgeConfirm && (
-          <div className="absolute bottom-[calc(100%+8px)] left-4 right-4 z-50 rounded-2xl border border-amber-500/30 bg-zinc-900/98 p-4 shadow-2xl backdrop-blur-xl">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-400">
-                <Cpu size={16} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-zinc-100">Run on your device?</p>
-                <p className="mt-1 text-xs text-zinc-400 leading-relaxed mb-3">
-                  Select a model variant to download and run offline in your browser.
-                </p>
-                <div className="flex flex-col gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleEdgeConfirm("int8")}
-                    className="rounded-full bg-amber-500/20 px-4 py-2 text-xs font-semibold text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors text-left flex justify-between"
-                  >
-                    <span>Edge INT8 (~137 MB)</span><span className="opacity-70 font-normal">Smallest</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleEdgeConfirm("fp16")}
-                    className="rounded-full bg-amber-500/20 px-4 py-2 text-xs font-semibold text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors text-left flex justify-between"
-                  >
-                    <span>Edge FP16 (~270 MB)</span><span className="opacity-70 font-normal">Medium</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleEdgeConfirm("fp32")}
-                    className="rounded-full bg-amber-500/20 px-4 py-2 text-xs font-semibold text-amber-300 border border-amber-500/40 hover:bg-amber-500/30 transition-colors text-left flex justify-between"
-                  >
-                    <span>Edge FP32 (~500 MB)</span><span className="opacity-70 font-normal">Most Accurate</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowEdgeConfirm(false)}
-                    className="rounded-full bg-zinc-800/80 px-4 py-2 mt-1 text-xs font-semibold text-zinc-400 border border-zinc-700/50 hover:text-zinc-200 transition-colors text-center"
-                  >
-                    Cancel
-                  </button>
-                  <div className="mt-3 pt-3 border-t border-amber-500/20">
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await edgeLLM.clearCache();
-                          setShowEdgeConfirm(false);
-                        } catch (e) {
-                          console.error("Failed to clear edge model cache.");
-                        }
-                      }}
-                      className="w-full rounded-full bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors text-center"
-                    >
-                      Delete Downloaded Models
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Edge loading / progress bar */}
-        {inferenceMode.startsWith("edge") && (edgeLLM.status === "downloading" || edgeLLM.status === "loading") && (
-          <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[11px] font-semibold text-amber-300">
-                {edgeLLM.status === "downloading" ? "Downloading model..." : "Loading model into memory..."}
-              </span>
-              <span className="text-[11px] font-mono text-amber-400">
-                {edgeLLM.status === "downloading" ? `${Math.round(edgeLLM.progress * 100)}%` : ""}
-              </span>
-            </div>
-            <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all duration-300"
-                style={{ width: `${Math.round(edgeLLM.progress * 100)}%` }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Edge error */}
-        {inferenceMode.startsWith("edge") && edgeLLM.status === "error" && (
-          <div className="mb-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-2 flex items-center gap-2">
-            <span className="text-[11px] text-red-400 flex-1">{edgeLLM.error ?? "Edge model failed to load."}</span>
-            <button
-              type="button"
-              onClick={() => { edgeLLM.reset(); setInferenceMode("cloud"); }}
-              className="text-[10px] text-red-300 underline hover:no-underline"
-            >
-              Use Cloud
-            </button>
-          </div>
-        )}
-
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all ${isMenuOpen
-                ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
-                : "bg-zinc-800/50 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200"
-              }`}
-          >
-            <MoreHorizontal size={18} />
-          </button>
-
-          {/* Edge Models Toggle */}
-          <button
-            type="button"
-            id="inference-mode-toggle"
-            onClick={() => setShowEdgeConfirm(true)}
-            title="Select Edge Model Variant"
-            className={`flex h-11 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all ${inferenceMode.startsWith("edge")
-                ? edgeLLM.status === "ready"
-                  ? "border-amber-500/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25"
-                  : "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                : "border-zinc-700/50 bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-              }`}
-          >
-            <Cpu size={13} />
-            <span>Edge Models</span>
-          </button>
-
-          <form onSubmit={handleSend} className="relative flex-1 flex items-center">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={
-                inferenceMode.startsWith("edge")
-                  ? edgeLLM.status === "ready"
-                    ? "Ask me (running on-device)..."
-                    : edgeLLM.status === "downloading" || edgeLLM.status === "loading"
-                      ? "Loading edge model..."
-                      : "Ask me to trim, cut, or analyze your video..."
-                  : "Ask me to trim, cut, or analyze your video..."
+          <EdgeConfirmPanel
+            inferenceMode={inferenceMode}
+            edgeLLM={edgeLLM}
+            onConfirm={handleEdgeConfirm}
+            onClose={() => setShowEdgeConfirm(false)}
+            onDeleteModels={async () => {
+              try {
+                await edgeLLM.clearCache();
+                edgeLLM.reset();
+                if (inferenceMode.startsWith("edge")) setInferenceMode("cloud");
+                setShowEdgeConfirm(false);
+              } catch (e) {
+                console.error("Failed to clear edge model cache.");
               }
-              className="w-full rounded-full border border-zinc-700/60 bg-zinc-900/80 py-3 pl-5 pr-14 text-sm text-zinc-100 placeholder:text-zinc-500 shadow-inner shadow-black/20 focus:border-blue-500/80 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-            />
-            <button
-              type="submit"
-              disabled={!input.trim() || (inferenceMode.startsWith("edge") && edgeLLM.status !== "ready")}
-              className="absolute right-2 flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/20 transition-all hover:from-blue-400 hover:to-blue-500 hover:shadow-blue-500/30 disabled:opacity-40 disabled:shadow-none disabled:hover:from-blue-500 disabled:hover:to-blue-600"
-            >
-              <Send size={15} />
-            </button>
-          </form>
-        </div>
+            }}
+          />
+        )}
+
+        {/* Edge model download/error banners */}
+        <EdgeModelBanners
+          inferenceMode={inferenceMode}
+          edgeLLM={edgeLLM}
+          onSwitchCloud={() => { edgeLLM.reset(); setInferenceMode("cloud"); }}
+        />
+
+        {/* Bottom input row */}
+        <ChatInputBar
+          input={input}
+          isProcessing={isProcessing}
+          isMenuOpen={isMenuOpen}
+          inferenceMode={inferenceMode}
+          edgeLLM={edgeLLM}
+          onInputChange={setInput}
+          onSubmit={handleSend}
+          onCancel={() => {
+            if (abortControllerRef.current) {
+              abortControllerRef.current.abort();
+              abortControllerRef.current = null;
+            }
+            setIsProcessing(false);
+            setStatus(null);
+          }}
+          onToggleMenu={() => setIsMenuOpen((prev) => !prev)}
+          onOpenEdgeConfirm={() => setShowEdgeConfirm(true)}
+        />
       </div>
     </div>
   );

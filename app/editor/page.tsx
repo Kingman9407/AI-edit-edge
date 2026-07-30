@@ -1186,27 +1186,12 @@ function VideoEditorComponent() {
     : undefined;
 
   if (!videoSrc) {
+    if (multiFiles.length === 0) {
+      return <VideoUpload onFileUpload={handleMultiUpload} />;
+    }
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-zinc-950 p-4">
-        <div className="flex w-full max-w-xl flex-col items-center justify-center gap-6 rounded-3xl border border-zinc-800 bg-zinc-900/30 p-12 text-center backdrop-blur-2xl shadow-2xl">
-          <div className="h-16 w-16 rounded-full bg-zinc-800/50 flex items-center justify-center text-zinc-500 mb-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-xl md:text-2xl font-bold tracking-tight text-zinc-100">
-              No Video Loaded
-            </h1>
-            <p className="text-zinc-400 text-sm md:text-base">
-              The video for this project isn't in memory.
-            </p>
-          </div>
-          <button
-            onClick={() => setIsDrawerOpen(true)}
-            className="mt-2 inline-flex items-center justify-center rounded-xl bg-white/10 px-6 py-2.5 text-sm font-semibold text-white transition-all hover:bg-white/20 active:scale-95 shadow-lg"
-          >
-            Open Media Library
-          </button>
-        </div>
+        <div className="w-8 h-8 border-4 border-white/20 border-t-emerald-500 rounded-full animate-spin" />
       </div>
     );
   }
@@ -1325,7 +1310,7 @@ function VideoEditorComponent() {
                 }}
                 onAddEdit={addEdit}
                 onAddMute={addMuteEdit}
-                onUndoEdits={undoEdits}
+                onUndoEdits={handleUndoLastChange}
                 onPlanSelect={setPlanId}
                 activeTimeline={keptSegments}
                 onActivateMerge={() => setMergeActive(true)}
