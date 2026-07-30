@@ -45,7 +45,7 @@ trainer/SmolLM2-135M-Instruct/
 trainer/fine_tuned_smollm/
 trainer/__pycache__/
 trainer/logs/
-trainer/training_data/
+
 *.safetensors
 *.bin
 *.pt
