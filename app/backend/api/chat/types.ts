@@ -6,5 +6,6 @@ export type ModelAction = {
   reason?: string | null;
   audioFileIndex?: number | null;
   volume?: number | null;
+  count?: number | null;
 };
 
