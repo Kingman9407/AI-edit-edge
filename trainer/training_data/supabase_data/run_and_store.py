@@ -18,80 +18,80 @@ import sys
 import json
 import argparse
 import time
-import re
 
-# ─── Env / Colab detection ────────────────────────────────────────────────────
-# In Colab, secrets are already in os.environ.
-# Locally, we load from .env.local
+# ─── Detect Colab ────────────────────────────────────────────────────────────
+# userdata.get() only works in the Jupyter kernel, NOT in subprocesses.
+# Instead: set env vars in your Colab cell BEFORE running this script.
+# This script will inherit them automatically.
 try:
-    from google.colab import userdata
+    import google.colab  # noqa: F401
     IS_COLAB = True
-    os.environ["NEXT_PUBLIC_SUPABASE_URL"]      = userdata.get("SUPABASE_URL")
-    os.environ["NEXT_PUBLIC_SUPABASE_ANON_KEY"] = userdata.get("SUPABASE_KEY")
 except ImportError:
     IS_COLAB = False
-    from dotenv import load_dotenv
-    env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.env.local"))
-    load_dotenv(env_path)
 
-# ─── Imports ──────────────────────────────────────────────────────────────────
+# ─── Heavy imports (torch etc.) ───────────────────────────────────────────────
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
-from supabase import create_client, Client
 
-# ─── Config ───────────────────────────────────────────────────────────────────
-# In Colab: path after git clone. Locally: relative to this file.
-if IS_COLAB:
-    MODEL_PATH = "/content/repo/trainer/fine_tuned_smollm"
-    BASE_MODEL  = "/content/repo/trainer/SmolLM2-135M-Instruct"
-else:
-    MODEL_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../fine_tuned_smollm"))
-    BASE_MODEL  = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../SmolLM2-135M-Instruct"))
-
-# Use fine-tuned model if it exists, otherwise fall back to base model
-ACTIVE_MODEL = MODEL_PATH if os.path.exists(MODEL_PATH) else BASE_MODEL
-MODEL_NAME_TAG = "fine_tuned_smollm" if os.path.exists(MODEL_PATH) else "smollm2-base"
-
+# ─── Constants ────────────────────────────────────────────────────────────────
 SYSTEM_INSTRUCTION = (
     "You are Hornet, a video editing AI. Return JSON with 'message' and 'operations' (cut, mute, add_audio_overlay). "
     "If the user mentions time expressions requiring calculation, output a <tool_call> block first. "
     "Otherwise, output the final JSON directly."
 )
-
 MAX_NEW_TOKENS = 256
 
-# ─── Load Supabase ────────────────────────────────────────────────────────────
-sb_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
-sb_key = os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
 
-if not sb_url or not sb_key:
-    print("❌ Missing Supabase credentials! Set SUPABASE_URL and SUPABASE_KEY in Colab Secrets.")
-    sys.exit(1)
+def _load_credentials():
+    """Load Supabase credentials.
+    - In Colab: env vars are set in the notebook cell before running this script.
+    - Locally: load from .env.local via dotenv.
+    """
+    if not IS_COLAB:
+        from dotenv import load_dotenv
+        env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.env.local"))
+        load_dotenv(env_path)
+        print(f"🔑 Loaded credentials from: {env_path}")
+    else:
+        print("🔑 Using credentials from environment (set in Colab cell).")
 
-supabase: Client = create_client(sb_url, sb_key)
+
+def _resolve_model_paths():
+    """Return (model_path, base_model, active_model, model_name_tag)."""
+    if IS_COLAB:
+        model_path = "/content/repo/trainer/fine_tuned_smollm"
+        base_model  = "/content/repo/trainer/SmolLM2-135M-Instruct"
+    else:
+        model_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../fine_tuned_smollm"))
+        base_model  = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../SmolLM2-135M-Instruct"))
+
+    active_model   = model_path if os.path.exists(model_path) else base_model
+    model_name_tag = "fine_tuned_smollm" if os.path.exists(model_path) else "smollm2-base"
+    return active_model, model_name_tag
+
 
 # ─── Load Model ───────────────────────────────────────────────────────────────
-def load_model():
-    if not os.path.exists(ACTIVE_MODEL):
-        print(f"❌ Model not found at: {ACTIVE_MODEL}")
-        print("   Run Cell 3 (Download Base Model) in Colab first.")
+def load_model(active_model: str, model_name_tag: str):
+    if not os.path.exists(active_model):
+        print(f"❌ Model not found at: {active_model}")
+        print("   Run train.py (or download_model.py) first.")
         sys.exit(1)
 
     device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-    print(f"🚀 Loading model from: {ACTIVE_MODEL}")
+    print(f"🚀 Loading model from: {active_model}")
     print(f"   Device: {device.upper()}")
 
-    tokenizer = AutoTokenizer.from_pretrained(ACTIVE_MODEL, local_files_only=True)
+    tokenizer = AutoTokenizer.from_pretrained(active_model, local_files_only=True)
     tokenizer.pad_token = "<|endoftext|>"
 
     model = AutoModelForCausalLM.from_pretrained(
-        ACTIVE_MODEL,
+        active_model,
         torch_dtype=torch.float32,
         local_files_only=True,
     ).to(device)
 
     pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, device=device)
-    print(f"✅ Model loaded! ({MODEL_NAME_TAG})")
+    print(f"✅ Model loaded! ({model_name_tag})")
     return pipe, tokenizer, device
 
 
@@ -127,13 +127,13 @@ def run_input(pipe, tokenizer, user_input: str) -> str:
 
 
 # ─── Store to Supabase ────────────────────────────────────────────────────────
-def store_result(user_input: str, ai_output: str, input_id: str):
+def store_result(supabase, user_input: str, ai_output: str, input_id: str, model_name_tag: str) -> bool:
     """Inserts user_input + ai_output into Supabase ai_logs. Score is left null."""
     try:
         supabase.table("ai_logs").insert({
-            "user_input":  user_input,
-            "ai_output":   ai_output,
-            "model_name":  MODEL_NAME_TAG,
+            "user_input": user_input,
+            "ai_output":  ai_output,
+            "model_name": model_name_tag,
             # score and is_correct are left null — score_logs.py will fill them
         }).execute()
         return True
@@ -144,8 +144,22 @@ def store_result(user_input: str, ai_output: str, input_id: str):
 
 # ─── Main Runner ──────────────────────────────────────────────────────────────
 def main(set_ids: list = None):
-    # Import test inputs
-    sys.path.insert(0, os.path.dirname(__file__))
+    # ── 1. Load credentials (safe to call here, not at import time) ──────────
+    _load_credentials()
+
+    from supabase import create_client, Client
+    sb_url = os.environ.get("NEXT_PUBLIC_SUPABASE_URL")
+    sb_key = os.environ.get("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+    if not sb_url or not sb_key:
+        print("❌ Missing Supabase credentials! Set SUPABASE_URL and SUPABASE_KEY.")
+        sys.exit(1)
+    supabase: Client = create_client(sb_url, sb_key)
+
+    # ── 2. Resolve model paths ────────────────────────────────────────────────
+    active_model, model_name_tag = _resolve_model_paths()
+
+    # ── 3. Import test inputs ─────────────────────────────────────────────────
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from test_inputs import ALL_TEST_SETS
 
     # Filter sets if requested
@@ -157,9 +171,11 @@ def main(set_ids: list = None):
     total = sum(len(s["inputs"]) for s in selected)
     print(f"\n{'='*60}")
     print(f"  HORNET AI — RUN & STORE ({total} inputs across {len(selected)} sets)")
+    print(f"  Model: {model_name_tag}")
     print(f"{'='*60}\n")
 
-    pipe, tokenizer, device = load_model()
+    # ── 4. Load model ─────────────────────────────────────────────────────────
+    pipe, tokenizer, device = load_model(active_model, model_name_tag)
 
     stored_count = 0
     failed_count = 0
@@ -169,8 +185,8 @@ def main(set_ids: list = None):
         print("-" * 50)
 
         for item in test_set["inputs"]:
-            input_id    = item["id"]
-            user_input  = item["user_input"]
+            input_id   = item["id"]
+            user_input = item["user_input"]
 
             print(f"\n  ▶ Input {input_id}: {user_input.splitlines()[-1][:60]}...")
 
@@ -181,7 +197,7 @@ def main(set_ids: list = None):
 
                 print(f"    ← Output ({latency}s): {ai_output[:100]}...")
 
-                ok = store_result(user_input, ai_output, input_id)
+                ok = store_result(supabase, user_input, ai_output, input_id, model_name_tag)
                 if ok:
                     print(f"    ✅ Stored in Supabase")
                     stored_count += 1

@@ -22,17 +22,20 @@ os.environ["TRANSFORMERS_CACHE"]    = cache_dir
 os.environ["TORCH_HOME"]            = cache_dir
 os.environ["HF_DATASETS_CACHE"]     = cache_dir
 
-# ─── Env: Colab Secrets → dotenv fallback ────────────────────────────────────
+# ─── Env: inherited from Colab cell → dotenv fallback for local ─────────────────
 try:
-    from google.colab import userdata
-    os.environ["NEXT_PUBLIC_SUPABASE_URL"]      = userdata.get("SUPABASE_URL")
-    os.environ["NEXT_PUBLIC_SUPABASE_ANON_KEY"] = userdata.get("SUPABASE_KEY")
-    print("🔑 Loaded credentials from Colab Secrets.")
+    import google.colab  # noqa: F401
+    IS_COLAB = True
 except ImportError:
+    IS_COLAB = False
+
+if not IS_COLAB:
     from dotenv import load_dotenv
     _env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.env.local"))
     load_dotenv(_env_path)
     print(f"🔑 Loaded credentials from: {_env_path}")
+else:
+    print("🔑 Using credentials from environment (set in Colab cell).")
 
 import json
 import argparse
