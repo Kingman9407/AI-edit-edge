@@ -64,35 +64,80 @@ def get_nvidia_completion(prompt: str, api_key: str) -> str:
     return completion.choices[0].message.content
 
 
+
 def build_prompt(batch_size: int) -> str:
     return f"""
-You are an expert training data generator for a video editing AI.
-Generate exactly {batch_size} unique and highly diverse user requests and the exact expected JSON output the AI should return.
+You are an expert training data generator for a video editing AI called Hornet.
+Generate exactly {batch_size} unique and highly diverse examples.
 
-The AI's rules:
-- It returns JSON with 'message' (string) and 'operations' (array of objects).
-- Valid operations:
-  - cut: requires start (number) and end (number)
-  - mute: requires start (number) and end (number)
-  - add_audio_overlay: requires url (string), start (number)
+Each example is a user request sent to Hornet along with video metadata context, and Hornet's exact JSON response.
 
-IMPORTANT: Make the user requests conversational and varied. Some should be simple ("cut the first 5 seconds"), some complex ("mute between 10s and 20s and cut the end from 30s to 40s").
+━━━ INPUT FORMAT ━━━
+The user_input always follows this structure:
 
-Return strictly as a JSON object with a single key 'examples' containing a list of objects.
-Each object must have:
-- "user_input": The text the user typed
-- "ai_output": The exact JSON object the AI should return (as a string)
+[VIDEO METADATA]
+Name: <filename>
+Duration: <seconds>s
+Resolution: <WxH>
+Playhead: <seconds>s
+
+[TIMELINE STATE]
+Cuts:
+- <existing cuts or None>
+
+Muted Sections:
+- <existing mutes or None>
+
+Background Music:
+- <existing music or None>
+
+[USER REQUEST]
+<the user's natural language request>
+
+━━━ OUTPUT SCHEMA ━━━
+Hornet returns a JSON object with:
+- "message": a friendly string describing what was done
+- "operations": an array of operation objects
+
+Each operation object has:
+- "operation": one of "cut" | "mute" | "add_audio_overlay"
+- "variation": one of "first" | "last" | "range" | "before_playhead" | "after_playhead"
+- "value": (number) used when variation is "first" or "last" — the N seconds
+- "start": (string) used when variation is "range" — echo the user's exact time string e.g. "1:30" or "90"
+- "end": (string) used when variation is "range" — echo the user's exact time string
+- "unit": always "seconds"
+- "track": (string) only for add_audio_overlay — the filename e.g. "music.mp3"
+- "reason": a short string explaining why
+
+━━━ EXAMPLES ━━━
+cut first N seconds → variation: "first", value: N
+cut last N seconds  → variation: "last",  value: N
+cut from X to Y     → variation: "range",  start: "X", end: "Y"
+cut before playhead → variation: "before_playhead"
+cut after playhead  → variation: "after_playhead"
+same logic for mute; add_audio_overlay uses range with a "track" field
+
+━━━ RULES ━━━
+- user_input MUST include the full [VIDEO METADATA] and [TIMELINE STATE] block
+- ai_output MUST be a JSON string (not a dict), valid and parseable
+- Make requests conversational and varied — simple and complex
+- Include multi-operation examples (cut + mute, cut + add_audio_overlay)
+- Vary video names, durations, resolutions, and existing timeline states
+
+Return ONLY a JSON object with key "examples" containing a list of objects.
+Each object has "user_input" (string) and "ai_output" (JSON string).
 
 Example:
 {{
     "examples": [
         {{
-            "user_input": "cut the video from 0s to 5s",
-            "ai_output": "{{\"message\": \"Cutting the first 5 seconds.\", \"operations\": [{{\"action\": \"cut\", \"start\": 0, \"end\": 5}}]}}"
+            "user_input": "[VIDEO METADATA]\\nName: vlog.mp4\\nDuration: 240.0s\\nResolution: 1920x1080\\nPlayhead: 0.0s\\n\\n[TIMELINE STATE]\\nCuts:\\n- None\\n\\nMuted Sections:\\n- None\\n\\nBackground Music:\\n- None\\n\\n[USER REQUEST]\\ncut the first 8 seconds",
+            "ai_output": "{{\\\"message\\\": \\\"Removed the first 8 seconds of the video.\\\", \\\"operations\\\": [{{\\\"operation\\\": \\\"cut\\\", \\\"variation\\\": \\\"first\\\", \\\"value\\\": 8, \\\"unit\\\": \\\"seconds\\\", \\\"reason\\\": \\\"Remove first 8 seconds\\\"}}]}}"
         }}
     ]
 }}
 """
+
 
 
 def main(batch_size: int = DEFAULT_BATCH_SIZE) -> int:
@@ -164,7 +209,7 @@ def main(batch_size: int = DEFAULT_BATCH_SIZE) -> int:
             print(f"  [Error inserting row]: {e}")
 
     print(f"\n{'='*60}")
-    print(f"🎉 Inserted {success_count} synthetic logs into Supabase 'ai_logs'!")
+    print(f"🎉 Requested {batch_size} examples. Inserted {success_count} synthetic logs into Supabase 'ai_logs'!")
     print(f"{'='*60}\n")
     return success_count
 
