@@ -66,5 +66,17 @@ trainer/*_quantized/
 # Hugging Face & Vercel Blob test scripts
 test_hf.js
 test_fetch.js
-test_url.js
+# Hugging Face & torch model cache (downloaded at runtime, never commit)
+trainer/training_data/supabase_data/.cache/
+trainer/**/.cache/
+.cache/
 
+# xet transfer logs
+trainer/training_data/supabase_data/.cache/xet/
+
+# Python caches inside training_data
+trainer/training_data/__pycache__/
+trainer/training_data/**/__pycache__/
+
+# Generated pipeline output (built at runtime from Supabase)
+trainer/training_data/supabase_data/auto_training_data.jsonl
