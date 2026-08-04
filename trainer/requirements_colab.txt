@@ -1,0 +1,28 @@
+# =============================================================
+# Hornet AI Trainer — Google Colab Requirements
+# =============================================================
+
+# Core ML
+torch>=2.0.0
+transformers>=4.40.0
+datasets>=2.18.0
+accelerate>=0.28.0
+huggingface_hub>=0.22.0
+
+# ONNX Export
+optimum>=1.18.0
+onnxruntime>=1.17.0
+onnxruntime-tools>=1.7.0
+
+# Supabase & Data
+supabase>=2.3.0
+python-dotenv>=1.0.0
+
+# Scoring Model
+sentence-transformers>=2.2.2
+
+# HTTP (for OpenRouter)
+requests>=2.31.0
+
+# Utilities
+numpy>=1.24.0

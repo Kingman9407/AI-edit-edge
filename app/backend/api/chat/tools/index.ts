@@ -6,6 +6,7 @@ import { keepSegmentTool, parseKeepSegmentCall } from "./keepSegment";
 import { mergeVideosTool, parseMergeVideosCall } from "./mergeVideos";
 import { muteSegmentTool, parseMuteSegmentCall } from "./muteSegment";
 import { removeSilenceTool, parseRemoveSilenceCall } from "./removeSilence";
+import { undoTool, parseUndoCall } from "./undoTool";
 
 export const TOOLS = [
   cutSegmentTool,
@@ -15,6 +16,7 @@ export const TOOLS = [
   addAudioOverlayTool,
   muteSegmentTool,
   mergeVideosTool,
+  undoTool,
 ] as const;
 
 /**
@@ -35,5 +37,6 @@ export const parseToolCallToAction = (
   if (name === "export_video")     return parseExportVideoCall();
   if (name === "add_audio_overlay") return parseAddAudioOverlayCall(args);
   if (name === "merge_videos")     return parseMergeVideosCall(args);
+  if (name === "undo")             return parseUndoCall(args);
   return null;
 };

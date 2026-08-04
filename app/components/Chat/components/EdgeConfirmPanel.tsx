@@ -18,6 +18,17 @@ export default function EdgeConfirmPanel({
   onClose,
   onDeleteModels,
 }: EdgeConfirmPanelProps) {
+  const [isDeleting, setIsDeleting] = React.useState(false);
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await onDeleteModels();
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="absolute bottom-[calc(100%+8px)] left-4 right-4 z-50 rounded-2xl border border-amber-500/30 bg-zinc-900/98 p-4 shadow-2xl backdrop-blur-xl">
       <div className="flex items-start gap-3">
@@ -61,10 +72,15 @@ export default function EdgeConfirmPanel({
             <div className="mt-3 pt-3 border-t border-amber-500/20">
               <button
                 type="button"
-                onClick={onDeleteModels}
-                className="w-full rounded-full bg-red-500/10 px-4 py-2 text-xs font-semibold text-red-400 border border-red-500/20 hover:bg-red-500/20 transition-colors text-center"
+                onClick={handleDelete}
+                disabled={isDeleting || edgeLLM.status === "downloading" || edgeLLM.status === "loading"}
+                className={`w-full rounded-full px-4 py-2 text-xs font-semibold text-center transition-colors border ${
+                  isDeleting || edgeLLM.status === "downloading" || edgeLLM.status === "loading"
+                    ? "bg-zinc-800/50 text-zinc-500 border-zinc-700/50 cursor-not-allowed"
+                    : "bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20"
+                }`}
               >
-                Delete Downloaded Models
+                {isDeleting ? "Deleting..." : "Delete Downloaded Models"}
               </button>
             </div>
           </div>

@@ -25,10 +25,7 @@ examples = [
         "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nstop playing at the end",
         "output": "{\"message\":\"I don't control video playback. I can help with timeline edits like cuts and mutes.\",\"operations\":[]}"
     },
-    {
-        "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- 10.0 -> 20.0\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nrestore the cut from 10 to 20 seconds",
-        "output": "{\"message\":\"Restoring or undoing cuts isn't supported. Let me know if you'd like to make a new edit.\",\"operations\":[]}"
-    },
+
     {
         "input": "[VIDEO METADATA]\nName: video.mp4\nDuration: 100.0s\nResolution: 1920x1080\nPlayhead: 0.0s\n\n[TIMELINE STATE]\nCuts:\n- None\n\nMuted Sections:\n- None\n\nBackground Music:\n- None\n\n[USER REQUEST]\nend_all edits",
         "output": "{\"message\":\"That operation isn't supported. Let me know what you'd like to cut, mute, or add.\",\"operations\":[]}"
