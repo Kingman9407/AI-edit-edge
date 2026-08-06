@@ -61,21 +61,6 @@ CHATML_SYSTEM = (
     "Otherwise, output the final JSON directly."
 )
 
-# GLM judge system prompt
-JUDGE_SYSTEM = (
-    "You are a strict evaluator for Hornet, a video editing AI assistant.\n"
-    "Hornet must return a valid JSON object with exactly two keys:\n"
-    "  - \"message\": a friendly string\n"
-    "  - \"operations\": an array of operation objects, each with:\n"
-    "      \"operation\" (cut/mute/add_audio_overlay), "
-    "\"variation\" (first/last/range/before_playhead/after_playhead),\n"
-    "      and the appropriate parameter fields (value, start, end, unit, track, reason).\n\n"
-    "Evaluate whether the RESPONSE correctly and completely fulfils the REQUEST.\n"
-    "Reply with EXACTLY one of:\n"
-    "  PASS: <one-line reason why it is correct>\n"
-    "  FAIL: <one-line reason why it is wrong or incomplete>"
-)
-
 # Output JSONL — lives alongside this file in supabase_data/
 OUTPUT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "auto_training_data.jsonl")
 
@@ -156,47 +141,56 @@ def run_hornet(pipe, tokenizer, user_input: str) -> str:
     return reply.replace("<|im_end|>", "").strip()
 
 
-# ─── GLM judge: PASS or FAIL? ─────────────────────────────────────────────────
-def judge_with_glm(user_input: str, ai_output: str, api_key: str) -> tuple[bool, str]:
+# ─── Ask GLM for expected answer ──────────────────────────────────────────────
+def ask_glm(user_input: str, api_key: str) -> str:
     """
-    Asks GLM to judge whether Hornet's ai_output correctly fulfils the user_input.
-    Returns (is_correct: bool, reason: str).
+    Asks GLM for the correct expected JSON output.
     """
     from openai import OpenAI
-
     client = OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
-    judge_prompt = (
-        f"REQUEST:\n{user_input}\n\n"
-        f"RESPONSE:\n{ai_output}"
-    )
 
     completion = client.chat.completions.create(
         model=NVIDIA_MODEL,
         messages=[
-            {"role": "system", "content": JUDGE_SYSTEM},
-            {"role": "user",   "content": judge_prompt},
+            {"role": "system", "content": SYSTEM_INSTRUCTION},
+            {"role": "user",   "content": user_input},
         ],
-        temperature=0.0,   # Fully deterministic judge
+        temperature=0.2,   # Low temp = deterministic reference
         top_p=1,
-        max_tokens=80,
+        max_tokens=512,
         stream=False,
     )
     raw = completion.choices[0].message.content.strip()
 
-    # Parse "PASS: reason" or "FAIL: reason"
-    upper = raw.upper()
-    if upper.startswith("PASS"):
-        is_correct = True
-        reason = raw[raw.find(":") + 1:].strip() if ":" in raw else "Correct response."
-    elif upper.startswith("FAIL"):
-        is_correct = False
-        reason = raw[raw.find(":") + 1:].strip() if ":" in raw else "Incorrect response."
-    else:
-        # Ambiguous — treat as fail but preserve full response
-        is_correct = False
-        reason = f"[ambiguous verdict] {raw}"
+    # Strip markdown code fences if present
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+        raw = raw.strip()
+        if raw.endswith("```"):
+            raw = raw[:-3].strip()
 
-    return is_correct, reason
+    return raw
+
+
+# ─── JSON Compare ─────────────────────────────────────────────────────────────
+def compare_outputs(ai_output: str, expected_output: str) -> bool:
+    """
+    Checks if Hornet's JSON output matches GLM's expected JSON output.
+    """
+    try:
+        ai_json = json.loads(ai_output)
+        expected_json = json.loads(expected_output)
+        
+        # We only strictly compare the "operations" array.
+        # Messages can vary slightly without breaking correctness.
+        if ai_json.get("operations") == expected_json.get("operations"):
+            return True
+        return False
+    except Exception:
+        # If parsing fails, fallback to direct string match
+        return ai_output.strip() == expected_output.strip()
 
 
 # ─── Store to Supabase ────────────────────────────────────────────────────────
@@ -204,22 +198,24 @@ def store_result(
     supabase,
     user_input: str,
     ai_output: str,
+    expected_output: str,
     is_correct: bool,
-    score_reason: str,
     input_id: str,
     model_name_tag: str,
 ) -> bool:
     """
     Inserts a fully-scored row into ai_logs.
-    score = GLM judge reason string; is_correct = PASS/FAIL verdict.
     """
     try:
+        notes = "JSON Operations Match" if is_correct else "JSON Mismatch"
         supabase.table("ai_logs").insert({
-            "user_input":  user_input,
-            "ai_output":   ai_output,
-            "score":       score_reason,
-            "is_correct":  is_correct,
-            "model_name":  model_name_tag,
+            "user_input":      user_input,
+            "ai_output":       ai_output,
+            "expected_output": expected_output,
+            "score":           100 if is_correct else 0,
+            "is_correct":      is_correct,
+            "model_name":      model_name_tag,
+            "notes":           notes,
         }).execute()
         return True
     except Exception as e:
@@ -359,24 +355,29 @@ def main(set_ids: list = None, interactive: bool = False, list_only: bool = Fals
                 hornet_ms = round(time.time() - t0, 2)
                 print(f"    🤖 Hornet ({hornet_ms}s): {ai_output[:90]}...")
 
-                # ── Step 2: GLM judges the answer ─────────────────────────────
-                t0           = time.time()
-                is_correct, reason = judge_with_glm(user_input, ai_output, nv_key)
-                judge_ms     = round(time.time() - t0, 2)
+                # ── Step 2: GLM generates expected output ─────────────────────
+                t0               = time.time()
+                expected_output  = ask_glm(user_input, nv_key)
+                glm_ms           = round(time.time() - t0, 2)
+                
+                # ── Step 3: Compare JSONs ─────────────────────────────────────
+                is_correct = compare_outputs(ai_output, expected_output)
                 verdict_icon = "✅" if is_correct else "❌"
                 verdict_word = "PASS" if is_correct else "FAIL"
-                print(f"    {verdict_icon} Judge ({judge_ms}s): {verdict_word} — {reason}")
+                
+                print(f"    🌐 GLM ({glm_ms}s): {expected_output[:90]}...")
+                print(f"    {verdict_icon} Verdict: {verdict_word}")
 
-                # ── Step 3: Store to Supabase ─────────────────────────────────
+                # ── Step 4: Store to Supabase ─────────────────────────────────
                 ok = store_result(
-                    supabase, user_input, ai_output,
-                    is_correct, reason, input_id, model_name_tag
+                    supabase, user_input, ai_output, expected_output,
+                    is_correct, input_id, model_name_tag
                 )
                 if ok:
                     grand_stored += 1
                     print(f"    💾 Stored to Supabase")
 
-                # ── Step 4: Append to JSONL if PASS ───────────────────────────
+                # ── Step 5: Append to JSONL if PASS ───────────────────────────
                 if is_correct:
                     append_to_jsonl(user_input, ai_output)
                     batch_passed += 1
