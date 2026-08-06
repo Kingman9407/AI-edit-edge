@@ -1,11 +1,11 @@
 """
 run_and_store.py
 ────────────────
-For each test input:
-  1. Hornet (fine-tuned SmolLM2) runs the input  → stored as ai_output
-  2. NVIDIA GLM runs the same input               → stored as expected_output
-
-score_logs.py then compares ai_output ↔ expected_output to grade Hornet.
+For each selected test batch:
+  1. Hornet (fine-tuned SmolLM2) runs each input → ai_output
+  2. GLM judges the output against the user request → PASS/FAIL + reason
+  3. Result stored to Supabase with is_correct + score (reason) filled immediately
+  4. PASS rows are appended to auto_training_data.jsonl inline — no separate steps needed
 
 Usage:
     python run_and_store.py                  # Run all sets
@@ -33,6 +33,7 @@ NVIDIA_MODEL    = "z-ai/glm-5.2"
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 MAX_NEW_TOKENS  = 256
 
+# System instruction used when running Hornet (must match train.py)
 SYSTEM_INSTRUCTION = (
     "You are Hornet, a video editing AI. "
     "Given a user video editing request with metadata and timeline state, "
@@ -51,6 +52,33 @@ SYSTEM_INSTRUCTION = (
     "Return ONLY the raw JSON object. No markdown, no code fences, no explanation."
 )
 
+# System instruction used when writing ChatML to the training JSONL
+# (must match the system instruction used during SFT training)
+CHATML_SYSTEM = (
+    "You are Hornet, a video editing AI. Return JSON with 'message' and 'operations' "
+    "(cut, mute, add_audio_overlay). "
+    "If the user mentions time expressions requiring calculation, output a <tool_call> block first. "
+    "Otherwise, output the final JSON directly."
+)
+
+# GLM judge system prompt
+JUDGE_SYSTEM = (
+    "You are a strict evaluator for Hornet, a video editing AI assistant.\n"
+    "Hornet must return a valid JSON object with exactly two keys:\n"
+    "  - \"message\": a friendly string\n"
+    "  - \"operations\": an array of operation objects, each with:\n"
+    "      \"operation\" (cut/mute/add_audio_overlay), "
+    "\"variation\" (first/last/range/before_playhead/after_playhead),\n"
+    "      and the appropriate parameter fields (value, start, end, unit, track, reason).\n\n"
+    "Evaluate whether the RESPONSE correctly and completely fulfils the REQUEST.\n"
+    "Reply with EXACTLY one of:\n"
+    "  PASS: <one-line reason why it is correct>\n"
+    "  FAIL: <one-line reason why it is wrong or incomplete>"
+)
+
+# Output JSONL — lives alongside this file in supabase_data/
+OUTPUT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "auto_training_data.jsonl")
+
 
 # ─── Load credentials ─────────────────────────────────────────────────────────
 def _load_credentials():
@@ -63,7 +91,7 @@ def _load_credentials():
         print("🔑 Using credentials from environment (set in Colab cell).")
 
 
-# ─── Resolve model paths ─────────────────────────────────────────────────────
+# ─── Resolve model paths ──────────────────────────────────────────────────────
 def _resolve_model_paths():
     if IS_COLAB:
         model_path = "/content/repo/trainer/fine_tuned_smollm"
@@ -128,60 +156,86 @@ def run_hornet(pipe, tokenizer, user_input: str) -> str:
     return reply.replace("<|im_end|>", "").strip()
 
 
-# ─── Ask GLM for the correct answer ──────────────────────────────────────────
-def ask_glm(user_input: str, api_key: str) -> str:
+# ─── GLM judge: PASS or FAIL? ─────────────────────────────────────────────────
+def judge_with_glm(user_input: str, ai_output: str, api_key: str) -> tuple[bool, str]:
     """
-    Asks NVIDIA GLM (the reference AI) for the correct answer to the same input.
-    This becomes the expected_output that Hornet's output is compared against.
+    Asks GLM to judge whether Hornet's ai_output correctly fulfils the user_input.
+    Returns (is_correct: bool, reason: str).
     """
     from openai import OpenAI
 
     client = OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
+    judge_prompt = (
+        f"REQUEST:\n{user_input}\n\n"
+        f"RESPONSE:\n{ai_output}"
+    )
+
     completion = client.chat.completions.create(
         model=NVIDIA_MODEL,
         messages=[
-            {"role": "system", "content": SYSTEM_INSTRUCTION},
-            {"role": "user",   "content": user_input},
+            {"role": "system", "content": JUDGE_SYSTEM},
+            {"role": "user",   "content": judge_prompt},
         ],
-        temperature=0.2,   # Low temp → deterministic, reliable reference answer
+        temperature=0.0,   # Fully deterministic judge
         top_p=1,
-        max_tokens=512,
+        max_tokens=80,
         stream=False,
     )
     raw = completion.choices[0].message.content.strip()
 
-    # Strip markdown code fences if present
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
+    # Parse "PASS: reason" or "FAIL: reason"
+    upper = raw.upper()
+    if upper.startswith("PASS"):
+        is_correct = True
+        reason = raw[raw.find(":") + 1:].strip() if ":" in raw else "Correct response."
+    elif upper.startswith("FAIL"):
+        is_correct = False
+        reason = raw[raw.find(":") + 1:].strip() if ":" in raw else "Incorrect response."
+    else:
+        # Ambiguous — treat as fail but preserve full response
+        is_correct = False
+        reason = f"[ambiguous verdict] {raw}"
 
-    return raw
+    return is_correct, reason
 
 
 # ─── Store to Supabase ────────────────────────────────────────────────────────
 def store_result(
     supabase,
     user_input: str,
-    ai_output: str,       # Hornet's answer
-    expected_output: str, # GLM's correct answer
+    ai_output: str,
+    is_correct: bool,
+    score_reason: str,
     input_id: str,
     model_name_tag: str,
 ) -> bool:
-    """Inserts a row into ai_logs. score/is_correct are left null for score_logs.py."""
+    """
+    Inserts a fully-scored row into ai_logs.
+    score = GLM judge reason string; is_correct = PASS/FAIL verdict.
+    """
     try:
         supabase.table("ai_logs").insert({
-            "user_input":      user_input,
-            "ai_output":       ai_output,
-            "expected_output": expected_output,
-            "model_name":      model_name_tag,
-            # score and is_correct are intentionally null — score_logs.py fills them
+            "user_input":  user_input,
+            "ai_output":   ai_output,
+            "score":       score_reason,
+            "is_correct":  is_correct,
+            "model_name":  model_name_tag,
         }).execute()
         return True
     except Exception as e:
         print(f"  ⚠️  [Supabase Error for {input_id}]: {e}")
         return False
+
+
+# ─── Append a passing row to the JSONL training file ─────────────────────────
+def append_to_jsonl(user_input: str, ai_output: str):
+    """Formats as ChatML and appends one line to auto_training_data.jsonl."""
+    text  = f"<|im_start|>system\n{CHATML_SYSTEM}<|im_end|>\n"
+    text += f"<|im_start|>user\n{user_input}<|im_end|>\n"
+    text += f"<|im_start|>assistant\n{ai_output}<|im_end|>\n"
+    record = {"text": text}
+    with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 # ─── Interactive batch picker ─────────────────────────────────────────────────
@@ -234,7 +288,7 @@ def main(set_ids: list = None, interactive: bool = False, list_only: bool = Fals
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from test_inputs import ALL_TEST_SETS
 
-    # ── List mode ─────────────────────────────────────────────────────────────
+    # ── List mode ──────────────────────────────────────────────────────────────
     if list_only:
         print("\nAvailable test sets:")
         for i, s in enumerate(ALL_TEST_SETS, 1):
@@ -242,7 +296,7 @@ def main(set_ids: list = None, interactive: bool = False, list_only: bool = Fals
         print(f"\nTotal: {sum(len(s['inputs']) for s in ALL_TEST_SETS)} inputs")
         return
 
-    # ── Resolve which sets to run ─────────────────────────────────────────────
+    # ── Resolve which sets to run ──────────────────────────────────────────────
     if interactive:
         set_ids = pick_sets_interactively(ALL_TEST_SETS)
         if not set_ids:
@@ -257,74 +311,114 @@ def main(set_ids: list = None, interactive: bool = False, list_only: bool = Fals
     total = sum(len(s["inputs"]) for s in selected)
 
     print(f"\n{'='*60}")
-    print(f"  HORNET AI — RUN & STORE")
-    print(f"  Hornet  : fine-tuned SmolLM2  (→ ai_output)")
-    print(f"  GLM     : {NVIDIA_MODEL}  (→ expected_output)")
+    print(f"  🐝 HORNET AI — RUN + JUDGE + EXTRACT")
+    print(f"  Scorer  : GLM ({NVIDIA_MODEL}) as judge")
     print(f"  Sets    : {', '.join(s['name'] for s in selected)}")
     print(f"  Inputs  : {total} total")
+    print(f"  Output  : {OUTPUT_FILE}")
     print(f"{'='*60}\n")
 
-    # ── Load Hornet model once ────────────────────────────────────────────────
+    # ── Load Hornet model once ─────────────────────────────────────────────────
     active_model, model_name_tag = _resolve_model_paths()
     pipe, tokenizer = load_hornet(active_model, model_name_tag)
 
-    stored_count = 0
-    failed_count = 0
+    # ── Ensure output file exists (clear for a fresh run) ─────────────────────
+    # Comment out the open() below if you want to APPEND to an existing file
+    open(OUTPUT_FILE, "w").close()
+    print(f"📄 Cleared {OUTPUT_FILE} — will append as batches complete.\n")
+
+    grand_stored = 0
+    grand_passed = 0
+    grand_failed = 0
+    grand_errors = 0
+    global_idx   = 0
 
     for test_set in selected:
-        print(f"\n📋 {test_set['name']} ({len(test_set['inputs'])} inputs)")
-        print("-" * 50)
+        set_name   = test_set["name"]
+        set_inputs = test_set["inputs"]
 
-        for item in test_set["inputs"]:
+        print(f"\n{'━'*60}")
+        print(f"  📋 BATCH: {set_name}  ({len(set_inputs)} inputs)")
+        print(f"{'━'*60}")
+
+        batch_passed = 0
+        batch_failed = 0
+
+        for item in set_inputs:
             input_id   = item["id"]
             user_input = item["user_input"]
             last_line  = user_input.splitlines()[-1][:55]
-            done       = stored_count + failed_count + 1
+            global_idx += 1
 
-            print(f"\n  ▶ [{done}/{total}] Input {input_id}: {last_line}...")
+            print(f"\n  ▶ [{global_idx}/{total}] {input_id}: {last_line}...")
 
             try:
-                # Step 1: Hornet answers
-                t0         = time.time()
-                ai_output  = run_hornet(pipe, tokenizer, user_input)
-                hornet_ms  = round(time.time() - t0, 2)
-                print(f"    🤖 Hornet ({hornet_ms}s): {ai_output[:80]}...")
+                # ── Step 1: Hornet answers ─────────────────────────────────────
+                t0        = time.time()
+                ai_output = run_hornet(pipe, tokenizer, user_input)
+                hornet_ms = round(time.time() - t0, 2)
+                print(f"    🤖 Hornet ({hornet_ms}s): {ai_output[:90]}...")
 
-                # Step 2: GLM answers (rate-limited — 3s gap)
-                t0              = time.time()
-                expected_output = ask_glm(user_input, nv_key)
-                glm_ms          = round(time.time() - t0, 2)
-                print(f"    🌐 GLM    ({glm_ms}s): {expected_output[:80]}...")
+                # ── Step 2: GLM judges the answer ─────────────────────────────
+                t0           = time.time()
+                is_correct, reason = judge_with_glm(user_input, ai_output, nv_key)
+                judge_ms     = round(time.time() - t0, 2)
+                verdict_icon = "✅" if is_correct else "❌"
+                verdict_word = "PASS" if is_correct else "FAIL"
+                print(f"    {verdict_icon} Judge ({judge_ms}s): {verdict_word} — {reason}")
 
-                # Step 3: Store both
-                ok = store_result(supabase, user_input, ai_output, expected_output, input_id, model_name_tag)
+                # ── Step 3: Store to Supabase ─────────────────────────────────
+                ok = store_result(
+                    supabase, user_input, ai_output,
+                    is_correct, reason, input_id, model_name_tag
+                )
                 if ok:
-                    print(f"    ✅ Stored → score_logs.py will grade Hornet vs GLM")
-                    stored_count += 1
+                    grand_stored += 1
+                    print(f"    💾 Stored to Supabase")
+
+                # ── Step 4: Append to JSONL if PASS ───────────────────────────
+                if is_correct:
+                    append_to_jsonl(user_input, ai_output)
+                    batch_passed += 1
+                    grand_passed += 1
+                    print(f"    📝 Appended to auto_training_data.jsonl")
                 else:
-                    failed_count += 1
+                    batch_failed += 1
+                    grand_failed += 1
 
             except Exception as e:
                 print(f"    ❌ Error on {input_id}: {e}")
-                failed_count += 1
+                grand_errors += 1
 
-            # Respect NVIDIA free-tier: 20 req/min → 3s between GLM calls
+            # Respect NVIDIA free-tier: 20 req/min → ~3s between judge calls
             time.sleep(3)
 
+        # ── Batch summary ──────────────────────────────────────────────────────
+        print(f"\n  ✔  Batch '{set_name}' complete → "
+              f"✅ {batch_passed} passed  ❌ {batch_failed} failed")
+
+    # ── Grand summary ──────────────────────────────────────────────────────────
     print(f"\n{'='*60}")
-    print(f"✅ Stored : {stored_count}")
-    print(f"❌ Failed : {failed_count}")
+    print(f"  🎉 ALL BATCHES COMPLETE")
     print(f"{'='*60}")
-    print("\nNext step: run score_logs.py to grade Hornet vs GLM!\n")
+    print(f"  Stored to Supabase : {grand_stored}")
+    print(f"  ✅ Passed (→ JSONL) : {grand_passed}")
+    print(f"  ❌ Failed           : {grand_failed}")
+    if grand_errors:
+        print(f"  ⚠️  Errors          : {grand_errors}")
+    print(f"\n  📄 auto_training_data.jsonl → {grand_passed} training examples")
+    print(f"{'='*60}")
+    if grand_passed > 0:
+        print("\n✅ Ready! Update train.py to use auto_training_data.jsonl for the next run.\n")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Run Hornet (SmolLM2) + GLM on test inputs and store both outputs in Supabase"
+        description="Run Hornet on test inputs, judge with GLM, store results and extract passing rows"
     )
     parser.add_argument(
         "--set", nargs="*", type=int,
-        help="Which set numbers to run (1–9). Omit to run all. Example: --set 1 3 5"
+        help="Which set numbers to run (1-N). Omit to run all. Example: --set 1 3 5"
     )
     parser.add_argument(
         "--interactive", action="store_true",
