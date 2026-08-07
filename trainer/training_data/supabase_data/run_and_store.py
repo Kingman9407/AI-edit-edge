@@ -138,7 +138,24 @@ def run_hornet(pipe, tokenizer, user_input: str) -> str:
         reply = full_text.split("<|im_start|>assistant")[-1]
     else:
         reply = full_text[len(prompt):]
-    return reply.replace("<|im_end|>", "").strip()
+    reply = reply.replace("<|im_end|>", "").strip()
+    
+    # Apply JSON correction
+    import sys
+    import os
+    trainer_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+    if trainer_dir not in sys.path:
+        sys.path.insert(0, trainer_dir)
+        
+    try:
+        from json_corrector import correct_json
+        corrected_dict = correct_json(reply)
+        if corrected_dict:
+            return json.dumps(corrected_dict, ensure_ascii=False)
+    except ImportError:
+        pass
+        
+    return reply
 
 
 # ─── Ask GLM for expected answer ──────────────────────────────────────────────
