@@ -117,11 +117,17 @@ def load_hornet(active_model: str, model_name_tag: str):
 
     model = AutoModelForCausalLM.from_pretrained(
         active_model,
-        torch_dtype=torch.float32,
+        dtype=torch.float32,          # fix: torch_dtype deprecated, use dtype
         local_files_only=True,
     ).to(device)
 
-    pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, device=device)
+    pipe = pipeline(
+        "text-generation",
+        model=model,
+        tokenizer=tokenizer,
+        device=device,
+        clean_up_tokenization_spaces=False,  # fix: suppress BPE tokenizer warning
+    )
     print(f"✅ Hornet loaded! ({model_name_tag})")
     return pipe, tokenizer
 
@@ -134,53 +140,64 @@ def run_hornet(pipe, tokenizer, user_input: str) -> str:
         f"<|im_start|>user\n{user_input}<|im_end|>\n"
         f"<|im_start|>assistant\n"
     )
+    # Pass all generation args explicitly to avoid deprecation warning
     outputs = pipe(
         prompt,
         max_new_tokens=MAX_NEW_TOKENS,
         do_sample=False,
-        temperature=1.0,
+        eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.eos_token_id,
+        return_full_text=False,
     )
-    full_text = outputs[0]["generated_text"]
-    if "<|im_start|>assistant" in full_text:
-        reply = full_text.split("<|im_start|>assistant")[-1]
-    else:
-        reply = full_text[len(prompt):]
-    reply = reply.replace("<|im_end|>", "").strip()
+    reply = outputs[0]["generated_text"].replace("<|im_end|>", "").strip()
     return reply
 
 
 # ─── Ask GLM for expected answer ──────────────────────────────────────────────
-def ask_glm(user_input: str, api_key: str) -> str:
+def ask_glm(user_input: str, api_key: str, retries: int = 3) -> str:
     """
-    Asks GLM for the correct expected JSON output.
+    Asks GLM for the correct expected DSL output. Retries up to 3 times on failure.
     """
     from openai import OpenAI
-    client = OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key)
+    # Set timeout on the CLIENT so httpx enforces it at the transport level
+    client = OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key, timeout=30.0)
 
-    completion = client.chat.completions.create(
-        model=NVIDIA_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_INSTRUCTION},
-            {"role": "user",   "content": user_input},
-        ],
-        temperature=0.2,   # Low temp = deterministic reference
-        top_p=1,
-        max_tokens=512,
-        stream=False,
-    )
-    raw = completion.choices[0].message.content.strip()
+    last_error = None
+    for attempt in range(1, retries + 1):
+        try:
+            completion = client.chat.completions.create(
+                model=NVIDIA_MODEL,
+                messages=[
+                    {"role": "system", "content": SYSTEM_INSTRUCTION},
+                    {"role": "user",   "content": user_input},
+                ],
+                temperature=0.2,   # Low temp = deterministic reference
+                top_p=1,
+                max_tokens=128,    # DSL output is very short — cap tokens
+                stream=False,
+                timeout=30,        # 30-second timeout to prevent hanging
+            )
+            raw = completion.choices[0].message.content.strip()
 
-    # Strip markdown code fences if present
-    if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
-        raw = raw.strip()
-        if raw.endswith("```"):
-            raw = raw[:-3].strip()
+            # Strip markdown code fences if present
+            if raw.startswith("```"):
+                raw = raw.split("```")[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.strip()
+                if raw.endswith("```"):
+                    raw = raw[:-3].strip()
 
-    return raw
+            return raw
+
+        except Exception as e:
+            last_error = e
+            wait = attempt * 5
+            print(f"    ⚠️  GLM attempt {attempt}/{retries} failed: {e}. Retrying in {wait}s...")
+            time.sleep(wait)
+
+    print(f"    ❌ GLM gave up after {retries} attempts: {last_error}")
+    return ""
 
 
 # ─── JSON Compare ─────────────────────────────────────────────────────────────
