@@ -130,6 +130,14 @@ Example:
         {{
             "user_input": "[VIDEO METADATA]\\nName: vlog.mp4\\nDuration: 240.0s\\nResolution: 1920x1080\\nPlayhead: 0.0s\\n\\n[TIMELINE STATE]\\nCuts:\\n- None\\n\\nMuted Sections:\\n- None\\n\\nBackground Music:\\n- None\\n\\n[USER REQUEST]\\ncut the first 8 seconds",
             "ai_output": "SAY: Removed the first 8 seconds of the video.\\nCUT first 8s"
+        }},
+        {{
+            "user_input": "[VIDEO METADATA]\\nName: game.mp4\\nDuration: 600.0s\\nResolution: 1920x1080\\nPlayhead: 0.0s\\n\\n[TIMELINE STATE]\\nCuts:\\n- None\\n\\nMuted Sections:\\n- None\\n\\nBackground Music:\\n- None\\n\\n[USER REQUEST]\\nmute from 1:00 to 2:00",
+            "ai_output": "SAY: Muted the audio from 1:00 to 2:00.\\nMUTE range 1:00 2:00"
+        }},
+        {{
+            "user_input": "[VIDEO METADATA]\\nName: travel.mp4\\nDuration: 180.0s\\nResolution: 1920x1080\\nPlayhead: 0.0s\\n\\n[TIMELINE STATE]\\nCuts:\\n- None\\n\\nMuted Sections:\\n- None\\n\\nBackground Music:\\n- None\\n\\n[USER REQUEST]\\nadd lofi.mp3 to the entire video",
+            "ai_output": "SAY: Added lofi.mp3 across the full video.\\nADD_AUDIO_OVERLAY full_video lofi.mp3"
         }}
     ]
 }}

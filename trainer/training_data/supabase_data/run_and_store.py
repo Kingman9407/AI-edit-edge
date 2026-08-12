@@ -45,6 +45,12 @@ SYSTEM_INSTRUCTION = (
     "- variation: first | last | range | before_playhead | after_playhead\n"
     "- value/start/end: Echo the user's exact time string (e.g. '1:30', '90s', '10'). Add 's' if it's just a number and the user said seconds.\n"
     "- track: only for ADD_AUDIO_OVERLAY (e.g. 'music.mp3')\n\n"
+    "Example:\n"
+    "[USER REQUEST]\n"
+    "cut the first 8 seconds\n"
+    "-->\n"
+    "SAY: Removed the first 8 seconds of the video.\n"
+    "CUT first 8s\n\n"
     "Return ONLY the raw text. No markdown, no code fences, no JSON, no explanation."
 )
 
@@ -54,7 +60,13 @@ CHATML_SYSTEM = (
     "You are Hornet, a video editing AI. Return a flat text response with a 'SAY: ' message "
     "and command lines (CUT, MUTE, ADD_AUDIO_OVERLAY). "
     "If the user mentions time expressions requiring calculation, output a <tool_call> block first. "
-    "Otherwise, output the final DSL response directly."
+    "Otherwise, output the final DSL response directly.\n\n"
+    "Example:\n"
+    "[USER REQUEST]\n"
+    "cut the first 8 seconds\n"
+    "-->\n"
+    "SAY: Removed the first 8 seconds of the video.\n"
+    "CUT first 8s"
 )
 
 # Output JSONL — lives alongside this file in supabase_data/
