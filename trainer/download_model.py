@@ -12,12 +12,12 @@ snapshot_download(
     local_dir=local_dir,
     local_dir_use_symlinks=False,
     ignore_patterns=[
-        "onnx/*", 
-        "runs/*", 
-        "*.bin", 
-        "*results.json", 
-        "trainer_state.json", 
-        "README.md", 
+        "onnx/*",
+        "runs/*",
+        "training_args.bin",   # trainer artifact, not the model weights
+        "*results.json",
+        "trainer_state.json",
+        "README.md",
         ".gitattributes"
     ]
 )

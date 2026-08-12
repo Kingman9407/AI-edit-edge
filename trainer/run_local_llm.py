@@ -2,7 +2,7 @@ import os
 import json
 from transformers import pipeline
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from resolver import resolve_semantic_operations
+from resolver import resolve_semantic_operations, parse_dsl_response
 
 # Paths
 base_model_path = "./SmolLM2-135M-Instruct"
@@ -164,8 +164,8 @@ def run_comparison(user_text):
         print("\n" + "─" * 30 + " FINE-TUNED MODEL " + "─" * 30)
         print(f"RAW OUTPUT:\n{ans_finetuned}\n")
         try:
-            parsed_ft = json.loads(ans_finetuned)
-            if isinstance(parsed_ft, dict) and "operations" in parsed_ft:
+            parsed_ft = parse_dsl_response(ans_finetuned)
+            if "operations" in parsed_ft:
                 # Semantic operations from Hornet — resolve to absolute timestamps
                 semantic_ops = parsed_ft["operations"]
                 resolved_ft  = resolve_semantic_operations(semantic_ops, mock_workspace_state)
@@ -173,15 +173,9 @@ def run_comparison(user_text):
                 print(f"✅ SEMANTIC OPERATIONS:\n{json.dumps(semantic_ops, indent=2)}")
                 print(f"🎬 RESOLVED (ABSOLUTE) OPERATIONS:\n{json.dumps(resolved_ft, indent=2)}")
             else:
-                # Fallback: try resolving as a plain list of semantic ops
-                resolved_ft = resolve_semantic_operations(
-                    parsed_ft if isinstance(parsed_ft, list) else [parsed_ft],
-                    mock_workspace_state
-                )
                 print(f"✅ OPERATIONS:\n{json.dumps(parsed_ft, indent=2)}")
-                print(f"🎬 RESOLVED:\n{json.dumps(resolved_ft, indent=2)}")
         except Exception as e:
-            print(f"⚠️ Fine-tuned model output is not valid JSON: {e}")
+            print(f"⚠️ Fine-tuned model output could not be parsed: {e}")
     else:
         print("\n" + "─" * 30 + " FINE-TUNED MODEL " + "─" * 30)
         print("[No fine-tuned model active yet. Wait for training script to complete!]")

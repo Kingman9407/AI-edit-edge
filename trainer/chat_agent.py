@@ -5,16 +5,16 @@ import json
 import torch
 import random
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-from resolver import resolve_semantic_operations
+from resolver import resolve_semantic_operations, parse_dsl_response
 
 # Paths
 finetuned_model_path = "./fine_tuned_smollm"
 
 # Unified System Instruction for single-stage architecture
 SYSTEM_INSTRUCTION = (
-    "You are Hornet, a video editing AI. Return JSON with 'message' and 'operations' (cut, mute, add_audio_overlay). "
-    "If the user mentions time expressions requiring calculation, output a <tool_call> block first. "
-    "Otherwise, output the final JSON directly."
+    "You are Hornet, a video editing AI. "
+    "Reply with 'SAY: <message>' then one operation per line: "
+    "CUT|MUTE|ADD_AUDIO_OVERLAY  first|last|before_playhead|after_playhead|range|full_video  <duration>|<start> <end>  [track]."
 )
 
 
@@ -247,7 +247,7 @@ def main():
             print("-" * 50)
 
             try:
-                parsed_response = parse_json_response(raw_text)
+                parsed_response = parse_dsl_response(raw_text)
                 
                 print(f"\n🗣️  AGENT MESSAGE:\n{parsed_response.get('message', '')}")
                 

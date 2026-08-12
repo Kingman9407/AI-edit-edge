@@ -9,7 +9,7 @@ import json
 import time
 import random
 import numpy as np
-from resolver import resolve_semantic_operations
+from resolver import resolve_semantic_operations, parse_dsl_response
 
 # Paths — override via env var to support FP32 or INT8 from main.py
 ONNX_MODEL_PATH  = os.environ.get("ONNX_MODEL_OVERRIDE", "./fine_tuned_smollm_onnx") + "/model.onnx"
@@ -18,9 +18,9 @@ TOKENIZER_PATH   = "./fine_tuned_smollm"
 MAX_NEW_TOKENS   = 128
 
 SYSTEM_INSTRUCTION = (
-    "You are Hornet, a video editing AI. Return JSON with 'message' and 'operations' (cut, mute, add_audio_overlay). "
-    "If the user mentions time expressions requiring calculation, output a <tool_call> block first. "
-    "Otherwise, output the final JSON directly."
+    "You are Hornet, a video editing AI. "
+    "Reply with 'SAY: <message>' then one operation per line: "
+    "CUT|MUTE|ADD_AUDIO_OVERLAY  first|last|before_playhead|after_playhead|range|full_video  <duration>|<start> <end>  [track]."
 )
 
 
@@ -92,33 +92,7 @@ def random_video() -> dict:
 # JSON parser (same as chat_agent.py)
 # ──────────────────────────────────────────────────────────────────────────────
 
-def parse_json(text: str) -> dict:
-    start = text.find("{")
-    if start == -1:
-        return {}
-    depth = 0
-    in_str = False
-    esc = False
-    for i, ch in enumerate(text[start:], start=start):
-        if esc:
-            esc = False; continue
-        if ch == "\\" and in_str:
-            esc = True; continue
-        if ch == '"':
-            in_str = not in_str; continue
-        if in_str:
-            continue
-        if ch == "{":
-            depth += 1
-        elif ch == "}":
-            depth -= 1
-            if depth == 0:
-                try:
-                    parsed = json.loads(text[start:i + 1])
-                    return parsed if isinstance(parsed, dict) else {}
-                except json.JSONDecodeError:
-                    return {}
-    return {}
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -287,7 +261,7 @@ def main():
         print(raw)
         print("-" * 50)
 
-        parsed = parse_json(raw)
+        parsed = parse_dsl_response(raw)
         msg  = parsed.get("message", "⚠️  Could not parse response.")
         ops  = parsed.get("operations", [])
 

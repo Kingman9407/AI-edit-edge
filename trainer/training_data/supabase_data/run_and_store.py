@@ -37,28 +37,24 @@ MAX_NEW_TOKENS  = 256
 SYSTEM_INSTRUCTION = (
     "You are Hornet, a video editing AI. "
     "Given a user video editing request with metadata and timeline state, "
-    "return a JSON object with exactly two keys:\n"
-    "  - \"message\": a friendly string describing what was done\n"
-    "  - \"operations\": an array of operation objects\n\n"
-    "Each operation object:\n"
-    "  - \"operation\": one of \"cut\" | \"mute\" | \"add_audio_overlay\"\n"
-    "  - \"variation\": one of \"first\" | \"last\" | \"range\" | \"before_playhead\" | \"after_playhead\"\n"
-    "  - \"value\": (number) used when variation is \"first\" or \"last\" — the N seconds\n"
-    "  - \"start\": (string) used when variation is \"range\"\n"
-    "  - \"end\": (string) used when variation is \"range\"\n"
-    "  - \"unit\": always \"seconds\"\n"
-    "  - \"track\": (string) only for add_audio_overlay — the filename\n"
-    "  - \"reason\": a short string explaining why\n\n"
-    "Return ONLY the raw JSON object. No markdown, no code fences, no explanation."
+    "return exactly a two-line flat text response (or more if multiple operations):\n"
+    "Line 1: A message starting with 'SAY: ' describing what was done.\n"
+    "Line 2+: Command lines starting with 'CUT', 'MUTE', or 'ADD_AUDIO_OVERLAY'.\n\n"
+    "Command format:\n"
+    "COMMAND variation [value/start] [end] [track]\n"
+    "- variation: first | last | range | before_playhead | after_playhead\n"
+    "- value/start/end: Echo the user's exact time string (e.g. '1:30', '90s', '10'). Add 's' if it's just a number and the user said seconds.\n"
+    "- track: only for ADD_AUDIO_OVERLAY (e.g. 'music.mp3')\n\n"
+    "Return ONLY the raw text. No markdown, no code fences, no JSON, no explanation."
 )
 
 # System instruction used when writing ChatML to the training JSONL
 # (must match the system instruction used during SFT training)
 CHATML_SYSTEM = (
-    "You are Hornet, a video editing AI. Return JSON with 'message' and 'operations' "
-    "(cut, mute, add_audio_overlay). "
+    "You are Hornet, a video editing AI. Return a flat text response with a 'SAY: ' message "
+    "and command lines (CUT, MUTE, ADD_AUDIO_OVERLAY). "
     "If the user mentions time expressions requiring calculation, output a <tool_call> block first. "
-    "Otherwise, output the final JSON directly."
+    "Otherwise, output the final DSL response directly."
 )
 
 # Output JSONL — lives alongside this file in supabase_data/
@@ -139,22 +135,6 @@ def run_hornet(pipe, tokenizer, user_input: str) -> str:
     else:
         reply = full_text[len(prompt):]
     reply = reply.replace("<|im_end|>", "").strip()
-    
-    # Apply JSON correction
-    import sys
-    import os
-    trainer_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
-    if trainer_dir not in sys.path:
-        sys.path.insert(0, trainer_dir)
-        
-    try:
-        from json_corrector import correct_json
-        corrected_dict = correct_json(reply)
-        if corrected_dict:
-            return json.dumps(corrected_dict, ensure_ascii=False)
-    except ImportError:
-        pass
-        
     return reply
 
 
@@ -194,20 +174,18 @@ def ask_glm(user_input: str, api_key: str) -> str:
 # ─── JSON Compare ─────────────────────────────────────────────────────────────
 def compare_outputs(ai_output: str, expected_output: str) -> bool:
     """
-    Checks if Hornet's JSON output matches GLM's expected JSON output.
+    Checks if Hornet's DSL output matches GLM's expected DSL output.
     """
-    try:
-        ai_json = json.loads(ai_output)
-        expected_json = json.loads(expected_output)
-        
-        # We only strictly compare the "operations" array.
-        # Messages can vary slightly without breaking correctness.
-        if ai_json.get("operations") == expected_json.get("operations"):
-            return True
-        return False
-    except Exception:
-        # If parsing fails, fallback to direct string match
+    def extract_commands(text: str):
+        return [line.strip() for line in text.strip().splitlines() if line.strip().startswith(("CUT", "MUTE", "ADD_AUDIO_OVERLAY"))]
+    
+    ai_cmds = extract_commands(ai_output)
+    expected_cmds = extract_commands(expected_output)
+    
+    if not ai_cmds or not expected_cmds:
         return ai_output.strip() == expected_output.strip()
+        
+    return ai_cmds == expected_cmds
 
 
 # ─── Store to Supabase ────────────────────────────────────────────────────────
@@ -224,7 +202,7 @@ def store_result(
     Inserts a fully-scored row into ai_logs.
     """
     try:
-        notes = "JSON Operations Match" if is_correct else "JSON Mismatch"
+        notes = "DSL Commands Match" if is_correct else "DSL Mismatch"
         supabase.table("ai_logs").insert({
             "user_input":      user_input,
             "ai_output":       ai_output,

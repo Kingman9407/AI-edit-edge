@@ -10,7 +10,8 @@ from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-from resolver import resolve_semantic_operations
+from resolver import resolve_semantic_operations, parse_dsl_response
+from json_corrector import correct_json
 
 # Config Paths
 MODEL_PATH = "./fine_tuned_smollm"
@@ -23,11 +24,8 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # System Instruction — must match prepare_data.py SYSTEM_INSTRUCTION exactly.
 SYSTEM_INSTRUCTION = (
     "You are Hornet, a video editing AI. "
-    "Return JSON: {\"message\": str, \"operations\": [...]}. "
-    "Each op: {operation: cut|mute|add_audio_overlay, variation: first|last|before_playhead|after_playhead|range, "
-    "value: number, unit: seconds|minutes|hours, reason: str}. "
-    "For range: use start and end as strings exactly as the user said (e.g. '1:20', '100', '45s'). "
-    "add_audio_overlay also needs track. Output raw JSON only."
+    "Reply with 'SAY: <message>' then one operation per line: "
+    "CUT|MUTE|ADD_AUDIO_OVERLAY  first|last|before_playhead|after_playhead|range|full_video  <duration>|<start> <end>  [track]."
 )
 
 app = FastAPI(
@@ -170,28 +168,14 @@ def clean_chatml_response(text: str) -> str:
     return text.replace("<|im_end|>", "").strip()
 
 
-def extract_actions_from_response(text: str) -> list:
+def extract_actions_from_response(text: str) -> List[Dict[str, Any]]:
     """
-    Extracts the semantic operations list from the model's assistant output.
-
-    Expected model output format:
-        A raw JSON object with 'message' and 'operations' keys.
-        Each operation uses the new semantic schema:
-          { "operation": "cut", "variation": "first", "value": 45, "unit": "seconds", "reason": "..." }
-          { "operation": "cut", "variation": "range", "start_seconds": 60.0, "end_seconds": 90.0, "reason": "..." }
-
-        Fallback: bare JSON list, or a single markdown ```json block.
+    Parses the DSL response from the model into semantic operations.
     """
-    from json_corrector import correct_json
-    
-    parsed = correct_json(text)
-    if isinstance(parsed, dict):
-        if "operations" in parsed:
-            return parsed["operations"]
-        parsed = [parsed]
-    if not isinstance(parsed, list):
-        raise ValueError(f"Expected a JSON list of operations, got: {type(parsed)}")
-    return parsed
+    parsed = parse_dsl_response(text)
+    if "operations" in parsed:
+        return parsed["operations"]
+    return []
 
 def construct_video_context(metadata: VideoMetadata, state: WorkspaceState) -> str:
     """Reconstructs the standard video context prompt matching SFT SFT dataset schema."""

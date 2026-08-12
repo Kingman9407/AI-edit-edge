@@ -33,9 +33,10 @@ from supabase import create_client, Client
 
 # ─── System instruction (must match train.py / run_and_store.py exactly) ─────
 SYSTEM_INSTRUCTION = (
-    "You are Hornet, a video editing AI. Return JSON with 'message' and 'operations' (cut, mute, add_audio_overlay). "
+    "You are Hornet, a video editing AI. Return a flat text response with a 'SAY: ' message "
+    "and command lines (CUT, MUTE, ADD_AUDIO_OVERLAY). "
     "If the user mentions time expressions requiring calculation, output a <tool_call> block first. "
-    "Otherwise, output the final JSON directly."
+    "Otherwise, output the final DSL response directly."
 )
 
 # Output lives inside supabase_data/ — keeping everything self-contained

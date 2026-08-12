@@ -68,7 +68,7 @@ def main():
     print(f"📥 Loading model weights strictly from local folder: {model_path} ...")
     model = AutoModelForCausalLM.from_pretrained(
         model_path,
-        dtype=torch_dtype,           # FP16 on CUDA, FP32 on MPS/CPU
+        dtype=torch_dtype,           # FP32 on MPS/CPU, FP16 on CUDA
         local_files_only=True
     )
     model = model.to(device)

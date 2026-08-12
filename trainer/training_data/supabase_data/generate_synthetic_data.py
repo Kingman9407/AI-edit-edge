@@ -70,7 +70,7 @@ def build_prompt(batch_size: int) -> str:
 You are an expert training data generator for a video editing AI called Hornet.
 Generate exactly {batch_size} unique and highly diverse examples.
 
-Each example is a user request sent to Hornet along with video metadata context, and Hornet's exact JSON response.
+Each example is a user request sent to Hornet along with video metadata context, and Hornet's exact response in a flat text DSL.
 
 ━━━ INPUT FORMAT ━━━
 The user_input always follows this structure:
@@ -95,44 +95,41 @@ Background Music:
 <the user's natural language request>
 
 ━━━ OUTPUT SCHEMA ━━━
-Hornet returns a JSON object with:
-- "message": a friendly string describing what was done
-- "operations": an array of operation objects
+Hornet returns a flat text response with exactly two lines (or more if multiple operations):
+Line 1: A message starting with "SAY: " describing what was done.
+Line 2+: Command lines starting with "CUT", "MUTE", or "ADD_AUDIO_OVERLAY".
 
-Each operation object has:
-- "operation": one of "cut" | "mute" | "add_audio_overlay"
-- "variation": one of "first" | "last" | "range" | "before_playhead" | "after_playhead"
-- "value": (number) used when variation is "first" or "last" — the N seconds
-- "start": (string) used when variation is "range" — echo the user's exact time string e.g. "1:30" or "90"
-- "end": (string) used when variation is "range" — echo the user's exact time string
-- "unit": always "seconds"
-- "track": (string) only for add_audio_overlay — the filename e.g. "music.mp3"
-- "reason": a short string explaining why
+Command format:
+COMMAND variation [value/start] [end] [track]
+- variation: first | last | range | before_playhead | after_playhead
+- value/start/end: Echo the user's exact time string (e.g. "1:30", "90s", "10"). Add a unit like "s" if it's just a number and the user said seconds.
+- track: only for ADD_AUDIO_OVERLAY (e.g. "music.mp3")
 
 ━━━ EXAMPLES ━━━
-cut first N seconds → variation: "first", value: N
-cut last N seconds  → variation: "last",  value: N
-cut from X to Y     → variation: "range",  start: "X", end: "Y"
-cut before playhead → variation: "before_playhead"
-cut after playhead  → variation: "after_playhead"
-same logic for mute; add_audio_overlay uses range with a "track" field
+cut first N seconds → CUT first Ns
+cut last N seconds  → CUT last Ns
+cut from X to Y     → CUT range X Y
+cut before playhead → CUT before_playhead
+cut after playhead  → CUT after_playhead
+same logic for MUTE; ADD_AUDIO_OVERLAY uses range with a track e.g. ADD_AUDIO_OVERLAY range X Y music.mp3
+Full video overlay: ADD_AUDIO_OVERLAY full_video music.mp3
 
 ━━━ RULES ━━━
 - user_input MUST include the full [VIDEO METADATA] and [TIMELINE STATE] block
-- ai_output MUST be a JSON string (not a dict), valid and parseable
+- ai_output MUST be a literal string matching the DSL exactly (newlines as \\n).
 - Make requests conversational and varied — simple and complex
 - Include multi-operation examples (cut + mute, cut + add_audio_overlay)
 - Vary video names, durations, resolutions, and existing timeline states
 
 Return ONLY a JSON object with key "examples" containing a list of objects.
-Each object has "user_input" (string) and "ai_output" (JSON string).
+Each object has "user_input" (string) and "ai_output" (string).
 
 Example:
 {{
     "examples": [
         {{
             "user_input": "[VIDEO METADATA]\\nName: vlog.mp4\\nDuration: 240.0s\\nResolution: 1920x1080\\nPlayhead: 0.0s\\n\\n[TIMELINE STATE]\\nCuts:\\n- None\\n\\nMuted Sections:\\n- None\\n\\nBackground Music:\\n- None\\n\\n[USER REQUEST]\\ncut the first 8 seconds",
-            "ai_output": "{{\\\"message\\\": \\\"Removed the first 8 seconds of the video.\\\", \\\"operations\\\": [{{\\\"operation\\\": \\\"cut\\\", \\\"variation\\\": \\\"first\\\", \\\"value\\\": 8, \\\"unit\\\": \\\"seconds\\\", \\\"reason\\\": \\\"Remove first 8 seconds\\\"}}]}}"
+            "ai_output": "SAY: Removed the first 8 seconds of the video.\\nCUT first 8s"
         }}
     ]
 }}
@@ -191,9 +188,8 @@ def main(batch_size: int = DEFAULT_BATCH_SIZE) -> int:
         if not user_input or not ai_output:
             continue
 
-        # GLM sometimes returns ai_output as a dict instead of a string
-        if isinstance(ai_output, dict):
-            ai_output = json.dumps(ai_output)
+        if not isinstance(ai_output, str):
+            ai_output = str(ai_output)
 
         try:
             supabase.table("ai_logs").insert({

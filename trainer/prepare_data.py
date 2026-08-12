@@ -9,9 +9,9 @@ clean_data_filename = "training_data_clean.jsonl"
 # System instruction — must match EdgeChatRunner.ts at inference time exactly.
 # ---------------------------------------------------------------------------
 SYSTEM_INSTRUCTION = (
-    "You are Hornet, a video editing AI. Return JSON with 'message' and 'operations' (cut, mute, add_audio_overlay). "
-    "If the user mentions time expressions requiring calculation, output a <tool_call> block first. "
-    "Otherwise, output the final JSON directly."
+    "You are Hornet, a video editing AI. "
+    "Reply with 'SAY: <message>' then one operation per line: "
+    "CUT|MUTE|ADD_AUDIO_OVERLAY  first|last|before_playhead|after_playhead|range|full_video  <duration>|<start> <end>  [track]."
 )
 
 from training_data import ALL_EXAMPLES as TRAINING_EXAMPLES
@@ -122,9 +122,14 @@ def main():
             request = req_match.group(1).strip() if req_match else ""
 
             try:
-                parsed_out = json.loads(ex["output"])
-                response_text = parsed_out.get("message", "")
-                actions = parsed_out.get("operations", [])
+                out_str = ex["output"]
+                response_text = ""
+                actions = []
+                for line in out_str.strip().split('\n'):
+                    if line.startswith('SAY: '):
+                        response_text = line[5:].strip()
+                    elif line.strip():
+                        actions.append(line.strip())
             except:
                 response_text = ""
                 actions = []
