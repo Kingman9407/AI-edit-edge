@@ -24,29 +24,7 @@ import os
 # Ensure sibling imports resolve correctly
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-
-# ─── GLM API Health Check ─────────────────────────────────────────────────────
-def test_glm_api(api_key: str, base_url: str, model: str) -> bool:
-    """
-    Sends a tiny request to the NVIDIA GLM API to verify it is reachable
-    and the key is valid. Returns True on success, False on failure.
-    """
-    try:
-        from openai import OpenAI
-        client = OpenAI(base_url=base_url, api_key=api_key, timeout=20.0)
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": "Reply with the word OK only."}],
-            max_tokens=5,
-            temperature=0,
-            stream=False,
-        )
-        reply = resp.choices[0].message.content.strip()
-        print(f"  ✅ GLM API OK — response: {reply!r}")
-        return True
-    except Exception as e:
-        print(f"  ❌ GLM API FAILED: {e}")
-        return False
+from glm_judge import test_glm_api, NVIDIA_MODEL, NVIDIA_BASE_URL
 
 
 def main():
@@ -91,7 +69,7 @@ Examples:
         if not nv_key:
             print("  ❌ NVIDIA_API_KEY not set in environment. Aborting.")
             sys.exit(1)
-        if not test_glm_api(nv_key, run_and_store.NVIDIA_BASE_URL, run_and_store.NVIDIA_MODEL):
+        if not test_glm_api(nv_key):
             print("\n  Pipeline aborted — fix the GLM API connection first.")
             sys.exit(1)
         print()

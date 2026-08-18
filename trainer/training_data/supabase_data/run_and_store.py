@@ -17,7 +17,6 @@ Usage:
 
 import os
 import sys
-import json
 import argparse
 import time
 
@@ -29,9 +28,7 @@ except ImportError:
     IS_COLAB = False
 
 # ─── Constants ────────────────────────────────────────────────────────────────
-NVIDIA_MODEL    = "z-ai/glm-5.2"
-NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-MAX_NEW_TOKENS  = 256
+MAX_NEW_TOKENS = 256
 
 # System instruction used when running Hornet (must match train.py)
 SYSTEM_INSTRUCTION = (
@@ -54,23 +51,12 @@ SYSTEM_INSTRUCTION = (
     "Return ONLY the raw text. No markdown, no code fences, no JSON, no explanation."
 )
 
-# System instruction used when writing ChatML to the training JSONL
-# (must match the system instruction used during SFT training)
-CHATML_SYSTEM = (
-    "You are Hornet, a video editing AI. Return a flat text response with a 'SAY: ' message "
-    "and command lines (CUT, MUTE, ADD_AUDIO_OVERLAY). "
-    "If the user mentions time expressions requiring calculation, output a <tool_call> block first. "
-    "Otherwise, output the final DSL response directly.\n\n"
-    "Example:\n"
-    "[USER REQUEST]\n"
-    "cut the first 8 seconds\n"
-    "-->\n"
-    "SAY: Removed the first 8 seconds of the video.\n"
-    "CUT first 8s"
-)
-
-# Output JSONL — lives alongside this file in supabase_data/
-OUTPUT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "auto_training_data.jsonl")
+# ─── Import dedicated modules ─────────────────────────────────────────────────
+# glm_judge.py  — all GLM API question-asking logic
+# validator.py  — all DSL output validation + Supabase storage + JSONL append
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from glm_judge import ask_glm, test_glm_api, NVIDIA_MODEL, NVIDIA_BASE_URL
+from validator import compare_outputs, store_result, append_to_jsonl, OUTPUT_FILE
 
 
 # ─── Load credentials ─────────────────────────────────────────────────────────
@@ -153,109 +139,7 @@ def run_hornet(pipe, tokenizer, user_input: str) -> str:
     return reply
 
 
-# ─── Ask GLM for expected answer ──────────────────────────────────────────────
-def ask_glm(user_input: str, api_key: str, retries: int = 3) -> str:
-    """
-    Asks GLM for the correct expected DSL output. Retries up to 3 times on failure.
-    """
-    from openai import OpenAI
-    # Set timeout on the CLIENT so httpx enforces it at the transport level
-    client = OpenAI(base_url=NVIDIA_BASE_URL, api_key=api_key, timeout=30.0)
 
-    last_error = None
-    for attempt in range(1, retries + 1):
-        try:
-            completion = client.chat.completions.create(
-                model=NVIDIA_MODEL,
-                messages=[
-                    {"role": "system", "content": SYSTEM_INSTRUCTION},
-                    {"role": "user",   "content": user_input},
-                ],
-                temperature=0.2,   # Low temp = deterministic reference
-                top_p=1,
-                max_tokens=128,    # DSL output is very short — cap tokens
-                stream=False,
-                timeout=30,        # 30-second timeout to prevent hanging
-            )
-            raw = completion.choices[0].message.content.strip()
-
-            # Strip markdown code fences if present
-            if raw.startswith("```"):
-                raw = raw.split("```")[1]
-                if raw.startswith("json"):
-                    raw = raw[4:]
-                raw = raw.strip()
-                if raw.endswith("```"):
-                    raw = raw[:-3].strip()
-
-            return raw
-
-        except Exception as e:
-            last_error = e
-            wait = attempt * 5
-            print(f"    ⚠️  GLM attempt {attempt}/{retries} failed: {e}. Retrying in {wait}s...")
-            time.sleep(wait)
-
-    print(f"    ❌ GLM gave up after {retries} attempts: {last_error}")
-    return ""
-
-
-# ─── JSON Compare ─────────────────────────────────────────────────────────────
-def compare_outputs(ai_output: str, expected_output: str) -> bool:
-    """
-    Checks if Hornet's DSL output matches GLM's expected DSL output.
-    """
-    def extract_commands(text: str):
-        return [line.strip() for line in text.strip().splitlines() if line.strip().startswith(("CUT", "MUTE", "ADD_AUDIO_OVERLAY"))]
-    
-    ai_cmds = extract_commands(ai_output)
-    expected_cmds = extract_commands(expected_output)
-    
-    if not ai_cmds or not expected_cmds:
-        return ai_output.strip() == expected_output.strip()
-        
-    return ai_cmds == expected_cmds
-
-
-# ─── Store to Supabase ────────────────────────────────────────────────────────
-def store_result(
-    supabase,
-    user_input: str,
-    ai_output: str,
-    expected_output: str,
-    is_correct: bool,
-    input_id: str,
-    model_name_tag: str,
-) -> bool:
-    """
-    Inserts a fully-scored row into ai_logs.
-    """
-    try:
-        notes = "DSL Commands Match" if is_correct else "DSL Mismatch"
-        supabase.table("ai_logs").insert({
-            "user_input":      user_input,
-            "ai_output":       ai_output,
-            "expected_output": expected_output,
-            "score":           100 if is_correct else 0,
-            "is_correct":      is_correct,
-            "model_name":      model_name_tag,
-            "notes":           notes,
-        }).execute()
-        return True
-    except Exception as e:
-        print(f"  ⚠️  [Supabase Error for {input_id}]: {e}")
-        return False
-
-
-# ─── Append a passing row to the JSONL training file ─────────────────────────
-def append_to_jsonl(user_input: str, ai_output: str):
-    """Formats as ChatML and appends one line to auto_training_data.jsonl."""
-    text  = f"<|im_start|>system\n{CHATML_SYSTEM}<|im_end|>\n"
-    text += f"<|im_start|>user\n{user_input}<|im_end|>\n"
-    text += f"<|im_start|>assistant\n{ai_output}<|im_end|>\n"
-    record = {"text": text}
-    with open(OUTPUT_FILE, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 # ─── Interactive batch picker ─────────────────────────────────────────────────
@@ -384,18 +268,18 @@ def main(set_ids: list = None, interactive: bool = False, list_only: bool = Fals
                 expected_output  = ask_glm(user_input, nv_key)
                 glm_ms           = round(time.time() - t0, 2)
                 
-                # ── Step 3: Compare JSONs ─────────────────────────────────────
-                is_correct = compare_outputs(ai_output, expected_output)
+                # ── Step 3: Validate DSL semantically ────────────────────
+                is_correct, reason = compare_outputs(ai_output, expected_output)
                 verdict_icon = "✅" if is_correct else "❌"
                 verdict_word = "PASS" if is_correct else "FAIL"
-                
+
                 print(f"    🌐 GLM ({glm_ms}s): {expected_output[:90]}...")
-                print(f"    {verdict_icon} Verdict: {verdict_word}")
+                print(f"    {verdict_icon} Verdict: {verdict_word} — {reason}")
 
                 # ── Step 4: Store to Supabase ─────────────────────────────────
                 ok = store_result(
                     supabase, user_input, ai_output, expected_output,
-                    is_correct, input_id, model_name_tag
+                    is_correct, reason, input_id, model_name_tag
                 )
                 if ok:
                     grand_stored += 1

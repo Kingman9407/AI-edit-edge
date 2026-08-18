@@ -59,14 +59,6 @@ def run_model(pipe, tokenizer, system_prompt: str, user_content: str,
     return raw, elapsed, new_tokens
 
 
-def parse_json_response(text: str) -> dict:
-    """
-    Finds and returns the FIRST complete JSON object from model output,
-    applying error correction via json_corrector.
-    """
-    from json_corrector import correct_json
-    return correct_json(text)
-
 
 # ==============================================================================
 # Video context generator

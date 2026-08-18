@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 from resolver import resolve_semantic_operations, parse_dsl_response
-from json_corrector import correct_json
+
 
 # Config Paths
 MODEL_PATH = "./fine_tuned_smollm"
