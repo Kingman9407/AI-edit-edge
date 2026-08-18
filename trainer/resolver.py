@@ -88,13 +88,14 @@ def resolve_semantic_operation(op: dict, workspace_state: dict) -> dict:
     duration = float(workspace_state.get("duration", 300.0))
     playhead = float(workspace_state.get("playhead", 0.0))
 
-    operation = op.get("operation", "cut")
-    variation = op.get("variation", "range")
-    value     = float(op.get("value") or 0)
-    unit      = op.get("unit", "seconds")
-    reason    = op.get("reason", "")
+    operation  = op.get("operation", "cut")
+    variation  = op.get("variation", "range")
+    value_raw  = op.get("value")                          # None = no-arg (full span)
+    value      = float(value_raw) if value_raw is not None else None
+    unit       = op.get("unit", "seconds")
+    reason     = op.get("reason", "")
 
-    span = to_seconds(value, unit)
+    span = to_seconds(value, unit) if value is not None else None
 
     if variation == "first":
         start = 0.0
@@ -105,12 +106,16 @@ def resolve_semantic_operation(op: dict, workspace_state: dict) -> dict:
         start = max(0.0, duration - span)
 
     elif variation == "before_playhead":
-        start = max(0.0, playhead - span)
         end   = playhead
+        # No-arg → cut everything from 0 to playhead
+        # With arg → cut only the N-second window immediately before playhead
+        start = 0.0 if span is None else max(0.0, playhead - span)
 
     elif variation == "after_playhead":
         start = playhead
-        end   = min(playhead + span, duration)
+        # No-arg → cut everything from playhead to end
+        # With arg → cut only the N-second window immediately after playhead
+        end   = duration if span is None else min(playhead + span, duration)
 
     else:  # "range" — parse raw strings the model echoed from the user
         start = parse_time_string(op.get("start", "0"), duration, unit)
@@ -266,22 +271,28 @@ def parse_dsl_response(dsl_text: str) -> dict:
 
         else:
             # Variations: first | last | before_playhead | after_playhead
-            # Shape: <duration>  [<track>]
+            # Shape: [<duration>]  [<track>]
             if not extra_args:
-                continue   # no duration token — skip
-            dur_tok      = extra_args[0]
-            val, unit    = _parse_duration(dur_tok)
-            if val is None:
-                # Not a plain duration — treat as raw seconds string for resolver
-                semantic["value"] = 0.0
-                semantic["unit"]  = "seconds"
-                semantic["_raw"]  = dur_tok
+                if var in ("before_playhead", "after_playhead"):
+                    # No-arg form — cut/mute everything before or after playhead
+                    semantic["value"] = None
+                    semantic["unit"]  = "seconds"
+                else:
+                    continue   # first/last always need a duration — skip
             else:
-                semantic["value"] = val
-                semantic["unit"]  = unit
-            # ADD_AUDIO_OVERLAY first <dur> <track>
-            if op_name == "add_audio_overlay" and len(extra_args) >= 2:
-                semantic["track"] = extra_args[-1]
+                dur_tok      = extra_args[0]
+                val, unit    = _parse_duration(dur_tok)
+                if val is None:
+                    # Not a plain duration — treat as raw seconds string for resolver
+                    semantic["value"] = 0.0
+                    semantic["unit"]  = "seconds"
+                    semantic["_raw"]  = dur_tok
+                else:
+                    semantic["value"] = val
+                    semantic["unit"]  = unit
+                # ADD_AUDIO_OVERLAY first <dur> <track>
+                if op_name == "add_audio_overlay" and len(extra_args) >= 2:
+                    semantic["track"] = extra_args[-1]
 
         operations.append(semantic)
 

@@ -100,14 +100,27 @@ def compare_outputs(ai_output: str, expected_output: str) -> tuple:
                         )
                         return False, reason
             elif var in ("first", "last", "before_playhead", "after_playhead"):
-                # Compare numeric value and unit
-                if ai_op.get("value") != exp_op.get("value"):
+                exp_val = exp_op.get("value")   # None = no-arg full-span
+                ai_val  = ai_op.get("value")
+
+                # Both must agree on whether there's a bounded duration or not
+                if (exp_val is None) != (ai_val is None):
                     reason = (
-                        f"Op {idx} duration value mismatch: "
-                        f"got {ai_op.get('value')}, expected {exp_op.get('value')}"
+                        f"Op {idx} duration presence mismatch: "
+                        f"got {'no-arg' if ai_val is None else ai_val}, "
+                        f"expected {'no-arg' if exp_val is None else exp_val}"
                     )
                     return False, reason
-                if ai_op.get("unit") != exp_op.get("unit"):
+
+                # When both have a numeric value, compare it
+                if exp_val is not None and ai_val != exp_val:
+                    reason = (
+                        f"Op {idx} duration value mismatch: "
+                        f"got {ai_val}, expected {exp_val}"
+                    )
+                    return False, reason
+
+                if exp_val is not None and ai_op.get("unit") != exp_op.get("unit"):
                     reason = (
                         f"Op {idx} duration unit mismatch: "
                         f"got {ai_op.get('unit')!r}, expected {exp_op.get('unit')!r}"

@@ -27,12 +27,22 @@ DSL_REFERENCE = {
                 "example": "CUT RANGE 1:30 2:00",
             },
             "before_playhead": {
-                "description": "Removes everything before the current playhead position.",
+                "description": (
+                    "Removes video relative to the playhead. With no argument, "
+                    "removes everything before it. With a duration argument, "
+                    "removes only that bounded window immediately before it."
+                ),
                 "example": "CUT BEFORE_PLAYHEAD",
+                "example_bounded": "CUT BEFORE_PLAYHEAD 10 SEC",
             },
             "after_playhead": {
-                "description": "Removes everything after the current playhead position.",
+                "description": (
+                    "Removes video relative to the playhead. With no argument, "
+                    "removes everything after it. With a duration argument, "
+                    "removes only that bounded window immediately after it."
+                ),
                 "example": "CUT AFTER_PLAYHEAD",
+                "example_bounded": "CUT AFTER_PLAYHEAD 45 SEC",
             },
         },
     },
@@ -53,12 +63,22 @@ DSL_REFERENCE = {
                 "example": "MUTE RANGE 0:45 1:10",
             },
             "before_playhead": {
-                "description": "Mutes everything before the current playhead position.",
+                "description": (
+                    "Mutes audio relative to the playhead. With no argument, "
+                    "mutes everything before it. With a duration argument, "
+                    "mutes only that bounded window immediately before it."
+                ),
                 "example": "MUTE BEFORE_PLAYHEAD",
+                "example_bounded": "MUTE BEFORE_PLAYHEAD 10 SEC",
             },
             "after_playhead": {
-                "description": "Mutes everything after the current playhead position.",
+                "description": (
+                    "Mutes audio relative to the playhead. With no argument, "
+                    "mutes everything after it. With a duration argument, "
+                    "mutes only that bounded window immediately after it."
+                ),
                 "example": "MUTE AFTER_PLAYHEAD",
+                "example_bounded": "MUTE AFTER_PLAYHEAD 30 SEC",
             },
         },
     },
@@ -125,4 +145,6 @@ if __name__ == "__main__":
         for variation, v in data["variations"].items():
             print(f"  [{variation}] {v['description']}")
             print(f"    {v['example']}")
+            if "example_bounded" in v:
+                print(f"    {v['example_bounded']}")
         print()
