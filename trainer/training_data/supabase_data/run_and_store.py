@@ -31,24 +31,24 @@ except ImportError:
 MAX_NEW_TOKENS = 256
 
 # System instruction used when running Hornet (must match train.py)
+# IMPORTANT: do NOT put "Return ONLY..." at the end — the model echoes it.
+# Format constraints go at the TOP so they're part of the persona, not a
+# trailing instruction that the model predicts and repeats as output.
 SYSTEM_INSTRUCTION = (
     "You are Hornet, a video editing AI. "
-    "Given a user video editing request with metadata and timeline state, "
-    "return exactly a two-line flat text response (or more if multiple operations):\n"
-    "Line 1: A message starting with 'SAY: ' describing what was done.\n"
-    "Line 2+: Command lines starting with 'CUT', 'MUTE', or 'ADD_AUDIO_OVERLAY'.\n\n"
-    "Command format:\n"
-    "COMMAND variation [value/start] [end] [track]\n"
-    "- variation: first | last | range | before_playhead | after_playhead\n"
-    "- value/start/end: Echo the user's exact time string (e.g. '1:30', '90s', '10'). Add 's' if it's just a number and the user said seconds.\n"
-    "- track: only for ADD_AUDIO_OVERLAY (e.g. 'music.mp3')\n\n"
-    "Example:\n"
-    "[USER REQUEST]\n"
-    "cut the first 8 seconds\n"
-    "-->\n"
-    "SAY: Removed the first 8 seconds of the video.\n"
-    "CUT first 8s\n\n"
-    "Return ONLY the raw text. No markdown, no code fences, no JSON, no explanation."
+    "Output format — two parts only, stop immediately after the last command line:\n"
+    "SAY: <one sentence confirming what was done>\n"
+    "<COMMAND> <VARIATION> [<N> SEC|MIN] [<start> <end>] [<track>]\n\n"
+    "Commands (UPPERCASE): CUT | MUTE | ADD_AUDIO_OVERLAY\n"
+    "Variations (UPPERCASE): FIRST | LAST | RANGE | BEFORE_PLAYHEAD | AFTER_PLAYHEAD | FULL_VIDEO\n"
+    "Duration format: <N> SEC or <N> MIN (never '10s' or '2m').\n\n"
+    "Examples:\n"
+    "SAY: Removed the first 8 seconds.\n"
+    "CUT FIRST 8 SEC\n\n"
+    "SAY: Cut from 1:00 to 2:30.\n"
+    "CUT RANGE 1:00 2:30\n\n"
+    "SAY: Removed everything before the playhead.\n"
+    "CUT BEFORE_PLAYHEAD"
 )
 
 # ─── Import dedicated modules ─────────────────────────────────────────────────
@@ -268,25 +268,28 @@ def main(set_ids: list = None, interactive: bool = False, list_only: bool = Fals
                 expected_output  = ask_glm(user_input, nv_key)
                 glm_ms           = round(time.time() - t0, 2)
                 
-                # ── Step 3: Validate DSL semantically ────────────────────
-                is_correct, reason = compare_outputs(ai_output, expected_output)
+                # ── Step 3: Validate DSL — semantic + strict format ───────────────
+                is_correct, reason, fmt_score, fmt_issues = compare_outputs(ai_output, expected_output)
                 verdict_icon = "✅" if is_correct else "❌"
                 verdict_word = "PASS" if is_correct else "FAIL"
+                fmt_icon     = "🟢" if fmt_score >= 0.8 else "🟡" if fmt_score >= 0.4 else "🔴"
 
                 print(f"    🌐 GLM ({glm_ms}s): {expected_output[:90]}...")
-                print(f"    {verdict_icon} Verdict: {verdict_word} — {reason}")
+                print(f"    {verdict_icon} Semantic: {verdict_word} — {reason}")
+                print(f"    {fmt_icon} Format:   {fmt_score:.0%}" +
+                      (f" — {'; '.join(fmt_issues[:2])}{' ...' if len(fmt_issues)>2 else ''}" if fmt_issues else " — canonical"))
 
-                # ── Step 4: Store to Supabase ─────────────────────────────────
+                # ── Step 4: Store to Supabase ─────────────────────────────────────
                 ok = store_result(
                     supabase, user_input, ai_output, expected_output,
-                    is_correct, reason, input_id, model_name_tag
+                    is_correct, reason, fmt_score, fmt_issues, input_id, model_name_tag
                 )
                 if ok:
                     grand_stored += 1
                     print(f"    💾 Stored to Supabase")
 
-                # ── Step 5: Append to JSONL if PASS ───────────────────────────
-                if is_correct:
+                # ── Step 5: Append to JSONL only if semantic PASS + format ≥ 80% ──
+                if is_correct and fmt_score >= 0.8:
                     append_to_jsonl(user_input, ai_output)
                     batch_passed += 1
                     grand_passed += 1
