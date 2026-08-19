@@ -6,7 +6,7 @@ from transformers import (
     AutoModelForCausalLM, 
     TrainingArguments, 
     Trainer,
-    DataCollatorForLanguageModeling
+    DefaultDataCollator
 )
 
 def main():
@@ -185,7 +185,9 @@ def main():
         report_to="none"
     )
 
-    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+    # DefaultDataCollator simply stacks tensors as-is — it does NOT re-pad or
+    # overwrite labels, which preserves the precise -100 masking from tokenize_function.
+    data_collator = DefaultDataCollator()
 
     # 6. Initialize Trainer
     trainer = Trainer(
