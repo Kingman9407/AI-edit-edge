@@ -103,12 +103,13 @@ def main():
             examples["text"], 
             truncation=True, 
             max_length=512,
-            padding=True
+            padding=True,
+            return_attention_mask=True
         )
         
         labels = []
 
-        for input_ids in result["input_ids"]:
+        for input_ids, attn in zip(result["input_ids"], result["attention_mask"]):
             # Start with everything masked
             label = [-100] * len(input_ids)
 
@@ -117,12 +118,11 @@ def main():
 
             # ── Find all tool_result turn starts (to keep them masked) ────
             tool_result_starts = find_all_occurrences(input_ids, tool_result_start_tokens)
-            tool_result_start_set = set(tool_result_starts)
 
             if not assistant_starts:
                 # Fallback: no assistant token found — use standard full-sequence labels
                 for j in range(len(input_ids)):
-                    if input_ids[j] != tokenizer.pad_token_id:
+                    if attn[j] == 1:
                         label[j] = input_ids[j]
                 labels.append(label)
                 continue
@@ -139,9 +139,7 @@ def main():
 
                 # Unmask this assistant block
                 for j in range(content_start, content_end):
-                    if input_ids[j] == tokenizer.pad_token_id:
-                        label[j] = -100
-                    else:
+                    if attn[j] == 1:
                         label[j] = input_ids[j]
 
             # ── Re-mask any tool_result turns (the model must not generate these) ─
