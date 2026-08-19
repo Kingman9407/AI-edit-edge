@@ -1,36 +1,13 @@
 import os
 import torch
-from dataclasses import dataclass
 from datasets import load_dataset
 from transformers import (
     AutoTokenizer, 
     AutoModelForCausalLM, 
     TrainingArguments, 
-    Trainer
+    Trainer,
+    DataCollatorForLanguageModeling
 )
-
-@dataclass
-class LabelPreservingCollator:
-    tokenizer: any
-
-    def __call__(self, examples):
-        max_len = max(len(e["input_ids"]) for e in examples)
-        pad_id = self.tokenizer.pad_token_id
-
-        input_ids, attention_mask, labels = [], [], []
-        for e in examples:
-            ids = e["input_ids"]
-            lbl = e["labels"]
-            pad_len = max_len - len(ids)
-            input_ids.append(ids + [pad_id] * pad_len)
-            attention_mask.append([1] * len(ids) + [0] * pad_len)
-            labels.append(lbl + [-100] * pad_len)
-
-        return {
-            "input_ids": torch.tensor(input_ids, dtype=torch.long),
-            "attention_mask": torch.tensor(attention_mask, dtype=torch.long),
-            "labels": torch.tensor(labels, dtype=torch.long),
-        }
 
 def main():
     print("=" * 60)
@@ -126,7 +103,7 @@ def main():
             examples["text"], 
             truncation=True, 
             max_length=512,
-            padding=False
+            padding=True
         )
         
         labels = []
@@ -210,7 +187,7 @@ def main():
         report_to="none"
     )
 
-    data_collator = LabelPreservingCollator(tokenizer=tokenizer)
+    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
     # 6. Initialize Trainer
     trainer = Trainer(

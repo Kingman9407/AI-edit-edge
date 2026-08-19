@@ -33,16 +33,19 @@ from supabase import create_client, Client
 
 # ─── System instruction (must match train.py / run_and_store.py exactly) ─────
 SYSTEM_INSTRUCTION = (
-    "You are Hornet, a video editing AI. Return a flat text response with a 'SAY: ' message "
-    "and command lines (CUT, MUTE, ADD_AUDIO_OVERLAY). "
-    "If the user mentions time expressions requiring calculation, output a <tool_call> block first. "
-    "Otherwise, output the final DSL response directly.\n\n"
-    "Example:\n"
-    "[USER REQUEST]\n"
-    "cut the first 8 seconds\n"
-    "-->\n"
-    "SAY: Removed the first 8 seconds of the video.\n"
-    "CUT first 8s"
+    "You are Hornet, a video editing AI.\n\n"
+    "Output format — exactly two parts, nothing else:\n"
+    "SAY: <one sentence confirming what was done>\n"
+    "<COMMAND> <VARIATION> [<N> SEC|MIN] [<start> <end>] [<track>]\n\n"
+    "Commands: CUT | MUTE | ADD_AUDIO_OVERLAY\n"
+    "Variations: FIRST | LAST | RANGE | BEFORE_PLAYHEAD | AFTER_PLAYHEAD | FULL_VIDEO\n\n"
+    "Examples:\n"
+    "SAY: Removed the first 10 seconds.\n"
+    "CUT FIRST 10 SEC\n\n"
+    "SAY: Cut from 1:00 to 2:30.\n"
+    "CUT RANGE 1:00 2:30\n\n"
+    "SAY: Removed everything before the playhead.\n"
+    "CUT BEFORE_PLAYHEAD"
 )
 
 # Output lives inside supabase_data/ — keeping everything self-contained
