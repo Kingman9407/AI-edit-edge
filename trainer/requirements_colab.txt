@@ -13,6 +13,8 @@ huggingface_hub>=0.22.0
 optimum>=1.18.0
 onnxruntime>=1.17.0
 onnxruntime-tools>=1.7.0
+onnx>=1.15.0
+onnxconverter-common>=0.13.0
 
 # Supabase & Data
 supabase>=2.3.0

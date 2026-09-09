@@ -37,7 +37,7 @@ r = subprocess.run(['nvidia-smi'], capture_output=True, text=True)
 print('✅ GPU detected!' if r.returncode == 0 else '⚠️  No GPU! Go to Runtime → Change runtime type → T4 GPU')
 if r.returncode == 0: print(r.stdout[:500])
 
-!pip install -q transformers datasets accelerate huggingface_hub optimum onnxruntime supabase python-dotenv sentence-transformers requests numpy openai
+!pip install -q transformers datasets accelerate huggingface_hub "optimum[onnxruntime]" onnx onnxruntime onnxconverter-common supabase python-dotenv sentence-transformers requests numpy openai
 print('\\n✅ All packages installed!')\
 """)
 
