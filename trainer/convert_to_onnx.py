@@ -58,7 +58,18 @@ def check_dependencies():
         print(f"\n👉 Please run the following command to install the required packages:")
         print(f"   {Colors.BOLD}{Colors.GREEN}{install_cmd}{Colors.END}\n")
         
-        choice = input("Would you like to attempt automated installation now? (y/n): ").strip().lower()
+        # Check if running in a non-interactive environment (e.g., Colab, CI, background script)
+        auto_yes = not sys.stdin.isatty() or os.environ.get("AUTO_INSTALL", "0") == "1"
+
+        if auto_yes:
+            print("⚡ Non-interactive environment detected. Attempting automated installation...")
+            choice = 'y'
+        else:
+            try:
+                choice = input("Would you like to attempt automated installation now? (y/n): ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                choice = 'n'
+
         if choice == 'y':
             try:
                 print(f"⚡ Running: {install_cmd}...")
@@ -76,7 +87,14 @@ def check_dependencies():
                 print(f" 2. Bypass this environment check by adding '--break-system-packages':")
                 print(f"    python3 -m pip install \"optimum[onnxruntime]\" onnx onnxconverter-common --break-system-packages")
                 
-                choice2 = input("\nWould you like to install using '--break-system-packages' now? (y/n): ").strip().lower()
+                if auto_yes:
+                    choice2 = 'y'
+                else:
+                    try:
+                        choice2 = input("\nWould you like to install using '--break-system-packages' now? (y/n): ").strip().lower()
+                    except (EOFError, KeyboardInterrupt):
+                        choice2 = 'n'
+
                 if choice2 == 'y':
                     try:
                         print(f"⚡ Running pip with --break-system-packages...")

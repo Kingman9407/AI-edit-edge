@@ -5,7 +5,7 @@ import shutil
 import tempfile
 from huggingface_hub import HfApi
 
-REPO_ID = "Kingman9407/hornet"
+REPO_ID = os.environ.get("REPO_ID") or os.environ.get("HF_REPO_ID") or "Kingman9407/hornet"
 
 # Tokenizer files to upload (patched for JS compatibility)
 TOKENIZER_FILES = [

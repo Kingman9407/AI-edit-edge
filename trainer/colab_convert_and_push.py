@@ -48,13 +48,25 @@ def main():
         print(f"{Colors.FAIL}❌ Could not find required scripts (convert_to_onnx.py or push_to_hf.py) in {script_dir}{Colors.END}")
         sys.exit(1)
 
+    # Auto-ensure ONNX export packages are installed
+    try:
+        import onnx
+        import onnxconverter_common
+    except ImportError:
+        print(f"{Colors.BLUE}📦 Installing required ONNX packages (onnx, onnxconverter-common, optimum)...{Colors.END}")
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install", "-q",
+            "optimum[onnxruntime]", "onnx", "onnxconverter-common"
+        ])
+
     # Step 1: Convert to all ONNX formats (int8, fp16, fp32)
     print("\n" + "="*60)
     print(f"{Colors.HEADER}{Colors.BOLD}Step 1: Converting model to all ONNX formats (INT8, FP16, FP32){Colors.END}")
     print("="*60)
     
-    # We call the existing script with --format all
-    run_command([sys.executable, convert_script, "--format", "all"])
+    convert_env = os.environ.copy()
+    convert_env["AUTO_INSTALL"] = "1"
+    run_command([sys.executable, convert_script, "--format", "all"], env=convert_env)
 
     # Step 2: Push to Hugging Face
     print("\n" + "="*60)
@@ -63,10 +75,8 @@ def main():
     
     push_env = os.environ.copy()
     push_env["FORMAT_NAME"] = "all"
-    
-    # If a repo ID was provided, we can pass it via env if push_to_hf.py supported it, 
-    # but push_to_hf.py hardcodes REPO_ID. So we might need to patch it dynamically or tell the user.
-    # Currently push_to_hf.py has `REPO_ID = "Kingman9407/hornet"`.
+    if args.repo_id:
+        push_env["REPO_ID"] = args.repo_id
     
     run_command([sys.executable, push_script], env=push_env)
     
