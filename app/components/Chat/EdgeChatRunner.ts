@@ -1,7 +1,7 @@
-import { parseToolCallToAction } from "@/app/backend/api/chat/tools";
 import type { ModelAction } from "@/app/backend/api/chat/types";
 import type { EdgeLLMState } from "@/app/hooks/useEdgeLLM";
 import { supabase } from "@/app/lib/supabase";
+import { parseDSLOutput } from "@/app/backend/api/chat/dslParser";
 export interface EdgeChatRequest {
   message: string;
   history?: { role: "user" | "assistant"; content: string }[];
@@ -47,7 +47,7 @@ function buildMessages(req: EdgeChatRequest): ChatMLMessage[] {
   // NOTE: This string must match SYSTEM_INSTRUCTION in trainer/prepare_data.py exactly.
   messages.push({
     role: "system",
-    content: "You are Hornet, a video editing AI. Return JSON with 'message' and 'operations' (cut, mute, add_audio_overlay). If the user mentions time expressions requiring calculation, output a <tool_call> block first. Otherwise, output the final JSON directly."
+    content: "You are Hornet, a video editing AI assistant. Always respond with a SAY: line describing what you did, followed by exactly one DSL command on the next line. Valid commands: CUT FIRST|LAST|RANGE|BEFORE_PLAYHEAD|AFTER_PLAYHEAD, MUTE FIRST|LAST|RANGE|BEFORE_PLAYHEAD|AFTER_PLAYHEAD, ADD_AUDIO_OVERLAY FIRST|LAST|RANGE|FULL_VIDEO, MERGE START|END|AFTER_TIME, UNDO. For conversational messages with no edit action, only output the SAY: line."
   });
 
   // 3. Current user message turn (context + query matching SFT training format)
@@ -137,50 +137,16 @@ export async function runEdgeChat(
 
   console.log("🤖 [Edge LLM] RAW Output:\n", raw);
 
-  let assistantMessage = "I'm ready to help with your video editing!";
-  let actions: ModelAction[] = [];
+  // Parse the DSL output from the model
+  const dslResult = parseDSLOutput(
+    raw,
+    req.videoContext?.duration ?? 0,
+    req.videoContext?.currentTime ?? 0
+  );
+  const assistantMessage = dslResult.assistantMessage;
+  const actions: ModelAction[] = dslResult.actions;
 
-  try {
-    // The WebWorker guarantees `raw` is just the JSON block
-    const parsedObj = JSON.parse(raw);
-    console.log("🤖 [Edge LLM] Parsed JSON:\n", parsedObj);
-
-    if (parsedObj.message) {
-      assistantMessage = parsedObj.message;
-    }
-
-    if (Array.isArray(parsedObj.operations)) {
-      actions = parsedObj.operations.map((op: any) => {
-        let toolName = op.operation;
-        if (toolName === "cut") toolName = "cut_segment";
-        if (toolName === "mute") toolName = "mute_segment";
-        if (toolName === "keep") toolName = "keep_segment";
-        
-        const action = parseToolCallToAction(
-          toolName,
-          op,
-          req.videoContext?.duration ?? 0,
-          req.videoContext?.currentTime ?? 0
-        );
-
-        if (action) return action;
-
-        // Fallback for absolute timestamps if parse fails or it wasn't a known tool
-        const startVal = op.start !== undefined && op.start !== null ? Number(op.start) : null;
-        const endVal = op.end !== undefined && op.end !== null ? Number(op.end) : null;
-
-        return {
-          type: op.operation,
-          start: startVal,
-          end: endVal,
-          reason: op.reason || "Edge LLM Edit"
-        };
-      }).filter(Boolean) as ModelAction[];
-    }
-  } catch (err) {
-    console.error("🤖 [Edge LLM] Failed to parse JSON:", raw);
-    assistantMessage = raw.replace(/<\|im_end\|>[\s\S]*$/, "").trim();
-  }
+  console.log("🤖 [Edge LLM] DSL Parse Result:", { assistantMessage, actions });
 
   console.log("🤖 [Edge LLM] Final Actions sent to UI:\n", actions);
 
