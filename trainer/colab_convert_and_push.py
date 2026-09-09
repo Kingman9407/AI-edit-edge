@@ -48,16 +48,26 @@ def main():
         print(f"{Colors.FAIL}❌ Could not find required scripts (convert_to_onnx.py or push_to_hf.py) in {script_dir}{Colors.END}")
         sys.exit(1)
 
-    # Auto-ensure ONNX export packages are installed
+    # Auto-ensure ONNX export packages are installed.
+    # IMPORTANT: We use --no-deps so we don't upgrade torch/torchvision and
+    # cause version conflicts in pre-configured environments (e.g. Google Colab).
     try:
+        import optimum.exporters.onnx
         import onnx
         import onnxconverter_common
-    except ImportError:
-        print(f"{Colors.BLUE}📦 Installing required ONNX packages (onnx, onnxconverter-common, optimum)...{Colors.END}")
+        from optimum.onnxruntime import ORTQuantizer
+    except (ImportError, RuntimeError):
+        print(f"{Colors.BLUE}📦 Installing required ONNX packages (no-deps to preserve torch version)...{Colors.END}")
+        # Install optimum base with no-deps first, then its direct ONNX/ORT deps.
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install", "-q", "--no-deps",
+            "optimum"
+        ])
         subprocess.check_call([
             sys.executable, "-m", "pip", "install", "-q",
-            "optimum[onnxruntime]", "onnx", "onnxconverter-common"
+            "onnx", "onnxruntime", "onnxconverter-common"
         ])
+        print(f"{Colors.GREEN}✅ ONNX packages installed.{Colors.END}")
 
     # Step 1: Convert to all ONNX formats (int8, fp16, fp32)
     print("\n" + "="*60)

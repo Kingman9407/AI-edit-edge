@@ -30,9 +30,9 @@ def check_dependencies():
     missing_libs = []
     
     try:
-        import optimum
+        import optimum.exporters.onnx  # requires optimum[onnxruntime] extras, not just base optimum
     except ImportError:
-        missing_libs.append("optimum")
+        missing_libs.append("optimum[onnxruntime]")
         
     try:
         import onnxruntime
